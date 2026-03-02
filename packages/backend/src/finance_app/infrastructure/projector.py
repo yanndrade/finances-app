@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import inspect
 from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import Boolean
@@ -58,6 +59,9 @@ class Projector:
         )
 
     def bootstrap(self) -> None:
+        if self._projection_schema_requires_rebuild():
+            ProjectionBase.metadata.drop_all(self._engine)
+
         ProjectionBase.metadata.create_all(self._engine)
         with self._session_factory.begin() as session:
             cursor = session.get(EventCursorRecord, 1)
@@ -195,3 +199,21 @@ class Projector:
             return
 
         balance.current_balance = int(payload["initial_balance"])
+
+    def _projection_schema_requires_rebuild(self) -> bool:
+        inspector = inspect(self._engine)
+        table_names = set(inspector.get_table_names())
+
+        if "accounts" not in table_names:
+            return False
+
+        account_columns = {
+            column["name"] for column in inspector.get_columns("accounts")
+        }
+        if "is_active" not in account_columns:
+            return True
+
+        if "balance_state" not in table_names:
+            return True
+
+        return False
