@@ -16,8 +16,9 @@ if str(SRC_PATH) not in sys.path:
 from finance_app.infrastructure.db import (
     Base,
     escape_alembic_config_value,
-    get_database_url,
+    get_events_database_url,
 )
+from finance_app.infrastructure.event_store import EventRecord
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -32,7 +33,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 config.set_main_option(
     "sqlalchemy.url",
-    escape_alembic_config_value(get_database_url()),
+    escape_alembic_config_value(get_events_database_url()),
 )
 target_metadata = Base.metadata
 

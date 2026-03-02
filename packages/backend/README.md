@@ -8,4 +8,11 @@ Backend package root.
 - `src/finance_app/interfaces`: HTTP, CLI, or adapter-facing entry points
 - `tests/`: automated tests for backend behavior
 
-Runtime manifests are intentionally deferred to later backend-specific issues.
+## Event Store
+
+The source of truth is a dedicated SQLite database at `events.db`, separate from the projection database.
+
+- event writes happen through an append-only path in the application and infrastructure layers
+- the `events` table stores `event_id`, `type`, `timestamp`, `payload`, and `version`
+- SQLite `WAL` mode is enabled for the event store so readers do not block appends
+- throughput assumptions follow the PRD: serialized writes under SQLite locking are sufficient for fewer than `100` events per day
