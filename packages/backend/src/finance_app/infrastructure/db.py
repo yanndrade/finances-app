@@ -35,8 +35,8 @@ def escape_alembic_config_value(value: str) -> str:
     return value.replace("%", "%%")
 
 
-def get_engine():
-    return create_engine(get_database_url(), future=True)
+def get_engine(database_url: str | None = None):
+    return create_engine(database_url or get_database_url(), future=True)
 
 
 def get_events_engine(database_url: str | None = None):
@@ -52,8 +52,8 @@ def get_events_engine(database_url: str | None = None):
     return engine
 
 
-def get_session_factory() -> sessionmaker:
-    return sessionmaker(bind=get_engine(), autoflush=False, autocommit=False)
+def get_session_factory(database_url: str | None = None) -> sessionmaker:
+    return sessionmaker(bind=get_engine(database_url), autoflush=False, autocommit=False)
 
 
 def _build_sqlite_url(path: Path) -> str:

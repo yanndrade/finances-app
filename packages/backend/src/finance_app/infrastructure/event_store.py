@@ -82,8 +82,16 @@ class EventStore:
             return record.event_id
 
     def list_events(self) -> list[StoredEvent]:
+        return self.list_events_after(0)
+
+    def list_events_after(self, event_id: int) -> list[StoredEvent]:
         with self._session_factory() as session:
-            records = session.query(EventRecord).order_by(EventRecord.event_id.asc()).all()
+            records = (
+                session.query(EventRecord)
+                .filter(EventRecord.event_id > event_id)
+                .order_by(EventRecord.event_id.asc())
+                .all()
+            )
 
         return [
             StoredEvent(
