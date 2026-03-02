@@ -32,8 +32,9 @@ def test_projector_materializes_accounts_and_advances_cursor(tmp_path: Path) -> 
             payload={
                 "id": "acc-1",
                 "name": "Main Wallet",
-                "type": "cash",
+                "type": "wallet",
                 "initial_balance": 100_00,
+                "is_active": True,
             },
             version=1,
         )
@@ -52,8 +53,15 @@ def test_projector_materializes_accounts_and_advances_cursor(tmp_path: Path) -> 
         {
             "account_id": "acc-1",
             "name": "Main Wallet",
-            "type": "cash",
+            "type": "wallet",
             "initial_balance": 100_00,
+            "is_active": True,
+        }
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 100_00,
         }
     ]
 
@@ -71,8 +79,9 @@ def test_projector_rerun_without_new_events_is_idempotent(tmp_path: Path) -> Non
             payload={
                 "id": "acc-1",
                 "name": "Main Wallet",
-                "type": "cash",
+                "type": "wallet",
                 "initial_balance": 100_00,
+                "is_active": True,
             },
             version=1,
         )
@@ -105,8 +114,9 @@ def test_projector_rebuild_replays_history_into_fresh_projection(tmp_path: Path)
             payload={
                 "id": "acc-1",
                 "name": "Main Wallet",
-                "type": "cash",
+                "type": "wallet",
                 "initial_balance": 100_00,
+                "is_active": True,
             },
             version=1,
         )
@@ -120,6 +130,7 @@ def test_projector_rebuild_replays_history_into_fresh_projection(tmp_path: Path)
                 "name": "Savings",
                 "type": "checking",
                 "initial_balance": 250_00,
+                "is_active": True,
             },
             version=1,
         )
@@ -138,13 +149,84 @@ def test_projector_rebuild_replays_history_into_fresh_projection(tmp_path: Path)
         {
             "account_id": "acc-1",
             "name": "Main Wallet",
-            "type": "cash",
+            "type": "wallet",
             "initial_balance": 100_00,
+            "is_active": True,
         },
         {
             "account_id": "acc-2",
             "name": "Savings",
             "type": "checking",
             "initial_balance": 250_00,
+            "is_active": True,
         },
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 100_00,
+        },
+        {
+            "account_id": "acc-2",
+            "current_balance": 250_00,
+        },
+    ]
+
+
+def test_projector_updates_accounts_and_balance_state(tmp_path: Path) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="AccountUpdated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Emergency Fund",
+                "type": "savings",
+                "initial_balance": 300_00,
+                "is_active": False,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+
+    assert applied == 2
+    assert projector.list_accounts() == [
+        {
+            "account_id": "acc-1",
+            "name": "Emergency Fund",
+            "type": "savings",
+            "initial_balance": 300_00,
+            "is_active": False,
+        }
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 300_00,
+        }
     ]
