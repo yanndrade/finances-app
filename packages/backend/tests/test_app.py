@@ -143,3 +143,234 @@ def test_accounts_endpoints_validate_prd_account_types(tmp_path) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_cash_transaction_endpoints_support_create_edit_and_void(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    income_response = client.post(
+        "/api/incomes",
+        json={
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:01:00Z",
+            "amount": 50_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "salary",
+            "description": "Salary",
+        },
+    )
+
+    assert income_response.status_code == 201
+    assert income_response.json()["status"] == "active"
+
+    expense_response = client.post(
+        "/api/expenses",
+        json={
+            "id": "tx-2",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+
+    assert expense_response.status_code == 201
+    assert expense_response.json() == {
+        "transaction_id": "tx-2",
+        "occurred_at": "2026-03-02T12:02:00Z",
+        "type": "expense",
+        "amount": 20_00,
+        "account_id": "acc-1",
+        "payment_method": "CASH",
+        "category_id": "food",
+        "description": "Lunch",
+        "person_id": "friend",
+        "status": "active",
+    }
+
+    update_response = client.patch(
+        "/api/transactions/tx-2",
+        json={
+            "amount": 25_00,
+            "description": "Lunch with dessert",
+            "payment_method": "OTHER",
+        },
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["amount"] == 25_00
+    assert update_response.json()["description"] == "Lunch with dessert"
+    assert update_response.json()["payment_method"] == "OTHER"
+
+    void_response = client.post(
+        "/api/transactions/tx-1/void",
+        json={"reason": "Duplicate"},
+    )
+
+    assert void_response.status_code == 200
+    assert void_response.json()["status"] == "voided"
+
+    list_response = client.get("/api/transactions")
+
+    assert list_response.status_code == 200
+    assert list_response.json() == [
+        {
+            "transaction_id": "tx-2",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "type": "expense",
+            "amount": 25_00,
+            "account_id": "acc-1",
+            "payment_method": "OTHER",
+            "category_id": "food",
+            "description": "Lunch with dessert",
+            "person_id": "friend",
+            "status": "active",
+        },
+        {
+            "transaction_id": "tx-1",
+            "occurred_at": "2026-03-02T12:01:00Z",
+            "type": "income",
+            "amount": 50_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "salary",
+            "description": "Salary",
+            "person_id": None,
+            "status": "voided",
+        },
+    ]
+
+    accounts_response = client.get("/api/accounts")
+
+    assert accounts_response.status_code == 200
+    assert accounts_response.json()[0]["current_balance"] == 75_00
+
+
+def test_cash_transaction_list_supports_prd_filter_set(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Savings", "savings", 200_00)
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T08:00:00Z",
+            "amount": 15_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Morning coffee",
+            "person_id": "cafe",
+        },
+    )
+    _create_expense(
+        client,
+        {
+            "id": "tx-2",
+            "occurred_at": "2026-03-03T08:00:00Z",
+            "amount": 30_00,
+            "account_id": "acc-2",
+            "payment_method": "OTHER",
+            "category_id": "travel",
+            "description": "Bus ticket",
+            "person_id": "station",
+        },
+    )
+
+    response = client.get(
+        "/api/transactions",
+        params={
+            "from": "2026-03-02T00:00:00Z",
+            "to": "2026-03-02T23:59:59Z",
+            "category": "food",
+            "account": "acc-1",
+            "method": "CASH",
+            "person": "cafe",
+            "text": "coffee",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "transaction_id": "tx-1",
+            "occurred_at": "2026-03-02T08:00:00Z",
+            "type": "expense",
+            "amount": 15_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Morning coffee",
+            "person_id": "cafe",
+            "status": "active",
+        }
+    ]
+
+
+def test_cash_transaction_endpoints_require_existing_account_and_utc_timestamp(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    missing_account_response = client.post(
+        "/api/expenses",
+        json={
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "missing",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+        },
+    )
+    invalid_timestamp_response = client.post(
+        "/api/expenses",
+        json={
+            "id": "tx-2",
+            "occurred_at": "2026-03-02T12:02:00",
+            "amount": 20_00,
+            "account_id": "missing",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+        },
+    )
+
+    assert missing_account_response.status_code == 404
+    assert invalid_timestamp_response.status_code == 422
+
+
+def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:
+    response = client.post(
+        "/api/accounts",
+        json={
+            "id": account_id,
+            "name": name,
+            "type": account_type,
+            "initial_balance": initial_balance,
+        },
+    )
+
+    assert response.status_code == 201
+
+
+def _create_expense(client: TestClient, payload: dict[str, str | int]) -> None:
+    response = client.post("/api/expenses", json=payload)
+
+    assert response.status_code == 201
