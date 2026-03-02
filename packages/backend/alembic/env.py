@@ -13,7 +13,11 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from finance_app.infrastructure.db import Base, DATABASE_URL
+from finance_app.infrastructure.db import (
+    Base,
+    escape_alembic_config_value,
+    get_database_url,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -26,7 +30,10 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+config.set_main_option(
+    "sqlalchemy.url",
+    escape_alembic_config_value(get_database_url()),
+)
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
