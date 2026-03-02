@@ -64,8 +64,10 @@ def test_lock_without_password_does_not_require_startup_lock(tmp_path: Path) -> 
     store = SecurityStore(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
     )
+    lock_app = LockAppUseCase(store)
 
     store.bootstrap()
+    lock_app.execute()
 
     assert store.requires_lock_on_startup() is False
     assert store.is_locked() is False

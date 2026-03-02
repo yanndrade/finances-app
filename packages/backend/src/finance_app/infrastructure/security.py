@@ -91,8 +91,15 @@ class SecurityStore:
     def lock(self) -> None:
         self.bootstrap()
         with self._session_factory.begin() as session:
+            settings = session.get(SecuritySettingsRecord, 1)
             lock_state = session.get(LockStateRecord, 1)
+            assert settings is not None
             assert lock_state is not None
+
+            if not settings.password_hash:
+                lock_state.is_locked = False
+                return
+
             lock_state.is_locked = True
 
     def unlock(self, password: str) -> bool:
