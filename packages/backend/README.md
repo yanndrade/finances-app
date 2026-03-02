@@ -24,3 +24,12 @@ The source of truth is a dedicated SQLite database at `events.db`, separate from
 - `event_cursor` tracks the last `event_id` applied from `events.db`
 - the first concrete projection is `accounts`, materialized from `AccountCreated`
 - the projector can rerun safely and rebuild `app.db` from event history
+
+## Security Foundation
+
+The first local desktop security layer is stored in `app.db`.
+
+- passwords are hashed with Argon2id and never persisted in plaintext
+- lock state is persisted separately from the password hash
+- startup can require the lock screen when credentials exist and the app is marked locked
+- inactivity lock is prepared as persisted configuration (`inactivity_lock_seconds`)
