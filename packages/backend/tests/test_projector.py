@@ -616,6 +616,91 @@ def test_projector_rebuilds_when_account_table_disappears_during_introspection(
     assert projector._projection_schema_requires_rebuild() is True
 
 
+def test_projector_materializes_card_purchases_into_invoice_cycles(tmp_path: Path) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-10T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-10T12:00:00Z",
+                "amount": 100_00,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Groceries",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-11T12:00:00Z",
+            payload={
+                "id": "purchase-2",
+                "purchase_date": "2026-03-11T12:00:00Z",
+                "amount": 50_00,
+                "category_id": "transport",
+                "card_id": "card-1",
+                "description": "Taxi",
+            },
+            version=1,
+        )
+    )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+
+    assert applied == 3
+    assert projector.list_invoices(card_id="card-1") == [
+        {
+            "invoice_id": "card-1:2026-04",
+            "card_id": "card-1",
+            "reference_month": "2026-04",
+            "closing_date": "2026-04-10",
+            "due_date": "2026-04-20",
+            "total_amount": 50_00,
+            "purchase_count": 1,
+            "status": "open",
+        },
+        {
+            "invoice_id": "card-1:2026-03",
+            "card_id": "card-1",
+            "reference_month": "2026-03",
+            "closing_date": "2026-03-10",
+            "due_date": "2026-03-20",
+            "total_amount": 100_00,
+            "purchase_count": 1,
+            "status": "open",
+        },
+    ]
+
+
 def test_projector_updates_voids_and_filters_transactions(tmp_path: Path) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",

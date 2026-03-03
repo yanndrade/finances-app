@@ -12,6 +12,11 @@ from finance_app.application.accounts import (
     InvalidAccountTypeError,
     LastActiveAccountError,
 )
+from finance_app.application.card_purchases import (
+    CardPurchaseAlreadyExistsError,
+    CardPurchaseService,
+    CardPurchaseServiceError,
+)
 from finance_app.application.cards import (
     CardAlreadyExistsError,
     CardNotFoundError,
@@ -70,6 +75,15 @@ class UpdateCardRequest(BaseModel):
     is_active: bool | None = None
 
 
+class CreateCardPurchaseRequest(BaseModel):
+    id: str = Field(min_length=1)
+    purchase_date: str
+    amount: int = Field(gt=0)
+    category_id: str = Field(min_length=1)
+    card_id: str = Field(min_length=1)
+    description: str | None = None
+
+
 class CreateTransactionRequest(BaseModel):
     id: str = Field(min_length=1)
     occurred_at: str
@@ -108,6 +122,7 @@ class CreateTransferRequest(BaseModel):
 def build_router(
     account_service: AccountService,
     card_service: CardService,
+    card_purchase_service: CardPurchaseService,
     transaction_service: TransactionService,
     transfer_service: TransferService,
     event_store: EventStore,
@@ -229,6 +244,47 @@ def build_router(
                 detail=str(exc),
             ) from exc
         except CardServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.post("/api/card-purchases", status_code=status.HTTP_201_CREATED)
+    def create_card_purchase(
+        payload: CreateCardPurchaseRequest,
+    ) -> dict[str, str | int | None]:
+        try:
+            return card_purchase_service.create_card_purchase(
+                purchase_id=payload.id,
+                purchase_date=payload.purchase_date,
+                amount=payload.amount,
+                category_id=payload.category_id,
+                card_id=payload.card_id,
+                description=payload.description,
+            )
+        except (AccountNotFoundError, CardNotFoundError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except CardPurchaseAlreadyExistsError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+        except CardPurchaseServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.get("/api/invoices")
+    def list_invoices(
+        card_id: str | None = Query(default=None, alias="card"),
+    ) -> list[dict[str, str | int]]:
+        try:
+            return card_purchase_service.list_invoices(card_id=card_id)
+        except CardPurchaseServiceError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
@@ -435,6 +491,11 @@ def create_app(
         projector=projector,
         account_reader=account_service,
     )
+    card_purchase_service = CardPurchaseService(
+        event_store=event_store,
+        projector=projector,
+        card_reader=card_service,
+    )
     transaction_service = TransactionService(
         event_store=event_store,
         projector=projector,
@@ -462,6 +523,7 @@ def create_app(
         build_router(
             account_service,
             card_service,
+            card_purchase_service,
             transaction_service,
             transfer_service,
             event_store,
