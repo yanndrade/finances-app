@@ -18,6 +18,7 @@ from finance_app.domain.events import StoredEvent
 from finance_app.domain.projections import (
     AccountProjection,
     BalanceStateProjection,
+    CardProjection,
     TransactionProjection,
 )
 from finance_app.infrastructure.db import get_engine
@@ -42,6 +43,18 @@ class AccountProjectionRecord(ProjectionBase):
     name: Mapped[str] = mapped_column(String, nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)
     initial_balance: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class CardProjectionRecord(ProjectionBase):
+    __tablename__ = "cards"
+
+    card_id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    closing_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    due_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    payment_account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
@@ -143,6 +156,28 @@ class Projector:
                 name=row.name,
                 type=row.type,
                 initial_balance=row.initial_balance,
+                is_active=row.is_active,
+            ).to_dict()
+            for row in rows
+        ]
+
+    def list_cards(self) -> list[dict[str, str | int | bool]]:
+        self.bootstrap()
+        with self._session_factory() as session:
+            rows = (
+                session.query(CardProjectionRecord)
+                .order_by(CardProjectionRecord.card_id.asc())
+                .all()
+            )
+
+        return [
+            CardProjection(
+                card_id=row.card_id,
+                name=row.name,
+                limit=row.limit,
+                closing_day=row.closing_day,
+                due_day=row.due_day,
+                payment_account_id=row.payment_account_id,
                 is_active=row.is_active,
             ).to_dict()
             for row in rows
@@ -379,6 +414,14 @@ class Projector:
             self._apply_account_updated(session, event.payload)
             return
 
+        if event.type == "CardCreated":
+            self._apply_card_created(session, event.payload)
+            return
+
+        if event.type == "CardUpdated":
+            self._apply_card_updated(session, event.payload)
+            return
+
         if event.type in {"IncomeCreated", "ExpenseCreated"}:
             self._apply_transaction_created(session, event.payload)
             return
@@ -449,6 +492,47 @@ class Projector:
             return
 
         balance.current_balance = int(payload["initial_balance"])
+
+    def _apply_card_created(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        card_id = str(payload["id"])
+        existing = session.get(CardProjectionRecord, card_id)
+
+        if existing is not None:
+            return
+
+        session.add(
+            CardProjectionRecord(
+                card_id=card_id,
+                name=str(payload["name"]),
+                limit=int(payload["limit"]),
+                closing_day=int(payload["closing_day"]),
+                due_day=int(payload["due_day"]),
+                payment_account_id=str(payload["payment_account_id"]),
+                is_active=bool(payload.get("is_active", True)),
+            )
+        )
+
+    def _apply_card_updated(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        card_id = str(payload["id"])
+        existing = session.get(CardProjectionRecord, card_id)
+
+        if existing is None:
+            return
+
+        existing.name = str(payload["name"])
+        existing.limit = int(payload["limit"])
+        existing.closing_day = int(payload["closing_day"])
+        existing.due_day = int(payload["due_day"])
+        existing.payment_account_id = str(payload["payment_account_id"])
+        existing.is_active = bool(payload.get("is_active", True))
 
     def _apply_transaction_created(
         self,
@@ -632,6 +716,22 @@ class Projector:
             return True
 
         if "balance_state" not in table_names:
+            return True
+
+        if "cards" not in table_names:
+            return True
+
+        card_columns = {column["name"] for column in inspector.get_columns("cards")}
+        expected_card_columns = {
+            "card_id",
+            "name",
+            "limit",
+            "closing_day",
+            "due_day",
+            "payment_account_id",
+            "is_active",
+        }
+        if card_columns != expected_card_columns:
             return True
 
         if "transactions" not in table_names:

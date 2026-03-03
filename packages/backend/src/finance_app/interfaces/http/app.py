@@ -12,6 +12,11 @@ from finance_app.application.accounts import (
     InvalidAccountTypeError,
     LastActiveAccountError,
 )
+from finance_app.application.cards import (
+    CardAlreadyExistsError,
+    CardNotFoundError,
+    CardService,
+)
 from finance_app.application.health import HealthCheckUseCase
 from finance_app.application.transactions import (
     InvalidTransactionDateError,
@@ -43,6 +48,24 @@ class UpdateAccountRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     type: AccountType | None = None
     initial_balance: int | None = None
+    is_active: bool | None = None
+
+
+class CreateCardRequest(BaseModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    limit: int = Field(gt=0)
+    closing_day: int = Field(ge=1, le=28)
+    due_day: int = Field(ge=1, le=28)
+    payment_account_id: str = Field(min_length=1)
+
+
+class UpdateCardRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    limit: int | None = Field(default=None, gt=0)
+    closing_day: int | None = Field(default=None, ge=1, le=28)
+    due_day: int | None = Field(default=None, ge=1, le=28)
+    payment_account_id: str | None = Field(default=None, min_length=1)
     is_active: bool | None = None
 
 
@@ -83,6 +106,7 @@ class CreateTransferRequest(BaseModel):
 
 def build_router(
     account_service: AccountService,
+    card_service: CardService,
     transaction_service: TransactionService,
     transfer_service: TransferService,
     event_store: EventStore,
@@ -144,6 +168,58 @@ def build_router(
         except InvalidAccountTypeError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.get("/api/cards")
+    def list_cards() -> list[dict[str, str | int | bool]]:
+        return card_service.list_cards()
+
+    @router.post("/api/cards", status_code=status.HTTP_201_CREATED)
+    def create_card(payload: CreateCardRequest) -> dict[str, str | int | bool]:
+        try:
+            return card_service.create_card(
+                card_id=payload.id,
+                name=payload.name,
+                limit_amount=payload.limit,
+                closing_day=payload.closing_day,
+                due_day=payload.due_day,
+                payment_account_id=payload.payment_account_id,
+            )
+        except AccountNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except CardAlreadyExistsError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+
+    @router.patch("/api/cards/{card_id}")
+    def update_card(
+        card_id: str,
+        payload: UpdateCardRequest,
+    ) -> dict[str, str | int | bool]:
+        try:
+            return card_service.update_card(
+                card_id,
+                name=payload.name,
+                limit_amount=payload.limit,
+                closing_day=payload.closing_day,
+                due_day=payload.due_day,
+                payment_account_id=payload.payment_account_id,
+                is_active=payload.is_active,
+            )
+        except AccountNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except CardNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(exc),
             ) from exc
 
@@ -343,6 +419,11 @@ def create_app(
         projection_database_url=database_url,
     )
     account_service = AccountService(event_store=event_store, projector=projector)
+    card_service = CardService(
+        event_store=event_store,
+        projector=projector,
+        account_reader=account_service,
+    )
     transaction_service = TransactionService(
         event_store=event_store,
         projector=projector,
@@ -369,6 +450,7 @@ def create_app(
     app.include_router(
         build_router(
             account_service,
+            card_service,
             transaction_service,
             transfer_service,
             event_store,

@@ -20,6 +20,28 @@ class AccountProjection:
 
 
 @dataclass(frozen=True)
+class CardProjection:
+    card_id: str
+    name: str
+    limit: int
+    closing_day: int
+    due_day: int
+    payment_account_id: str
+    is_active: bool
+
+    def to_dict(self) -> dict[str, str | int | bool]:
+        return {
+            "card_id": self.card_id,
+            "name": self.name,
+            "limit": self.limit,
+            "closing_day": self.closing_day,
+            "due_day": self.due_day,
+            "payment_account_id": self.payment_account_id,
+            "is_active": self.is_active,
+        }
+
+
+@dataclass(frozen=True)
 class BalanceStateProjection:
     account_id: str
     current_balance: int
