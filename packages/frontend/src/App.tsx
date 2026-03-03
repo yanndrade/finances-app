@@ -22,6 +22,7 @@ import {
   fetchDashboardSummary,
   fetchInvoices,
   fetchTransactions,
+  payInvoice,
   resetApplicationData,
   updateAccount,
   updateCard,
@@ -36,6 +37,7 @@ import {
   type AccountUpdatePayload,
   type CashTransactionPayload,
   type DashboardSummary,
+  type InvoicePaymentPayload,
   type InvoiceSummary,
   type TransactionFilters,
   type TransactionSummary,
@@ -263,6 +265,17 @@ export function App() {
     }
   }
 
+  async function handlePayInvoice(payload: InvoicePaymentPayload): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => payInvoice(payload),
+      "Pagamento de fatura registrado com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel registrar o pagamento da fatura.");
+    }
+  }
+
   async function handleApplyTransactionFilters(filters: TransactionFilters): Promise<void> {
     await refreshData({ filters });
   }
@@ -360,6 +373,7 @@ export function App() {
           isSubmitting={isSubmitting}
           onCreateCard={handleCreateCard}
           onCreateCardPurchase={handleCreateCardPurchase}
+          onPayInvoice={handlePayInvoice}
           onUpdateCard={handleUpdateCard}
         />
       ) : null}

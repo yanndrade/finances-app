@@ -685,6 +685,8 @@ def test_projector_materializes_card_purchases_into_invoice_cycles(tmp_path: Pat
             "closing_date": "2026-04-10",
             "due_date": "2026-04-20",
             "total_amount": 50_00,
+            "paid_amount": 0,
+            "remaining_amount": 50_00,
             "purchase_count": 1,
             "status": "open",
         },
@@ -695,6 +697,8 @@ def test_projector_materializes_card_purchases_into_invoice_cycles(tmp_path: Pat
             "closing_date": "2026-03-10",
             "due_date": "2026-03-20",
             "total_amount": 100_00,
+            "paid_amount": 0,
+            "remaining_amount": 100_00,
             "purchase_count": 1,
             "status": "open",
         },
@@ -770,6 +774,8 @@ def test_projector_distributes_installments_into_future_invoice_cycles(tmp_path:
             "closing_date": "2026-06-10",
             "due_date": "2026-06-20",
             "total_amount": 33_34,
+            "paid_amount": 0,
+            "remaining_amount": 33_34,
             "purchase_count": 1,
             "status": "open",
         },
@@ -780,6 +786,8 @@ def test_projector_distributes_installments_into_future_invoice_cycles(tmp_path:
             "closing_date": "2026-05-10",
             "due_date": "2026-05-20",
             "total_amount": 33_33,
+            "paid_amount": 0,
+            "remaining_amount": 33_33,
             "purchase_count": 1,
             "status": "open",
         },
@@ -790,6 +798,8 @@ def test_projector_distributes_installments_into_future_invoice_cycles(tmp_path:
             "closing_date": "2026-04-10",
             "due_date": "2026-04-20",
             "total_amount": 33_33,
+            "paid_amount": 0,
+            "remaining_amount": 33_33,
             "purchase_count": 1,
             "status": "open",
         },
@@ -798,6 +808,146 @@ def test_projector_distributes_installments_into_future_invoice_cycles(tmp_path:
         {
             "category_id": "electronics",
             "total": 33_33,
+        }
+    ]
+
+
+def test_projector_applies_invoice_payments_to_invoice_status_and_cash_balance(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-15T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-15T12:00:00Z",
+                "amount": 100_00,
+                "category_id": "electronics",
+                "card_id": "card-1",
+                "description": "Headphones",
+                "installments_count": 1,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="InvoicePaid",
+            timestamp="2026-03-20T12:00:00Z",
+            payload={
+                "id": "payment-1",
+                "invoice_id": "card-1:2026-04",
+                "card_id": "card-1",
+                "amount": 40_00,
+                "account_id": "acc-1",
+                "paid_at": "2026-03-20T12:00:00Z",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="InvoicePaid",
+            timestamp="2026-03-20T12:05:00Z",
+            payload={
+                "id": "payment-2",
+                "invoice_id": "card-1:2026-04",
+                "card_id": "card-1",
+                "amount": 60_00,
+                "account_id": "acc-1",
+                "paid_at": "2026-03-20T12:05:00Z",
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+
+    assert applied == 5
+    assert projector.list_invoices(card_id="card-1") == [
+        {
+            "invoice_id": "card-1:2026-04",
+            "card_id": "card-1",
+            "reference_month": "2026-04",
+            "closing_date": "2026-04-10",
+            "due_date": "2026-04-20",
+            "total_amount": 100_00,
+            "paid_amount": 100_00,
+            "remaining_amount": 0,
+            "purchase_count": 1,
+            "status": "paid",
+        }
+    ]
+    assert projector.list_transactions(account_id="acc-1") == [
+        {
+            "transaction_id": "payment-2:invoice-payment",
+            "occurred_at": "2026-03-20T12:05:00Z",
+            "type": "expense",
+            "amount": 60_00,
+            "account_id": "acc-1",
+            "payment_method": "OTHER",
+            "category_id": "invoice_payment",
+            "description": "Pagamento de fatura card-1:2026-04",
+            "person_id": None,
+            "status": "active",
+        },
+        {
+            "transaction_id": "payment-1:invoice-payment",
+            "occurred_at": "2026-03-20T12:00:00Z",
+            "type": "expense",
+            "amount": 40_00,
+            "account_id": "acc-1",
+            "payment_method": "OTHER",
+            "category_id": "invoice_payment",
+            "description": "Pagamento de fatura card-1:2026-04",
+            "person_id": None,
+            "status": "active",
+        },
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 0,
         }
     ]
 

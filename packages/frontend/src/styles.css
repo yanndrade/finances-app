@@ -763,6 +763,11 @@ select:focus {
   color: #047857;
 }
 
+.status-badge--pending {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
 .status-badge--voided {
   background: rgba(225, 29, 72, 0.08);
   color: #be123c;

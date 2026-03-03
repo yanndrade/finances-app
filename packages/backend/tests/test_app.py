@@ -1109,6 +1109,8 @@ def test_invoice_list_aggregates_card_purchases_without_zero_value_rows(tmp_path
             "closing_date": "2026-04-10",
             "due_date": "2026-04-20",
             "total_amount": 50_00,
+            "paid_amount": 0,
+            "remaining_amount": 50_00,
             "purchase_count": 2,
             "status": "open",
         }
@@ -1175,6 +1177,8 @@ def test_card_purchase_endpoint_supports_installments_and_monthly_budget_project
             "closing_date": "2026-06-10",
             "due_date": "2026-06-20",
             "total_amount": 33_34,
+            "paid_amount": 0,
+            "remaining_amount": 33_34,
             "purchase_count": 1,
             "status": "open",
         },
@@ -1185,6 +1189,8 @@ def test_card_purchase_endpoint_supports_installments_and_monthly_budget_project
             "closing_date": "2026-05-10",
             "due_date": "2026-05-20",
             "total_amount": 33_33,
+            "paid_amount": 0,
+            "remaining_amount": 33_33,
             "purchase_count": 1,
             "status": "open",
         },
@@ -1195,6 +1201,8 @@ def test_card_purchase_endpoint_supports_installments_and_monthly_budget_project
             "closing_date": "2026-04-10",
             "due_date": "2026-04-20",
             "total_amount": 33_33,
+            "paid_amount": 0,
+            "remaining_amount": 33_33,
             "purchase_count": 1,
             "status": "open",
         },
@@ -1206,6 +1214,124 @@ def test_card_purchase_endpoint_supports_installments_and_monthly_budget_project
             "category_id": "electronics",
             "total": 33_33,
         }
+    ]
+
+
+def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Savings", "savings", 300_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Headphones",
+        },
+    )
+
+    partial_response = client.post(
+        "/api/invoices/card-1:2026-04/payments",
+        json={
+            "id": "payment-1",
+            "amount": 30_00,
+            "account_id": "acc-2",
+            "paid_at": "2026-03-20T12:00:00Z",
+        },
+    )
+    final_response = client.post(
+        "/api/invoices/card-1:2026-04/payments",
+        json={
+            "id": "payment-2",
+            "amount": 60_00,
+            "account_id": "acc-2",
+            "paid_at": "2026-03-20T12:05:00Z",
+        },
+    )
+    invoices_response = client.get("/api/invoices", params={"card": "card-1"})
+    accounts_response = client.get("/api/accounts")
+    transactions_response = client.get("/api/transactions", params={"account": "acc-2"})
+
+    assert partial_response.status_code == 201
+    assert partial_response.json() == {
+        "invoice_id": "card-1:2026-04",
+        "card_id": "card-1",
+        "reference_month": "2026-04",
+        "closing_date": "2026-04-10",
+        "due_date": "2026-04-20",
+        "total_amount": 90_00,
+        "paid_amount": 30_00,
+        "remaining_amount": 60_00,
+        "purchase_count": 1,
+        "status": "partial",
+    }
+    assert final_response.status_code == 201
+    assert final_response.json()["status"] == "paid"
+    assert final_response.json()["paid_amount"] == 90_00
+    assert final_response.json()["remaining_amount"] == 0
+    assert invoices_response.status_code == 200
+    assert invoices_response.json() == [
+        {
+            "invoice_id": "card-1:2026-04",
+            "card_id": "card-1",
+            "reference_month": "2026-04",
+            "closing_date": "2026-04-10",
+            "due_date": "2026-04-20",
+            "total_amount": 90_00,
+            "paid_amount": 90_00,
+            "remaining_amount": 0,
+            "purchase_count": 1,
+            "status": "paid",
+        }
+    ]
+    assert accounts_response.status_code == 200
+    assert next(
+        account for account in accounts_response.json() if account["account_id"] == "acc-2"
+    )["current_balance"] == 210_00
+    assert transactions_response.status_code == 200
+    assert transactions_response.json() == [
+        {
+            "transaction_id": "payment-2:invoice-payment",
+            "occurred_at": "2026-03-20T12:05:00Z",
+            "type": "expense",
+            "amount": 60_00,
+            "account_id": "acc-2",
+            "payment_method": "OTHER",
+            "category_id": "invoice_payment",
+            "description": "Pagamento de fatura card-1:2026-04",
+            "person_id": None,
+            "status": "active",
+        },
+        {
+            "transaction_id": "payment-1:invoice-payment",
+            "occurred_at": "2026-03-20T12:00:00Z",
+            "type": "expense",
+            "amount": 30_00,
+            "account_id": "acc-2",
+            "payment_method": "OTHER",
+            "category_id": "invoice_payment",
+            "description": "Pagamento de fatura card-1:2026-04",
+            "person_id": None,
+            "status": "active",
+        },
     ]
 
 

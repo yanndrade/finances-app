@@ -16,6 +16,8 @@ type InvoiceSummary = {
   closing_date: string;
   due_date: string;
   total_amount: number;
+  paid_amount: number;
+  remaining_amount: number;
   purchase_count: number;
   status: string;
 };
@@ -85,17 +87,25 @@ function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
 }
 
 function buildInvoice(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
-  return {
+  const invoice: InvoiceSummary = {
     invoice_id: "card-1:2026-03",
     card_id: "card-1",
     reference_month: "2026-03",
     closing_date: "2026-03-10",
     due_date: "2026-03-20",
     total_amount: 100_00,
+    paid_amount: 0,
+    remaining_amount: 100_00,
     purchase_count: 1,
     status: "open",
     ...overrides,
   };
+
+  if (overrides.remaining_amount === undefined) {
+    invoice.remaining_amount = invoice.total_amount - invoice.paid_amount;
+  }
+
+  return invoice;
 }
 
 function installAppFetchMock(initialState?: {
@@ -237,6 +247,7 @@ function installAppFetchMock(initialState?: {
 
         if (existingInvoice) {
           existingInvoice.total_amount += nextInvoice.total_amount;
+          existingInvoice.remaining_amount += nextInvoice.remaining_amount;
           existingInvoice.purchase_count += nextInvoice.purchase_count;
         } else {
           state.invoices = [nextInvoice, ...state.invoices];
@@ -286,6 +297,54 @@ function installAppFetchMock(initialState?: {
       return new Response(
         JSON.stringify(state.cards.find((card) => card.card_id === cardId)),
       );
+    }
+
+    if (url.includes("/api/invoices/") && url.endsWith("/payments") && method === "POST") {
+      const invoiceId = decodeURIComponent(
+        url.split("/api/invoices/")[1]?.replace("/payments", "") ?? "",
+      );
+      const payload = JSON.parse(String(init?.body)) as {
+        id: string;
+        amount: number;
+        account_id: string;
+        paid_at: string;
+      };
+      const invoice = state.invoices.find((item) => item.invoice_id === invoiceId);
+      if (!invoice) {
+        return new Response("Invoice not found", { status: 404 });
+      }
+
+      const appliedAmount = Math.min(payload.amount, invoice.remaining_amount);
+      invoice.paid_amount += appliedAmount;
+      invoice.remaining_amount -= appliedAmount;
+      invoice.status = invoice.remaining_amount === 0 ? "paid" : "partial";
+
+      state.accounts = state.accounts.map((account) => {
+        if (account.account_id !== payload.account_id) {
+          return account;
+        }
+
+        return {
+          ...account,
+          current_balance: account.current_balance - appliedAmount,
+        };
+      });
+
+      const paymentTransaction: TransactionSummary = {
+        transaction_id: `${payload.id}:invoice-payment`,
+        occurred_at: payload.paid_at,
+        type: "expense",
+        amount: appliedAmount,
+        account_id: payload.account_id,
+        payment_method: "OTHER",
+        category_id: "invoice_payment",
+        description: `Pagamento de fatura ${invoiceId}`,
+        person_id: null,
+        status: "active",
+      };
+      state.transactions = [paymentTransaction, ...state.transactions];
+
+      return new Response(JSON.stringify(invoice), { status: 201 });
     }
 
     if (url.includes("/api/transactions/") && method === "PATCH") {
@@ -470,7 +529,7 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: /^cards$/i }));
 
     expect(
-      await screen.findByText(/nenhuma fatura aberta para os cartoes cadastrados/i),
+      await screen.findByText(/nenhuma fatura pendente para os cartoes cadastrados/i),
     ).toBeInTheDocument();
 
     await userEvent.selectOptions(screen.getByLabelText(/cartao da compra/i), "card-1");
@@ -485,7 +544,7 @@ describe("App", () => {
     await userEvent.type(screen.getByLabelText(/descricao da compra/i), "Taxi");
     await userEvent.click(screen.getByRole("button", { name: /registrar compra/i }));
 
-    const invoicesSection = await screen.findByRole("region", { name: /faturas abertas/i });
+    const invoicesSection = await screen.findByRole("region", { name: /faturas pendentes/i });
     expect(within(invoicesSection).getByText(/referencia 2026-04/i)).toBeInTheDocument();
     expect(within(invoicesSection).getByText(/referencia 2026-06/i)).toBeInTheDocument();
     expect(within(invoicesSection).getAllByText("R$ 16,66").length).toBe(2);
@@ -496,6 +555,50 @@ describe("App", () => {
       expect(
         fetchMock.mock.calls.some(([url, init]) => {
           return String(url).endsWith("/api/card-purchases") && init?.method === "POST";
+        }),
+      ).toBe(true);
+    });
+  });
+
+  it("registers an invoice payment from the cards view and keeps partial invoices visible", async () => {
+    const fetchMock = installAppFetchMock({
+      invoices: [
+        buildInvoice({
+          invoice_id: "card-1:2026-04",
+          card_id: "card-1",
+          reference_month: "2026-04",
+          closing_date: "2026-04-10",
+          due_date: "2026-04-20",
+          total_amount: 100_00,
+        }),
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByText("Como voce esta");
+    await userEvent.click(screen.getByRole("button", { name: /^cards$/i }));
+
+    const invoicesSection = await screen.findByRole("region", { name: /faturas pendentes/i });
+    expect(within(invoicesSection).getByText("R$ 100,00")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /registrar pagamento/i }));
+    await userEvent.clear(screen.getByLabelText(/valor do pagamento/i));
+    await userEvent.type(screen.getByLabelText(/valor do pagamento/i), "3000");
+    await userEvent.click(screen.getByRole("button", { name: /confirmar pagamento/i }));
+
+    await waitFor(() => {
+      expect(within(invoicesSection).getByText("Parcial")).toBeInTheDocument();
+    });
+    expect(within(invoicesSection).getByText("R$ 70,00")).toBeInTheDocument();
+    expect(within(invoicesSection).getByText(/total r\$ 100,00/i)).toBeInTheDocument();
+    expect(within(invoicesSection).getByText(/pago r\$ 30,00/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return String(url).includes("/api/invoices/card-1%3A2026-04/payments") &&
+            init?.method === "POST";
         }),
       ).toBe(true);
     });

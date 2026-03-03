@@ -9,6 +9,7 @@ import type {
   CardPayload,
   CardPurchasePayload,
   CardSummary,
+  InvoicePaymentPayload,
   CardUpdatePayload,
   InvoiceSummary,
 } from "../../lib/api";
@@ -20,6 +21,7 @@ type CardsViewProps = {
   isSubmitting: boolean;
   onCreateCard: (payload: CardPayload) => Promise<void>;
   onCreateCardPurchase: (payload: CardPurchasePayload) => Promise<void>;
+  onPayInvoice: (payload: InvoicePaymentPayload) => Promise<void>;
   onUpdateCard: (cardId: string, payload: CardUpdatePayload) => Promise<void>;
 };
 
@@ -44,6 +46,12 @@ type PurchaseFormState = {
   description: string;
 };
 
+type PaymentFormState = {
+  accountId: string;
+  amount: string;
+  paidAt: string;
+};
+
 export function CardsView({
   accounts,
   cards,
@@ -51,6 +59,7 @@ export function CardsView({
   isSubmitting,
   onCreateCard,
   onCreateCardPurchase,
+  onPayInvoice,
   onUpdateCard,
 }: CardsViewProps) {
   const [createForm, setCreateForm] = useState<CardFormState>(() => createEmptyForm(accounts));
@@ -63,8 +72,13 @@ export function CardsView({
   );
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
+  const [paymentForm, setPaymentForm] = useState<PaymentFormState>(() =>
+    createEmptyPaymentForm(accounts),
+  );
   const [formError, setFormError] = useState<string | null>(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   useEffect(() => {
     setCreateForm((current) =>
@@ -83,9 +97,15 @@ export function CardsView({
   }, [cards]);
 
   const activeCards = cards.filter((card) => card.is_active);
+  const activeAccounts = accounts.filter((account) => account.is_active);
   const activeLimitTotal = activeCards.reduce((sum, card) => sum + card.limit, 0);
-  const openInvoices = invoices.filter((invoice) => invoice.status === "open");
-  const openInvoiceTotal = openInvoices.reduce((sum, invoice) => sum + invoice.total_amount, 0);
+  const payableInvoices = invoices.filter(
+    (invoice) => invoice.status === "open" || invoice.status === "partial",
+  );
+  const openInvoiceTotal = payableInvoices.reduce(
+    (sum, invoice) => sum + invoice.remaining_amount,
+    0,
+  );
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -169,6 +189,34 @@ export function CardsView({
     setPurchaseForm(createEmptyPurchaseForm(cards));
   }
 
+  async function handlePaymentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPaymentError(null);
+
+    if (payingInvoiceId === null) {
+      return;
+    }
+
+    const validationError = validatePaymentForm(paymentForm);
+    if (validationError !== null) {
+      setPaymentError(validationError);
+      return;
+    }
+
+    try {
+      await onPayInvoice({
+        invoiceId: payingInvoiceId,
+        amountInCents: parseInt(paymentForm.amount, 10),
+        accountId: paymentForm.accountId,
+        paidAt: paymentForm.paidAt,
+      });
+    } catch {
+      return;
+    }
+
+    setPayingInvoiceId(null);
+  }
+
   function openCreateModal() {
     setFormError(null);
     setCreateForm(createEmptyForm(accounts));
@@ -188,6 +236,22 @@ export function CardsView({
     });
   }
 
+  function openPaymentModal(invoice: InvoiceSummary) {
+    const preferredAccountId = cards.find((card) => card.card_id === invoice.card_id)?.payment_account_id;
+    const selectedAccountId =
+      activeAccounts.find((account) => account.account_id === preferredAccountId)?.account_id ??
+      activeAccounts[0]?.account_id ??
+      "";
+
+    setPaymentError(null);
+    setPayingInvoiceId(invoice.invoice_id);
+    setPaymentForm({
+      accountId: selectedAccountId,
+      amount: String(invoice.remaining_amount),
+      paidAt: currentLocalDateTime(),
+    });
+  }
+
   return (
     <div className="screen-stack">
       <div className="stats-grid">
@@ -202,9 +266,9 @@ export function CardsView({
           value={formatCurrency(activeLimitTotal)}
         />
         <StatCard
-          label="Faturas abertas"
+          label="Faturas pendentes"
           tone="default"
-          value={String(openInvoices.length)}
+          value={String(payableInvoices.length)}
         />
         <StatCard
           label="Total em faturas"
@@ -405,42 +469,142 @@ export function CardsView({
         )}
       </section>
 
-      <section aria-label="Faturas abertas" className="panel-card">
+      <section aria-label="Faturas pendentes" className="panel-card">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Faturas</p>
-            <h2 className="section-title">Resumo das faturas abertas</h2>
+            <h2 className="section-title">Resumo das faturas pendentes</h2>
             <p className="section-copy">
-              Confira valor acumulado, vencimento e volume de parcelas previstas por cartao.
+              Acompanhe saldo restante e registre pagamentos parciais ou totais sem sair daqui.
             </p>
           </div>
         </div>
 
-        {openInvoices.length === 0 ? (
-          <div className="empty-state">Nenhuma fatura aberta para os cartoes cadastrados.</div>
+        {payableInvoices.length === 0 ? (
+          <div className="empty-state">Nenhuma fatura pendente para os cartoes cadastrados.</div>
         ) : (
           <div className="account-grid">
-            {openInvoices.map((invoice) => (
+            {payableInvoices.map((invoice) => (
               <article key={invoice.invoice_id} className="account-card">
                 <div className="account-card__header">
                   <div>
                     <strong>{resolveCardName(cards, invoice.card_id)}</strong>
                     <p className="account-card__meta">Referencia {invoice.reference_month}</p>
                   </div>
-                  <span className="status-badge status-badge--active">Aberta</span>
+                  <span
+                    className={`status-badge status-badge--${
+                      invoice.status === "partial" ? "pending" : "active"
+                    }`}
+                  >
+                    {invoice.status === "partial" ? "Parcial" : "Aberta"}
+                  </span>
                 </div>
-                <p className="account-card__balance">{formatCurrency(invoice.total_amount)}</p>
+                <p className="account-card__balance">{formatCurrency(invoice.remaining_amount)}</p>
                 <p className="account-card__meta">
                   Fecha em {invoice.closing_date} e vence em {invoice.due_date}
                 </p>
                 <p className="account-card__meta">
+                  Total {formatCurrency(invoice.total_amount)} • Pago{" "}
+                  {formatCurrency(invoice.paid_amount)}
+                </p>
+                <p className="account-card__meta">
                   {invoice.purchase_count} {invoice.purchase_count === 1 ? "parcela" : "parcelas"}
                 </p>
+                <button
+                  className="ghost-button"
+                  disabled={activeAccounts.length === 0}
+                  onClick={() => openPaymentModal(invoice)}
+                  type="button"
+                >
+                  Registrar pagamento
+                </button>
               </article>
             ))}
           </div>
         )}
       </section>
+
+      <Modal
+        isOpen={payingInvoiceId !== null}
+        onClose={() => {
+          setPaymentError(null);
+          setPayingInvoiceId(null);
+        }}
+        title="Pagar fatura"
+      >
+        <form className="form-card" onSubmit={handlePaymentSubmit}>
+          <label className="custom-select-wrapper">
+            Conta de pagamento
+            <select
+              aria-label="Conta de pagamento"
+              onChange={(event) =>
+                setPaymentForm((current) => ({
+                  ...current,
+                  accountId: event.target.value,
+                }))
+              }
+              required
+              value={paymentForm.accountId}
+            >
+              {activeAccounts.map((account) => (
+                <option key={account.account_id} value={account.account_id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <CurrencyInput
+            aria-label="Valor do pagamento"
+            id="invoice-payment-amount"
+            label="Valor do pagamento"
+            onChange={(value) =>
+              setPaymentForm((current) => ({
+                ...current,
+                amount: value,
+              }))
+            }
+            value={paymentForm.amount}
+          />
+          <label>
+            Data do pagamento
+            <input
+              aria-label="Data do pagamento"
+              onChange={(event) =>
+                setPaymentForm((current) => ({
+                  ...current,
+                  paidAt: event.target.value,
+                }))
+              }
+              required
+              type="datetime-local"
+              value={paymentForm.paidAt}
+            />
+          </label>
+          <p className="field-hint">
+            Escolha qualquer conta ativa. O app sugere a conta padrao do cartao, mas voce pode trocar.
+          </p>
+          {paymentError !== null ? (
+            <p className="field-hint text-negative" role="alert">
+              {paymentError}
+            </p>
+          ) : null}
+          <div className="inline-actions">
+            <button className="primary-button" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Registrando..." : "Confirmar pagamento"}
+            </button>
+            <button
+              className="ghost-button"
+              onClick={() => {
+                setPaymentError(null);
+                setPayingInvoiceId(null);
+              }}
+              type="button"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         isOpen={isCreateModalOpen}
@@ -694,6 +858,14 @@ function createEmptyPurchaseForm(cards: CardSummary[]): PurchaseFormState {
   };
 }
 
+function createEmptyPaymentForm(accounts: AccountSummary[]): PaymentFormState {
+  return {
+    accountId: accounts.find((account) => account.is_active)?.account_id ?? "",
+    amount: "0",
+    paidAt: currentLocalDateTime(),
+  };
+}
+
 function currentLocalDateTime(): string {
   const now = new Date();
   const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
@@ -759,6 +931,23 @@ function validatePurchaseForm(form: PurchaseFormState): string | null {
 
   if (!form.categoryId.trim()) {
     return "Informe a categoria da compra.";
+  }
+
+  return null;
+}
+
+function validatePaymentForm(form: PaymentFormState): string | null {
+  if (!form.accountId) {
+    return "Selecione uma conta ativa para pagar a fatura.";
+  }
+
+  const amount = parseInt(form.amount, 10);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return "Informe um valor maior que zero.";
+  }
+
+  if (!form.paidAt.trim()) {
+    return "Informe a data do pagamento.";
   }
 
   return null;

@@ -79,6 +79,8 @@ class InvoiceProjection:
     closing_date: str
     due_date: str
     total_amount: int
+    paid_amount: int
+    remaining_amount: int
     purchase_count: int
     status: str
 
@@ -90,6 +92,8 @@ class InvoiceProjection:
             "closing_date": self.closing_date,
             "due_date": self.due_date,
             "total_amount": self.total_amount,
+            "paid_amount": self.paid_amount,
+            "remaining_amount": self.remaining_amount,
             "purchase_count": self.purchase_count,
             "status": self.status,
         }

@@ -24,6 +24,12 @@ from finance_app.application.cards import (
     CardService,
 )
 from finance_app.application.health import HealthCheckUseCase
+from finance_app.application.invoice_payments import (
+    InvoiceNotFoundError,
+    InvoicePaymentAlreadyExistsError,
+    InvoicePaymentService,
+    InvoicePaymentServiceError,
+)
 from finance_app.application.transactions import (
     InvalidTransactionDateError,
     TransactionAlreadyExistsError,
@@ -85,6 +91,13 @@ class CreateCardPurchaseRequest(BaseModel):
     description: str | None = None
 
 
+class CreateInvoicePaymentRequest(BaseModel):
+    id: str = Field(min_length=1)
+    amount: int = Field(gt=0)
+    account_id: str = Field(min_length=1)
+    paid_at: str
+
+
 class CreateTransactionRequest(BaseModel):
     id: str = Field(min_length=1)
     occurred_at: str
@@ -124,6 +137,7 @@ def build_router(
     account_service: AccountService,
     card_service: CardService,
     card_purchase_service: CardPurchaseService,
+    invoice_payment_service: InvoicePaymentService,
     transaction_service: TransactionService,
     transfer_service: TransferService,
     event_store: EventStore,
@@ -287,6 +301,40 @@ def build_router(
         try:
             return card_purchase_service.list_invoices(card_id=card_id)
         except CardPurchaseServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.post("/api/invoices/{invoice_id}/payments", status_code=status.HTTP_201_CREATED)
+    def create_invoice_payment(
+        invoice_id: str,
+        payload: CreateInvoicePaymentRequest,
+    ) -> dict[str, str | int]:
+        try:
+            return invoice_payment_service.create_payment(
+                payment_id=payload.id,
+                invoice_id=invoice_id,
+                amount=payload.amount,
+                account_id=payload.account_id,
+                paid_at=payload.paid_at,
+            )
+        except AccountNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except InvoiceNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except InvoicePaymentAlreadyExistsError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+        except InvoicePaymentServiceError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
@@ -498,6 +546,11 @@ def create_app(
         projector=projector,
         card_reader=card_service,
     )
+    invoice_payment_service = InvoicePaymentService(
+        event_store=event_store,
+        projector=projector,
+        account_reader=account_service,
+    )
     transaction_service = TransactionService(
         event_store=event_store,
         projector=projector,
@@ -526,6 +579,7 @@ def create_app(
             account_service,
             card_service,
             card_purchase_service,
+            invoice_payment_service,
             transaction_service,
             transfer_service,
             event_store,
