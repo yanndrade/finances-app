@@ -29,28 +29,71 @@ describe("Movements panel", () => {
   });
 
   it("submits a new expense and refreshes the dashboard", async () => {
-    const fetchMock = vi
-      .fn<(typeof fetch)>()
-      .mockImplementationOnce(() =>
-        Promise.resolve(
+    let dashboardCallCount = 0;
+    let accountsCallCount = 0;
+    let transactionsCallCount = 0;
+
+    const fetchMock = vi.fn<(typeof fetch)>().mockImplementation((input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url.includes("/api/cards") && method === "GET") {
+        return Promise.resolve(new Response(JSON.stringify([])));
+      }
+
+      if (url.includes("/api/dashboard") && method === "GET") {
+        dashboardCallCount += 1;
+
+        return Promise.resolve(
           new Response(
-            JSON.stringify({
-              month: "2026-03",
-              total_income: 5000,
-              total_expense: 2000,
-              net_flow: 3000,
-              current_balance: 15500,
-              recent_transactions: [],
-              spending_by_category: [],
-              previous_month: { total_income: 0, total_expense: 0, net_flow: 0 },
-              daily_balance_series: [],
-              review_queue: [],
-            }),
+            JSON.stringify(
+              dashboardCallCount === 1
+                ? {
+                    month: "2026-03",
+                    total_income: 5000,
+                    total_expense: 2000,
+                    net_flow: 3000,
+                    current_balance: 15500,
+                    recent_transactions: [],
+                    spending_by_category: [],
+                    previous_month: { total_income: 0, total_expense: 0, net_flow: 0 },
+                    daily_balance_series: [],
+                    review_queue: [],
+                  }
+                : {
+                    month: "2026-03",
+                    total_income: 5000,
+                    total_expense: 3000,
+                    net_flow: 2000,
+                    current_balance: 14500,
+                    recent_transactions: [
+                      {
+                        transaction_id: "tx-new",
+                        occurred_at: "2026-03-03T12:00:00Z",
+                        type: "expense",
+                        amount: 1000,
+                        account_id: "acc-1",
+                        payment_method: "CASH",
+                        category_id: "food",
+                        description: "Dinner",
+                        person_id: null,
+                        status: "active",
+                      },
+                    ],
+                    spending_by_category: [{ category_id: "food", total: 3000 }],
+                    previous_month: { total_income: 0, total_expense: 0, net_flow: 0 },
+                    daily_balance_series: [{ date: "2026-03-03", balance: 2000 }],
+                    review_queue: [],
+                  },
+            ),
           ),
-        ),
-      )
-      .mockImplementationOnce(() =>
-        Promise.resolve(
+        );
+      }
+
+      if (url.includes("/api/accounts") && method === "GET") {
+        accountsCallCount += 1;
+
+        return Promise.resolve(
           new Response(
             JSON.stringify([
               {
@@ -59,17 +102,42 @@ describe("Movements panel", () => {
                 type: "wallet",
                 initial_balance: 10000,
                 is_active: true,
-                current_balance: 15500
-              }
+                current_balance: accountsCallCount === 1 ? 15500 : 14500,
+              },
             ]),
           ),
-        ),
-      )
-      .mockImplementationOnce(() =>
-        Promise.resolve(new Response(JSON.stringify([]))),
-      )
-      .mockImplementationOnce(() =>
-        Promise.resolve(
+        );
+      }
+
+      if (url.includes("/api/transactions") && method === "GET") {
+        transactionsCallCount += 1;
+
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              transactionsCallCount === 1
+                ? []
+                : [
+                    {
+                      transaction_id: "tx-new",
+                      occurred_at: "2026-03-03T12:00:00Z",
+                      type: "expense",
+                      amount: 1000,
+                      account_id: "acc-1",
+                      payment_method: "CASH",
+                      category_id: "food",
+                      description: "Dinner",
+                      person_id: null,
+                      status: "active",
+                    },
+                  ],
+            ),
+          ),
+        );
+      }
+
+      if (url.includes("/api/expenses") && method === "POST") {
+        return Promise.resolve(
           new Response(
             JSON.stringify({
               transaction_id: "tx-new",
@@ -81,79 +149,15 @@ describe("Movements panel", () => {
               category_id: "food",
               description: "Dinner",
               person_id: null,
-              status: "active"
+              status: "active",
             }),
             { status: 201 },
           ),
-        ),
-      )
-      .mockImplementationOnce(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              month: "2026-03",
-              total_income: 5000,
-              total_expense: 3000,
-              net_flow: 2000,
-              current_balance: 14500,
-              recent_transactions: [
-                {
-                  transaction_id: "tx-new",
-                  occurred_at: "2026-03-03T12:00:00Z",
-                  type: "expense",
-                  amount: 1000,
-                  account_id: "acc-1",
-                  payment_method: "CASH",
-                  category_id: "food",
-                  description: "Dinner",
-                  person_id: null,
-                  status: "active"
-                }
-              ],
-              spending_by_category: [{ category_id: "food", total: 3000 }],
-              previous_month: { total_income: 0, total_expense: 0, net_flow: 0 },
-              daily_balance_series: [{ date: "2026-03-03", balance: 2000 }],
-              review_queue: [],
-            }),
-          ),
-        ),
-      )
-      .mockImplementationOnce(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify([
-              {
-                account_id: "acc-1",
-                name: "Main Wallet",
-                type: "wallet",
-                initial_balance: 10000,
-                is_active: true,
-                current_balance: 14500
-              }
-            ]),
-          ),
-        ),
-      )
-      .mockImplementationOnce(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify([
-              {
-                transaction_id: "tx-new",
-                occurred_at: "2026-03-03T12:00:00Z",
-                type: "expense",
-                amount: 1000,
-                account_id: "acc-1",
-                payment_method: "CASH",
-                category_id: "food",
-                description: "Dinner",
-                person_id: null,
-                status: "active"
-              }
-            ]),
-          ),
-        ),
-      );
+        );
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
 
     vi.stubGlobal("fetch", fetchMock);
 
@@ -172,7 +176,7 @@ describe("Movements panel", () => {
     expect(screen.getByText("Dinner")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(7);
+      expect(fetchMock).toHaveBeenCalledTimes(9);
     });
   });
 

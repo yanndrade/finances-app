@@ -2,7 +2,12 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "./App";
-import type { AccountSummary, DashboardSummary, TransactionSummary } from "./lib/api";
+import type {
+  AccountSummary,
+  CardSummary,
+  DashboardSummary,
+  TransactionSummary,
+} from "./lib/api";
 
 function buildAccount(overrides: Partial<AccountSummary> = {}): AccountSummary {
   return {
@@ -55,13 +60,28 @@ function buildDashboard(
   };
 }
 
+function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
+  return {
+    card_id: "card-1",
+    name: "Nubank",
+    limit: 150_000,
+    closing_day: 10,
+    due_day: 20,
+    payment_account_id: "acc-1",
+    is_active: true,
+    ...overrides,
+  };
+}
+
 function installAppFetchMock(initialState?: {
   accounts?: AccountSummary[];
+  cards?: CardSummary[];
   transactions?: TransactionSummary[];
   dashboard?: DashboardSummary;
 }) {
   const state = {
     accounts: initialState?.accounts ?? [buildAccount()],
+    cards: initialState?.cards ?? [buildCard()],
     transactions: initialState?.transactions ?? [buildTransaction()],
     dashboard:
       initialState?.dashboard ??
@@ -82,12 +102,17 @@ function installAppFetchMock(initialState?: {
       return new Response(JSON.stringify(state.accounts));
     }
 
+    if (url.includes("/api/cards") && method === "GET") {
+      return new Response(JSON.stringify(state.cards));
+    }
+
     if (url.includes("/api/transactions") && method === "GET") {
       return new Response(JSON.stringify(state.transactions));
     }
 
     if (url.endsWith("/api/dev/reset") && method === "POST") {
       state.accounts = [];
+      state.cards = [];
       state.transactions = [];
       state.dashboard = buildDashboard({
         total_income: 0,
@@ -123,6 +148,55 @@ function installAppFetchMock(initialState?: {
       state.accounts = [...state.accounts, nextAccount];
 
       return new Response(JSON.stringify(nextAccount), { status: 201 });
+    }
+
+    if (url.endsWith("/api/cards") && method === "POST") {
+      const payload = JSON.parse(String(init?.body)) as {
+        id: string;
+        name: string;
+        limit: number;
+        closing_day: number;
+        due_day: number;
+        payment_account_id: string;
+      };
+      const nextCard = buildCard({
+        card_id: payload.id,
+        name: payload.name,
+        limit: payload.limit,
+        closing_day: payload.closing_day,
+        due_day: payload.due_day,
+        payment_account_id: payload.payment_account_id,
+      });
+      state.cards = [...state.cards, nextCard];
+
+      return new Response(JSON.stringify(nextCard), { status: 201 });
+    }
+
+    if (url.includes("/api/cards/") && method === "PATCH") {
+      const cardId = url.split("/api/cards/")[1];
+      const payload = JSON.parse(String(init?.body)) as {
+        name?: string;
+        limit?: number;
+        closing_day?: number;
+        due_day?: number;
+        payment_account_id?: string;
+        is_active?: boolean;
+      };
+
+      state.cards = state.cards.map((card) => {
+        if (card.card_id !== cardId) {
+          return card;
+        }
+
+        return {
+          ...card,
+          ...payload,
+        };
+      });
+
+      return new Response(
+        JSON.stringify(state.cards.find((card) => card.card_id === cardId)),
+      );
     }
 
     if (url.includes("/api/transactions/") && method === "PATCH") {
@@ -238,6 +312,58 @@ describe("App", () => {
       expect(
         fetchMock.mock.calls.some(([url, init]) => {
           return String(url).endsWith("/api/accounts") && init?.method === "POST";
+        }),
+      ).toBe(true);
+    });
+  });
+
+  it("creates and edits a card from the cards view", async () => {
+    const fetchMock = installAppFetchMock({
+      cards: [],
+    });
+
+    render(<App />);
+
+    await screen.findByText("Como voce esta");
+    await userEvent.click(screen.getByRole("button", { name: /^cards$/i }));
+
+    expect(
+      await screen.findByText(/voce ainda nao tem cartoes cadastrados/i),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /\+ adicionar cartao/i }));
+    await userEvent.type(screen.getByLabelText(/nome do cartao/i), "Visa Infinite");
+    const limitInput = screen.getByLabelText(/limite do cartao/i);
+    await userEvent.clear(limitInput);
+    await userEvent.type(limitInput, "5000");
+    await userEvent.clear(screen.getByLabelText(/dia de fechamento/i));
+    await userEvent.type(screen.getByLabelText(/dia de fechamento/i), "12");
+    await userEvent.clear(screen.getByLabelText(/dia de vencimento/i));
+    await userEvent.type(screen.getByLabelText(/dia de vencimento/i), "22");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/conta padrao para pagamento/i),
+      "acc-1",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /criar cartao/i }));
+
+    expect(await screen.findByText("Visa Infinite")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /editar visa infinite/i }));
+    await userEvent.clear(screen.getByLabelText(/nome do cartao/i));
+    await userEvent.type(screen.getByLabelText(/nome do cartao/i), "Visa Black");
+    await userEvent.click(screen.getByRole("button", { name: /salvar cartao/i }));
+
+    expect(await screen.findByText("Visa Black")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return String(url).endsWith("/api/cards") && init?.method === "POST";
+        }),
+      ).toBe(true);
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return String(url).includes("/api/cards/") && init?.method === "PATCH";
         }),
       ).toBe(true);
     });
