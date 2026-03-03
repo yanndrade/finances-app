@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import type { AccountSummary, CashTransactionPayload, TransferPayload } from "../../lib/api";
 
@@ -51,13 +51,46 @@ export function MovementsPanel({
 }: MovementsPanelProps) {
   const [movementForm, setMovementForm] = useState<MovementFormValues>({
     ...EMPTY_MOVEMENT,
-    accountId: accounts[0]?.account_id ?? "",
+    accountId: resolveAccountId("", accounts),
   });
   const [transferForm, setTransferForm] = useState<TransferFormValues>({
     ...EMPTY_TRANSFER,
-    fromAccountId: accounts[0]?.account_id ?? "",
-    toAccountId: accounts[1]?.account_id ?? "",
+    fromAccountId: resolveAccountId("", accounts),
+    toAccountId: resolveTransferTarget("", accounts, accounts[0]?.account_id ?? ""),
   });
+
+  useEffect(() => {
+    setMovementForm((current) => {
+      const accountId = resolveAccountId(current.accountId, accounts);
+
+      if (accountId == current.accountId) {
+        return current;
+      }
+
+      return {
+        ...current,
+        accountId,
+      };
+    });
+
+    setTransferForm((current) => {
+      const fromAccountId = resolveAccountId(current.fromAccountId, accounts);
+      const toAccountId = resolveTransferTarget(current.toAccountId, accounts, fromAccountId);
+
+      if (
+        fromAccountId == current.fromAccountId &&
+        toAccountId == current.toAccountId
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        fromAccountId,
+        toAccountId,
+      };
+    });
+  }, [accounts]);
 
   async function handleTransactionSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -294,4 +327,38 @@ export function MovementsPanel({
 
 function toCents(rawAmount: string): number {
   return Math.round(Number(rawAmount.replace(",", ".")) * 100);
+}
+
+function resolveAccountId(currentAccountId: string, accounts: AccountSummary[]): string {
+  if (accounts.length === 0) {
+    return "";
+  }
+
+  const hasCurrentAccount = accounts.some((account) => account.account_id === currentAccountId);
+
+  if (hasCurrentAccount) {
+    return currentAccountId;
+  }
+
+  return accounts[0].account_id;
+}
+
+function resolveTransferTarget(
+  currentAccountId: string,
+  accounts: AccountSummary[],
+  fromAccountId: string,
+): string {
+  if (accounts.length === 0) {
+    return "";
+  }
+
+  const hasCurrentAccount = accounts.some((account) => account.account_id === currentAccountId);
+
+  if (hasCurrentAccount) {
+    return currentAccountId;
+  }
+
+  const alternateAccount = accounts.find((account) => account.account_id !== fromAccountId);
+
+  return alternateAccount?.account_id ?? accounts[0].account_id;
 }
