@@ -79,6 +79,7 @@ class CreateCardPurchaseRequest(BaseModel):
     id: str = Field(min_length=1)
     purchase_date: str
     amount: int = Field(gt=0)
+    installments_count: int = Field(default=1, ge=1)
     category_id: str = Field(min_length=1)
     card_id: str = Field(min_length=1)
     description: str | None = None
@@ -258,6 +259,7 @@ def build_router(
                 purchase_id=payload.id,
                 purchase_date=payload.purchase_date,
                 amount=payload.amount,
+                installments_count=payload.installments_count,
                 category_id=payload.category_id,
                 card_id=payload.card_id,
                 description=payload.description,

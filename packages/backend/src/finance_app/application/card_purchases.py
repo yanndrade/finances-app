@@ -60,6 +60,7 @@ class CardPurchaseService:
         purchase_id: str,
         purchase_date: str,
         amount: int,
+        installments_count: int = 1,
         category_id: str,
         card_id: str,
         description: str | None = None,
@@ -74,6 +75,7 @@ class CardPurchaseService:
         self._validate_payload(
             purchase_date=purchase_date,
             amount=amount,
+            installments_count=installments_count,
             category_id=category_id,
             card_id=card_id,
         )
@@ -82,6 +84,7 @@ class CardPurchaseService:
             "id": purchase_id,
             "purchase_date": purchase_date,
             "amount": amount,
+            "installments_count": installments_count,
             "category_id": category_id,
             "card_id": card_id,
             "description": description,
@@ -112,6 +115,7 @@ class CardPurchaseService:
         *,
         purchase_date: str,
         amount: int,
+        installments_count: int,
         category_id: str,
         card_id: str,
     ) -> None:
@@ -124,6 +128,8 @@ class CardPurchaseService:
 
         if amount <= 0:
             raise CardPurchaseServiceError("amount must be greater than zero.")
+        if installments_count <= 0:
+            raise CardPurchaseServiceError("installments_count must be at least 1.")
         if not category_id.strip():
             raise CardPurchaseServiceError("category_id is required.")
         if not card_id.strip():

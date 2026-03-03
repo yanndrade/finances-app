@@ -1040,6 +1040,7 @@ def test_card_purchase_endpoint_allocates_purchases_into_prd_invoice_cycles(tmp_
         "category_id": "food",
         "card_id": "card-1",
         "description": "Groceries",
+        "installments_count": 1,
         "invoice_id": "card-1:2026-03",
         "reference_month": "2026-03",
         "closing_date": "2026-03-10",

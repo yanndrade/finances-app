@@ -49,6 +49,7 @@ class CardPurchaseProjection:
     category_id: str
     card_id: str
     description: str | None
+    installments_count: int
     invoice_id: str
     reference_month: str
     closing_date: str
@@ -62,6 +63,7 @@ class CardPurchaseProjection:
             "category_id": self.category_id,
             "card_id": self.card_id,
             "description": self.description,
+            "installments_count": self.installments_count,
             "invoice_id": self.invoice_id,
             "reference_month": self.reference_month,
             "closing_date": self.closing_date,
