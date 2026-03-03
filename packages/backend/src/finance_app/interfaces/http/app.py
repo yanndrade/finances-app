@@ -15,6 +15,7 @@ from finance_app.application.accounts import (
 from finance_app.application.cards import (
     CardAlreadyExistsError,
     CardNotFoundError,
+    CardServiceError,
     CardService,
 )
 from finance_app.application.health import HealthCheckUseCase
@@ -196,6 +197,11 @@ def build_router(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=str(exc),
             ) from exc
+        except CardServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
 
     @router.patch("/api/cards/{card_id}")
     def update_card(
@@ -220,6 +226,11 @@ def build_router(
         except CardNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except CardServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
             ) from exc
 
