@@ -1,10 +1,10 @@
-import { createCardPurchase, normalizeTimestampForApi, payInvoice } from "./api";
+import * as api from "./api";
 
 
 describe("api timestamp normalization", () => {
   it("converts local purchase datetimes into the correct UTC instant", () => {
     expect(
-      normalizeTimestampForApi("2026-03-11T00:30", {
+      api.normalizeTimestampForApi("2026-03-11T00:30", {
         localOffsetMinutes: 180,
       }),
     ).toBe("2026-03-11T03:30:00Z");
@@ -31,7 +31,7 @@ describe("api timestamp normalization", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await createCardPurchase({
+    await api.createCardPurchase({
       cardId: "card-1",
       purchaseDate: "2026-03-11T00:30",
       amountInCents: 50_00,
@@ -70,7 +70,7 @@ describe("api timestamp normalization", () => {
     vi.setSystemTime(new Date("2026-03-03T12:00:00Z"));
     const timezoneSpy = vi.spyOn(Date.prototype, "getTimezoneOffset").mockReturnValue(180);
 
-    await payInvoice({
+    await api.payInvoice({
       invoiceId: "card-1:2026-04",
       amountInCents: 30_00,
       accountId: "acc-2",
@@ -88,5 +88,40 @@ describe("api timestamp normalization", () => {
 
     timezoneSpy.mockRestore();
     vi.useRealTimers();
+  });
+
+  it("requests invoice items for a specific invoice id", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            invoice_item_id: "purchase-1:1",
+            invoice_id: "card-1:2026-04",
+            purchase_id: "purchase-1",
+            card_id: "card-1",
+            purchase_date: "2026-03-15T12:00:00Z",
+            category_id: "electronics",
+            description: "Headphones",
+            installment_number: 1,
+            installments_count: 3,
+            amount: 33_33,
+          },
+        ]),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const fetchInvoiceItems = (
+      api as unknown as {
+        fetchInvoiceItems?: (invoiceId: string) => Promise<unknown>;
+      }
+    ).fetchInvoiceItems;
+
+    await fetchInvoiceItems?.("card-1:2026-04");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/invoices/card-1%3A2026-04/items",
+    );
   });
 });

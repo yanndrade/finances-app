@@ -4,14 +4,16 @@ import { CurrencyInput } from "../../components/currency-input";
 import { Modal } from "../../components/modal";
 import { StatCard } from "../../components/stat-card";
 import { formatCurrency } from "../../lib/format";
-import type {
-  AccountSummary,
-  CardPayload,
-  CardPurchasePayload,
-  CardSummary,
-  InvoicePaymentPayload,
-  CardUpdatePayload,
-  InvoiceSummary,
+import {
+  fetchInvoiceItems,
+  type InvoiceItemSummary,
+  type AccountSummary,
+  type CardPayload,
+  type CardPurchasePayload,
+  type CardSummary,
+  type InvoicePaymentPayload,
+  type CardUpdatePayload,
+  type InvoiceSummary,
 } from "../../lib/api";
 
 type CardsViewProps = {
@@ -76,6 +78,14 @@ export function CardsView({
   const [paymentForm, setPaymentForm] = useState<PaymentFormState>(() =>
     createEmptyPaymentForm(accounts),
   );
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
+  const [invoiceItemsByInvoiceId, setInvoiceItemsByInvoiceId] = useState<
+    Record<string, InvoiceItemSummary[]>
+  >({});
+  const [invoiceItemsErrorByInvoiceId, setInvoiceItemsErrorByInvoiceId] = useState<
+    Record<string, string>
+  >({});
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -250,6 +260,44 @@ export function CardsView({
       amount: String(invoice.remaining_amount),
       paidAt: currentLocalDateTime(),
     });
+  }
+
+  async function toggleInvoiceItems(invoiceId: string) {
+    if (expandedInvoiceId === invoiceId) {
+      setExpandedInvoiceId(null);
+      return;
+    }
+
+    setExpandedInvoiceId(invoiceId);
+    if (invoiceItemsByInvoiceId[invoiceId] !== undefined) {
+      return;
+    }
+
+    setLoadingInvoiceId(invoiceId);
+    setInvoiceItemsErrorByInvoiceId((current) => {
+      if (current[invoiceId] === undefined) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[invoiceId];
+      return next;
+    });
+
+    try {
+      const items = await fetchInvoiceItems(invoiceId);
+      setInvoiceItemsByInvoiceId((current) => ({
+        ...current,
+        [invoiceId]: items,
+      }));
+    } catch (error) {
+      setInvoiceItemsErrorByInvoiceId((current) => ({
+        ...current,
+        [invoiceId]: resolveInlineErrorMessage(error),
+      }));
+    } finally {
+      setLoadingInvoiceId((current) => (current === invoiceId ? null : current));
+    }
   }
 
   return (
@@ -485,40 +533,99 @@ export function CardsView({
         ) : (
           <div className="account-grid">
             {payableInvoices.map((invoice) => (
-              <article key={invoice.invoice_id} className="account-card">
-                <div className="account-card__header">
-                  <div>
-                    <strong>{resolveCardName(cards, invoice.card_id)}</strong>
-                    <p className="account-card__meta">Referencia {invoice.reference_month}</p>
+              <div key={invoice.invoice_id} className="invoice-card-shell">
+                <article className="account-card">
+                  <div className="account-card__header">
+                    <div>
+                      <strong>{resolveCardName(cards, invoice.card_id)}</strong>
+                      <p className="account-card__meta">Referencia {invoice.reference_month}</p>
+                    </div>
+                    <span
+                      className={`status-badge status-badge--${
+                        invoice.status === "partial" ? "pending" : "active"
+                      }`}
+                    >
+                      {invoice.status === "partial" ? "Parcial" : "Aberta"}
+                    </span>
                   </div>
-                  <span
-                    className={`status-badge status-badge--${
-                      invoice.status === "partial" ? "pending" : "active"
-                    }`}
-                  >
-                    {invoice.status === "partial" ? "Parcial" : "Aberta"}
-                  </span>
-                </div>
-                <p className="account-card__balance">{formatCurrency(invoice.remaining_amount)}</p>
-                <p className="account-card__meta">
-                  Fecha em {invoice.closing_date} e vence em {invoice.due_date}
-                </p>
-                <p className="account-card__meta">
-                  Total {formatCurrency(invoice.total_amount)} • Pago{" "}
-                  {formatCurrency(invoice.paid_amount)}
-                </p>
-                <p className="account-card__meta">
-                  {invoice.purchase_count} {invoice.purchase_count === 1 ? "parcela" : "parcelas"}
-                </p>
-                <button
-                  className="ghost-button"
-                  disabled={activeAccounts.length === 0}
-                  onClick={() => openPaymentModal(invoice)}
-                  type="button"
-                >
-                  Registrar pagamento
-                </button>
-              </article>
+                  <p className="account-card__balance">{formatCurrency(invoice.remaining_amount)}</p>
+                  <p className="account-card__meta">
+                    Fecha em {invoice.closing_date} e vence em {invoice.due_date}
+                  </p>
+                  <p className="account-card__meta">
+                    Total {formatCurrency(invoice.total_amount)} • Pago{" "}
+                    {formatCurrency(invoice.paid_amount)}
+                  </p>
+                  <p className="account-card__meta">
+                    {invoice.purchase_count}{" "}
+                    {invoice.purchase_count === 1 ? "parcela" : "parcelas"}
+                  </p>
+                  <div className="inline-actions">
+                    <button
+                      className="ghost-button"
+                      onClick={() => {
+                        void toggleInvoiceItems(invoice.invoice_id);
+                      }}
+                      type="button"
+                    >
+                      {expandedInvoiceId === invoice.invoice_id ? "Ocultar itens" : "Ver itens"}
+                    </button>
+                    <button
+                      className="ghost-button"
+                      disabled={activeAccounts.length === 0}
+                      onClick={() => openPaymentModal(invoice)}
+                      type="button"
+                    >
+                      Registrar pagamento
+                    </button>
+                  </div>
+                </article>
+
+                {expandedInvoiceId === invoice.invoice_id ? (
+                  <div className="invoice-detail-panel">
+                    <div className="invoice-detail-panel__header">
+                      <strong>Itens da fatura</strong>
+                      <span>{invoice.reference_month}</span>
+                    </div>
+
+                    {loadingInvoiceId === invoice.invoice_id ? (
+                      <p className="field-hint">Carregando itens...</p>
+                    ) : null}
+
+                    {invoiceItemsErrorByInvoiceId[invoice.invoice_id] !== undefined ? (
+                      <p className="field-hint text-negative" role="alert">
+                        {invoiceItemsErrorByInvoiceId[invoice.invoice_id]}
+                      </p>
+                    ) : null}
+
+                    {loadingInvoiceId !== invoice.invoice_id &&
+                    invoiceItemsErrorByInvoiceId[invoice.invoice_id] === undefined ? (
+                      invoiceItemsByInvoiceId[invoice.invoice_id]?.length ? (
+                        <div className="invoice-item-list">
+                          {invoiceItemsByInvoiceId[invoice.invoice_id].map((item) => (
+                            <div key={item.invoice_item_id} className="invoice-item-row">
+                              <div className="invoice-item-row__main">
+                                <strong>{item.description ?? "Compra sem descricao"}</strong>
+                                <p>
+                                  {item.category_id} • {formatPurchaseDate(item.purchase_date)}
+                                </p>
+                              </div>
+                              <div className="invoice-item-row__meta">
+                                <span>
+                                  {item.installment_number}/{item.installments_count}
+                                </span>
+                                <strong>{formatCurrency(item.amount)}</strong>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="field-hint">Nenhum item encontrado para esta fatura.</p>
+                      )
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             ))}
           </div>
         )}
@@ -873,6 +980,10 @@ function currentLocalDateTime(): string {
   return localTime.toISOString().slice(0, 16);
 }
 
+function formatPurchaseDate(value: string): string {
+  return value.slice(0, 10);
+}
+
 function resolveAccountName(accounts: AccountSummary[], accountId: string): string {
   return accounts.find((account) => account.account_id === accountId)?.name ?? accountId;
 }
@@ -951,4 +1062,12 @@ function validatePaymentForm(form: PaymentFormState): string | null {
   }
 
   return null;
+}
+
+function resolveInlineErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return "Nao foi possivel carregar os itens da fatura.";
 }

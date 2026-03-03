@@ -22,6 +22,19 @@ type InvoiceSummary = {
   status: string;
 };
 
+type InvoiceItemSummary = {
+  invoice_item_id: string;
+  invoice_id: string;
+  purchase_id: string;
+  card_id: string;
+  purchase_date: string;
+  category_id: string;
+  description: string | null;
+  installment_number: number;
+  installments_count: number;
+  amount: number;
+};
+
 function buildAccount(overrides: Partial<AccountSummary> = {}): AccountSummary {
   return {
     account_id: "acc-1",
@@ -108,18 +121,36 @@ function buildInvoice(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
   return invoice;
 }
 
+function buildInvoiceItem(overrides: Partial<InvoiceItemSummary> = {}): InvoiceItemSummary {
+  return {
+    invoice_item_id: "purchase-1:1",
+    invoice_id: "card-1:2026-03",
+    purchase_id: "purchase-1",
+    card_id: "card-1",
+    purchase_date: "2026-03-03T12:00:00Z",
+    category_id: "mercado",
+    description: "Supermercado",
+    installment_number: 1,
+    installments_count: 1,
+    amount: 100_00,
+    ...overrides,
+  };
+}
+
 function installAppFetchMock(initialState?: {
   accounts?: AccountSummary[];
   cards?: CardSummary[];
   transactions?: TransactionSummary[];
   dashboard?: DashboardSummary;
   invoices?: InvoiceSummary[];
+  invoiceItemsByInvoiceId?: Record<string, InvoiceItemSummary[]>;
 }) {
   const state = {
     accounts: initialState?.accounts ?? [buildAccount()],
     cards: initialState?.cards ?? [buildCard()],
     transactions: initialState?.transactions ?? [buildTransaction()],
     invoices: initialState?.invoices ?? [],
+    invoiceItemsByInvoiceId: initialState?.invoiceItemsByInvoiceId ?? {},
     dashboard:
       initialState?.dashboard ??
       buildDashboard({
@@ -141,6 +172,16 @@ function installAppFetchMock(initialState?: {
 
     if (url.includes("/api/cards") && method === "GET") {
       return new Response(JSON.stringify(state.cards));
+    }
+
+    if (url.includes("/api/invoices/") && url.endsWith("/items") && method === "GET") {
+      const invoiceId = decodeURIComponent(
+        url.split("/api/invoices/")[1]?.replace("/items", "") ?? "",
+      );
+
+      return new Response(
+        JSON.stringify(state.invoiceItemsByInvoiceId[invoiceId] ?? []),
+      );
     }
 
     if (url.includes("/api/invoices") && method === "GET") {
@@ -599,6 +640,59 @@ describe("App", () => {
         fetchMock.mock.calls.some(([url, init]) => {
           return String(url).includes("/api/invoices/card-1%3A2026-04/payments") &&
             init?.method === "POST";
+        }),
+      ).toBe(true);
+    });
+  });
+
+  it("expands invoice details inline and shows the invoice items", async () => {
+    const fetchMock = installAppFetchMock({
+      invoices: [
+        buildInvoice({
+          invoice_id: "card-1:2026-04",
+          card_id: "card-1",
+          reference_month: "2026-04",
+          closing_date: "2026-04-10",
+          due_date: "2026-04-20",
+          total_amount: 100_00,
+        }),
+      ],
+      invoiceItemsByInvoiceId: {
+        "card-1:2026-04": [
+          buildInvoiceItem({
+            invoice_item_id: "purchase-1:1",
+            invoice_id: "card-1:2026-04",
+            purchase_id: "purchase-1",
+            card_id: "card-1",
+            purchase_date: "2026-03-15T12:00:00Z",
+            category_id: "electronics",
+            description: "Headphones",
+            installment_number: 1,
+            installments_count: 3,
+            amount: 33_33,
+          }),
+        ],
+      },
+    });
+
+    render(<App />);
+
+    await screen.findByText("Como voce esta");
+    await userEvent.click(screen.getByRole("button", { name: /^cards$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /ver itens/i }));
+
+    expect(await screen.findByText("Headphones")).toBeInTheDocument();
+    expect(screen.getByText(/electronics/)).toBeInTheDocument();
+    expect(screen.getByText(/1\/3/)).toBeInTheDocument();
+    expect(screen.getByText(/33,33/)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return (
+            String(url).includes("/api/invoices/card-1%3A2026-04/items") &&
+            (init?.method ?? "GET") === "GET"
+          );
         }),
       ).toBe(true);
     });
