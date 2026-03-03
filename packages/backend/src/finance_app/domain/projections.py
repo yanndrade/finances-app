@@ -42,6 +42,58 @@ class CardProjection:
 
 
 @dataclass(frozen=True)
+class CardPurchaseProjection:
+    purchase_id: str
+    purchase_date: str
+    amount: int
+    category_id: str
+    card_id: str
+    description: str | None
+    invoice_id: str
+    reference_month: str
+    closing_date: str
+    due_date: str
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        return {
+            "purchase_id": self.purchase_id,
+            "purchase_date": self.purchase_date,
+            "amount": self.amount,
+            "category_id": self.category_id,
+            "card_id": self.card_id,
+            "description": self.description,
+            "invoice_id": self.invoice_id,
+            "reference_month": self.reference_month,
+            "closing_date": self.closing_date,
+            "due_date": self.due_date,
+        }
+
+
+@dataclass(frozen=True)
+class InvoiceProjection:
+    invoice_id: str
+    card_id: str
+    reference_month: str
+    closing_date: str
+    due_date: str
+    total_amount: int
+    purchase_count: int
+    status: str
+
+    def to_dict(self) -> dict[str, str | int]:
+        return {
+            "invoice_id": self.invoice_id,
+            "card_id": self.card_id,
+            "reference_month": self.reference_month,
+            "closing_date": self.closing_date,
+            "due_date": self.due_date,
+            "total_amount": self.total_amount,
+            "purchase_count": self.purchase_count,
+            "status": self.status,
+        }
+
+
+@dataclass(frozen=True)
 class BalanceStateProjection:
     account_id: str
     current_balance: int

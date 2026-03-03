@@ -990,6 +990,130 @@ def test_cards_endpoints_return_422_for_card_domain_validation_errors(tmp_path) 
     assert update_response.status_code == 422
 
 
+def test_card_purchase_endpoint_allocates_purchases_into_prd_invoice_cycles(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+
+    closing_day_response = client.post(
+        "/api/card-purchases",
+        json={
+            "id": "purchase-1",
+            "purchase_date": "2026-03-10T12:00:00Z",
+            "amount": 100_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Groceries",
+        },
+    )
+    next_cycle_response = client.post(
+        "/api/card-purchases",
+        json={
+            "id": "purchase-2",
+            "purchase_date": "2026-03-11T12:00:00Z",
+            "amount": 50_00,
+            "category_id": "transport",
+            "card_id": "card-1",
+            "description": "Taxi",
+        },
+    )
+
+    assert closing_day_response.status_code == 201
+    assert closing_day_response.json() == {
+        "purchase_id": "purchase-1",
+        "purchase_date": "2026-03-10T12:00:00Z",
+        "amount": 100_00,
+        "category_id": "food",
+        "card_id": "card-1",
+        "description": "Groceries",
+        "invoice_id": "card-1:2026-03",
+        "reference_month": "2026-03",
+        "closing_date": "2026-03-10",
+        "due_date": "2026-03-20",
+    }
+
+    assert next_cycle_response.status_code == 201
+    assert next_cycle_response.json()["invoice_id"] == "card-1:2026-04"
+    assert next_cycle_response.json()["reference_month"] == "2026-04"
+    assert next_cycle_response.json()["closing_date"] == "2026-04-10"
+    assert next_cycle_response.json()["due_date"] == "2026-04-20"
+
+
+def test_invoice_list_aggregates_card_purchases_without_zero_value_rows(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+
+    assert client.get("/api/invoices", params={"card": "card-1"}).json() == []
+
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 30_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Lunch",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-2",
+            "purchase_date": "2026-03-20T12:00:00Z",
+            "amount": 20_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Snacks",
+        },
+    )
+
+    response = client.get("/api/invoices", params={"card": "card-1"})
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "invoice_id": "card-1:2026-04",
+            "card_id": "card-1",
+            "reference_month": "2026-04",
+            "closing_date": "2026-04-10",
+            "due_date": "2026-04-20",
+            "total_amount": 50_00,
+            "purchase_count": 2,
+            "status": "open",
+        }
+    ]
+
+
 def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:
     response = client.post(
         "/api/accounts",
@@ -1006,6 +1130,12 @@ def _create_account(client: TestClient, account_id: str, name: str, account_type
 
 def _create_card(client: TestClient, payload: dict[str, str | int]) -> None:
     response = client.post("/api/cards", json=payload)
+
+    assert response.status_code == 201
+
+
+def _create_card_purchase(client: TestClient, payload: dict[str, str | int]) -> None:
+    response = client.post("/api/card-purchases", json=payload)
 
     assert response.status_code == 201
 

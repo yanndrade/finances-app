@@ -41,6 +41,10 @@ describe("Movements panel", () => {
         return Promise.resolve(new Response(JSON.stringify([])));
       }
 
+      if (url.includes("/api/invoices") && method === "GET") {
+        return Promise.resolve(new Response(JSON.stringify([])));
+      }
+
       if (url.includes("/api/dashboard") && method === "GET") {
         dashboardCallCount += 1;
 
@@ -176,7 +180,7 @@ describe("Movements panel", () => {
     expect(screen.getByText("Dinner")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(9);
+      expect(fetchMock).toHaveBeenCalledTimes(11);
     });
   });
 

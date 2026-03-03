@@ -16,11 +16,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import sessionmaker
 
+from finance_app.domain.cards import allocate_invoice_cycle
 from finance_app.domain.events import StoredEvent
 from finance_app.domain.projections import (
     AccountProjection,
     BalanceStateProjection,
     CardProjection,
+    CardPurchaseProjection,
+    InvoiceProjection,
     TransactionProjection,
 )
 from finance_app.infrastructure.db import get_engine
@@ -58,6 +61,34 @@ class CardProjectionRecord(ProjectionBase):
     due_day: Mapped[int] = mapped_column(Integer, nullable=False)
     payment_account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class CardPurchaseProjectionRecord(ProjectionBase):
+    __tablename__ = "card_purchases"
+
+    purchase_id: Mapped[str] = mapped_column(String, primary_key=True)
+    purchase_date: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    card_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    invoice_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    reference_month: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    closing_date: Mapped[str] = mapped_column(String, nullable=False)
+    due_date: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class InvoiceProjectionRecord(ProjectionBase):
+    __tablename__ = "invoices"
+
+    invoice_id: Mapped[str] = mapped_column(String, primary_key=True)
+    card_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    reference_month: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    closing_date: Mapped[str] = mapped_column(String, nullable=False)
+    due_date: Mapped[str] = mapped_column(String, nullable=False)
+    total_amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    purchase_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="open")
 
 
 class BalanceStateRecord(ProjectionBase):
@@ -189,6 +220,76 @@ class Projector:
                 due_day=row.due_day,
                 payment_account_id=row.payment_account_id,
                 is_active=row.is_active,
+            ).to_dict()
+            for row in rows
+        ]
+
+    def list_card_purchases(
+        self,
+        *,
+        card_id: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                query = session.query(CardPurchaseProjectionRecord)
+                if card_id is not None:
+                    query = query.filter(CardPurchaseProjectionRecord.card_id == card_id)
+
+                rows = (
+                    query.order_by(
+                        CardPurchaseProjectionRecord.purchase_date.desc(),
+                        CardPurchaseProjectionRecord.purchase_id.desc(),
+                    )
+                    .all()
+                )
+
+        return [
+            CardPurchaseProjection(
+                purchase_id=row.purchase_id,
+                purchase_date=row.purchase_date,
+                amount=row.amount,
+                category_id=row.category_id,
+                card_id=row.card_id,
+                description=row.description,
+                invoice_id=row.invoice_id,
+                reference_month=row.reference_month,
+                closing_date=row.closing_date,
+                due_date=row.due_date,
+            ).to_dict()
+            for row in rows
+        ]
+
+    def list_invoices(
+        self,
+        *,
+        card_id: str | None = None,
+    ) -> list[dict[str, str | int]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                query = session.query(InvoiceProjectionRecord)
+                if card_id is not None:
+                    query = query.filter(InvoiceProjectionRecord.card_id == card_id)
+
+                rows = (
+                    query.order_by(
+                        InvoiceProjectionRecord.reference_month.desc(),
+                        InvoiceProjectionRecord.invoice_id.desc(),
+                    )
+                    .all()
+                )
+
+        return [
+            InvoiceProjection(
+                invoice_id=row.invoice_id,
+                card_id=row.card_id,
+                reference_month=row.reference_month,
+                closing_date=row.closing_date,
+                due_date=row.due_date,
+                total_amount=row.total_amount,
+                purchase_count=row.purchase_count,
+                status=row.status,
             ).to_dict()
             for row in rows
         ]
@@ -435,6 +536,10 @@ class Projector:
             self._apply_card_updated(session, event.payload)
             return
 
+        if event.type == "CardPurchaseCreated":
+            self._apply_card_purchase_created(session, event.payload)
+            return
+
         if event.type in {"IncomeCreated", "ExpenseCreated"}:
             self._apply_transaction_created(session, event.payload)
             return
@@ -546,6 +651,63 @@ class Projector:
         existing.due_day = int(payload["due_day"])
         existing.payment_account_id = str(payload["payment_account_id"])
         existing.is_active = bool(payload.get("is_active", True))
+
+    def _apply_card_purchase_created(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        purchase_id = str(payload["id"])
+        existing = session.get(CardPurchaseProjectionRecord, purchase_id)
+        if existing is not None:
+            return
+
+        card_id = str(payload["card_id"])
+        card = session.get(CardProjectionRecord, card_id)
+        if card is None:
+            return
+
+        allocation = allocate_invoice_cycle(
+            purchase_date=str(payload["purchase_date"]),
+            closing_day=card.closing_day,
+            due_day=card.due_day,
+        )
+        reference_month = allocation.reference_month
+        invoice_id = f"{card_id}:{reference_month}"
+
+        session.add(
+            CardPurchaseProjectionRecord(
+                purchase_id=purchase_id,
+                purchase_date=str(payload["purchase_date"]),
+                amount=int(payload["amount"]),
+                category_id=str(payload["category_id"]),
+                card_id=card_id,
+                description=_optional_string(payload.get("description")),
+                invoice_id=invoice_id,
+                reference_month=reference_month,
+                closing_date=allocation.closing_date,
+                due_date=allocation.due_date,
+            )
+        )
+
+        invoice = session.get(InvoiceProjectionRecord, invoice_id)
+        if invoice is None:
+            session.add(
+                InvoiceProjectionRecord(
+                    invoice_id=invoice_id,
+                    card_id=card_id,
+                    reference_month=reference_month,
+                    closing_date=allocation.closing_date,
+                    due_date=allocation.due_date,
+                    total_amount=int(payload["amount"]),
+                    purchase_count=1,
+                    status="open",
+                )
+            )
+            return
+
+        invoice.total_amount += int(payload["amount"])
+        invoice.purchase_count += 1
 
     def _apply_transaction_created(
         self,
@@ -747,6 +909,46 @@ class Projector:
             "is_active",
         }
         if card_columns != expected_card_columns:
+            return True
+
+        if "card_purchases" not in table_names:
+            return True
+
+        card_purchase_columns = self._safe_column_names(inspector, "card_purchases")
+        if card_purchase_columns is None:
+            return True
+        expected_card_purchase_columns = {
+            "purchase_id",
+            "purchase_date",
+            "amount",
+            "category_id",
+            "card_id",
+            "description",
+            "invoice_id",
+            "reference_month",
+            "closing_date",
+            "due_date",
+        }
+        if card_purchase_columns != expected_card_purchase_columns:
+            return True
+
+        if "invoices" not in table_names:
+            return True
+
+        invoice_columns = self._safe_column_names(inspector, "invoices")
+        if invoice_columns is None:
+            return True
+        expected_invoice_columns = {
+            "invoice_id",
+            "card_id",
+            "reference_month",
+            "closing_date",
+            "due_date",
+            "total_amount",
+            "purchase_count",
+            "status",
+        }
+        if invoice_columns != expected_invoice_columns:
             return True
 
         if "transactions" not in table_names:

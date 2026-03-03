@@ -46,6 +46,30 @@ export type CardSummary = {
   is_active: boolean;
 };
 
+export type CardPurchaseSummary = {
+  purchase_id: string;
+  purchase_date: string;
+  amount: number;
+  category_id: string;
+  card_id: string;
+  description: string | null;
+  invoice_id: string;
+  reference_month: string;
+  closing_date: string;
+  due_date: string;
+};
+
+export type InvoiceSummary = {
+  invoice_id: string;
+  card_id: string;
+  reference_month: string;
+  closing_date: string;
+  due_date: string;
+  total_amount: number;
+  purchase_count: number;
+  status: string;
+};
+
 export type TransactionSummary = {
   transaction_id: string;
   occurred_at: string;
@@ -105,6 +129,14 @@ export type CardUpdatePayload = CardPayload & {
   isActive: boolean;
 };
 
+export type CardPurchasePayload = {
+  cardId: string;
+  purchaseDate: string;
+  amountInCents: number;
+  categoryId: string;
+  description?: string;
+};
+
 export type TransactionFilters = {
   from: string;
   to: string;
@@ -140,6 +172,12 @@ export async function fetchAccounts(): Promise<AccountSummary[]> {
 
 export async function fetchCards(): Promise<CardSummary[]> {
   return requestJson<CardSummary[]>("/api/cards");
+}
+
+export async function fetchInvoices(cardId?: string): Promise<InvoiceSummary[]> {
+  const query = cardId ? `?card=${encodeURIComponent(cardId)}` : "";
+
+  return requestJson<InvoiceSummary[]>(`/api/invoices${query}`);
 }
 
 export async function fetchTransactions(
@@ -234,6 +272,22 @@ export async function updateCard(
   });
 }
 
+export async function createCardPurchase(
+  payload: CardPurchasePayload,
+): Promise<CardPurchaseSummary> {
+  return requestJson<CardPurchaseSummary>("/api/card-purchases", {
+    method: "POST",
+    body: JSON.stringify({
+      id: `purchase-${Date.now()}`,
+      purchase_date: normalizeTimestampForApi(payload.purchaseDate),
+      amount: payload.amountInCents,
+      category_id: payload.categoryId,
+      card_id: payload.cardId,
+      description: payload.description || undefined,
+    }),
+  });
+}
+
 export async function createCashTransaction(
   payload: CashTransactionPayload,
 ): Promise<TransactionSummary> {
@@ -320,4 +374,40 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+export function normalizeTimestampForApi(
+  value: string,
+  options?: {
+    localOffsetMinutes?: number;
+  },
+): string {
+  const trimmed = value.trim();
+
+  if (trimmed.endsWith("Z")) {
+    return trimmed;
+  }
+
+  const match = trimmed.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/,
+  );
+  if (match !== null) {
+    const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match;
+    const year = parseInt(yearText, 10);
+    const month = parseInt(monthText, 10);
+    const day = parseInt(dayText, 10);
+    const hour = parseInt(hourText, 10);
+    const minute = parseInt(minuteText, 10);
+    const second = parseInt(secondText ?? "0", 10);
+    const localOffsetMinutes =
+      options?.localOffsetMinutes ??
+      new Date(year, month - 1, day, hour, minute, second).getTimezoneOffset();
+    const utcMillis =
+      Date.UTC(year, month - 1, day, hour, minute, second) +
+      localOffsetMinutes * 60_000;
+
+    return new Date(utcMillis).toISOString().replace(".000", "");
+  }
+
+  throw new Error("Data da compra invalida.");
 }
