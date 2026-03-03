@@ -36,7 +36,11 @@ def allocate_invoice_cycle(
         target_year, target_month = _shift_month(target_year, target_month, 1)
 
     closing = date(target_year, target_month, closing_day)
-    due = date(target_year, target_month, due_day)
+    due_year = target_year
+    due_month = target_month
+    if due_day < closing_day:
+        due_year, due_month = _shift_month(due_year, due_month, 1)
+    due = date(due_year, due_month, due_day)
 
     return InvoiceCycleAllocation(
         reference_month=f"{target_year}-{target_month:02d}",

@@ -279,7 +279,7 @@ export async function createCardPurchase(
     method: "POST",
     body: JSON.stringify({
       id: `purchase-${Date.now()}`,
-      purchase_date: toUtcTimestamp(payload.purchaseDate),
+      purchase_date: normalizeTimestampForApi(payload.purchaseDate),
       amount: payload.amountInCents,
       category_id: payload.categoryId,
       card_id: payload.cardId,
@@ -376,19 +376,37 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-function toUtcTimestamp(value: string): string {
+export function normalizeTimestampForApi(
+  value: string,
+  options?: {
+    localOffsetMinutes?: number;
+  },
+): string {
   const trimmed = value.trim();
 
   if (trimmed.endsWith("Z")) {
     return trimmed;
   }
 
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
-    return `${trimmed}:00Z`;
-  }
+  const match = trimmed.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/,
+  );
+  if (match !== null) {
+    const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match;
+    const year = parseInt(yearText, 10);
+    const month = parseInt(monthText, 10);
+    const day = parseInt(dayText, 10);
+    const hour = parseInt(hourText, 10);
+    const minute = parseInt(minuteText, 10);
+    const second = parseInt(secondText ?? "0", 10);
+    const localOffsetMinutes =
+      options?.localOffsetMinutes ??
+      new Date(year, month - 1, day, hour, minute, second).getTimezoneOffset();
+    const utcMillis =
+      Date.UTC(year, month - 1, day, hour, minute, second) +
+      localOffsetMinutes * 60_000;
 
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(trimmed)) {
-    return `${trimmed}Z`;
+    return new Date(utcMillis).toISOString().replace(".000", "");
   }
 
   throw new Error("Data da compra invalida.");
