@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, status
@@ -233,6 +234,18 @@ def build_router(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
             ) from exc
+
+    @router.get("/api/dashboard")
+    def get_dashboard(
+        month: str = Query(...),
+    ) -> dict[str, object]:
+        if re.fullmatch(r"\d{4}-\d{2}", month) is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Month must use YYYY-MM format.",
+            )
+
+        return transaction_service.get_dashboard_summary(month=month)
 
     @router.patch("/api/transactions/{transaction_id}")
     def update_transaction(

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import Boolean
 from sqlalchemy import Integer
 from sqlalchemy import String
+from sqlalchemy import func
 from sqlalchemy import inspect
 from sqlalchemy import or_
 from sqlalchemy.orm import DeclarativeBase
@@ -221,6 +224,58 @@ class Projector:
             ).to_dict()
             for row in rows
         ]
+
+    def get_dashboard_summary(self, *, month: str) -> dict[str, object]:
+        self.bootstrap()
+        with self._session_factory() as session:
+            month_rows: Sequence[TransactionProjectionRecord] = (
+                session.query(TransactionProjectionRecord)
+                .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
+                .filter(TransactionProjectionRecord.status == "active")
+                .order_by(
+                    TransactionProjectionRecord.occurred_at.desc(),
+                    TransactionProjectionRecord.transaction_id.desc(),
+                )
+                .limit(10)
+                .all()
+            )
+            balance_total = (
+                session.query(func.coalesce(func.sum(BalanceStateRecord.current_balance), 0))
+                .scalar()
+            )
+
+        recent_transactions = [
+            TransactionProjection(
+                transaction_id=row.transaction_id,
+                occurred_at=row.occurred_at,
+                type=row.type,
+                amount=row.amount,
+                account_id=row.account_id,
+                payment_method=row.payment_method,
+                category_id=row.category_id,
+                description=row.description,
+                person_id=row.person_id,
+                status=row.status,
+                transfer_id=row.transfer_id,
+                direction=row.direction,
+            ).to_dict()
+            for row in month_rows
+        ]
+        total_income = sum(
+            row.amount for row in month_rows if row.type == "income"
+        )
+        total_expense = sum(
+            row.amount for row in month_rows if row.type == "expense"
+        )
+
+        return {
+            "month": month,
+            "total_income": total_income,
+            "total_expense": total_expense,
+            "net_flow": total_income - total_expense,
+            "current_balance": int(balance_total or 0),
+            "recent_transactions": recent_transactions,
+        }
 
     def _apply_event(self, session: Session, event: StoredEvent) -> None:
         if event.type == "AccountCreated":

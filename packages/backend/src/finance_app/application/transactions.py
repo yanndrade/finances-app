@@ -50,6 +50,7 @@ class TransactionEventStore(Protocol):
 
 class TransactionProjector(Protocol):
     def run(self) -> int: ...
+    def get_dashboard_summary(self, *, month: str) -> dict[str, object]: ...
     def list_transactions(
         self,
         *,
@@ -107,6 +108,10 @@ class TransactionService:
             person_id=person_id,
             text=text,
         )
+
+    def get_dashboard_summary(self, *, month: str) -> dict[str, object]:
+        self._sync_projections()
+        return self._projector.get_dashboard_summary(month=month)
 
     def create_income(
         self,

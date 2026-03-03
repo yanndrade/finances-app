@@ -604,6 +604,140 @@ def test_transfer_endpoint_rejects_collisions_with_derived_leg_ids(tmp_path) -> 
     assert response.status_code == 409
 
 
+def test_dashboard_endpoint_returns_monthly_summary_from_projections(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Savings", "savings", 25_00)
+
+    income_response = client.post(
+        "/api/incomes",
+        json={
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:01:00Z",
+            "amount": 50_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "salary",
+            "description": "Salary",
+        },
+    )
+    assert income_response.status_code == 201
+
+    expense_response = client.post(
+        "/api/expenses",
+        json={
+            "id": "tx-2",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+        },
+    )
+    assert expense_response.status_code == 201
+
+    transfer_response = client.post(
+        "/api/transfers",
+        json={
+            "id": "trf-1",
+            "occurred_at": "2026-03-02T12:03:00Z",
+            "from_account_id": "acc-1",
+            "to_account_id": "acc-2",
+            "amount": 10_00,
+            "description": "Move to savings",
+        },
+    )
+    assert transfer_response.status_code == 201
+
+    response = client.get(
+        "/api/dashboard",
+        params={"month": "2026-03"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "month": "2026-03",
+        "total_income": 50_00,
+        "total_expense": 20_00,
+        "net_flow": 30_00,
+        "current_balance": 155_00,
+        "recent_transactions": [
+            {
+                "transaction_id": "trf-1:debit",
+                "occurred_at": "2026-03-02T12:03:00Z",
+                "type": "transfer",
+                "amount": 10_00,
+                "account_id": "acc-1",
+                "payment_method": "OTHER",
+                "category_id": "transfer",
+                "description": "Move to savings",
+                "person_id": None,
+                "status": "active",
+                "transfer_id": "trf-1",
+                "direction": "debit",
+            },
+            {
+                "transaction_id": "trf-1:credit",
+                "occurred_at": "2026-03-02T12:03:00Z",
+                "type": "transfer",
+                "amount": 10_00,
+                "account_id": "acc-2",
+                "payment_method": "OTHER",
+                "category_id": "transfer",
+                "description": "Move to savings",
+                "person_id": None,
+                "status": "active",
+                "transfer_id": "trf-1",
+                "direction": "credit",
+            },
+            {
+                "transaction_id": "tx-2",
+                "occurred_at": "2026-03-02T12:02:00Z",
+                "type": "expense",
+                "amount": 20_00,
+                "account_id": "acc-1",
+                "payment_method": "CASH",
+                "category_id": "food",
+                "description": "Lunch",
+                "person_id": None,
+                "status": "active",
+            },
+            {
+                "transaction_id": "tx-1",
+                "occurred_at": "2026-03-02T12:01:00Z",
+                "type": "income",
+                "amount": 50_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "salary",
+                "description": "Salary",
+                "person_id": None,
+                "status": "active",
+            },
+        ],
+    }
+
+
+def test_dashboard_endpoint_rejects_invalid_month_format(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/dashboard",
+        params={"month": "2026-3"},
+    )
+
+    assert response.status_code == 422
+
+
 def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:
     response = client.post(
         "/api/accounts",
