@@ -64,6 +64,10 @@ class EventStore:
                 )
             )
 
+    def reset(self) -> None:
+        Base.metadata.drop_all(self._engine, tables=[EventRecord.__table__])
+        self.create_schema()
+
     def append(self, event: NewEvent) -> int:
         try:
             payload = json.dumps(event.payload, sort_keys=True, separators=(",", ":"))

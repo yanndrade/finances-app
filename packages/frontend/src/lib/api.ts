@@ -1,3 +1,19 @@
+export type CategorySpending = {
+  category_id: string;
+  total: number;
+};
+
+export type PreviousMonthSummary = {
+  total_income: number;
+  total_expense: number;
+  net_flow: number;
+};
+
+export type DailyBalancePoint = {
+  date: string;
+  balance: number;
+};
+
 export type DashboardSummary = {
   month: string;
   total_income: number;
@@ -5,6 +21,10 @@ export type DashboardSummary = {
   net_flow: number;
   current_balance: number;
   recent_transactions: TransactionSummary[];
+  spending_by_category: CategorySpending[];
+  previous_month: PreviousMonthSummary;
+  daily_balance_series: DailyBalancePoint[];
+  review_queue: TransactionSummary[];
 };
 
 export type AccountSummary = {
@@ -38,6 +58,8 @@ export type CashTransactionPayload = {
   accountId: string;
   paymentMethod: "PIX" | "CASH" | "OTHER";
   categoryId: string;
+  occurredAt?: string;
+  personId?: string;
 };
 
 export type TransferPayload = {
@@ -45,6 +67,41 @@ export type TransferPayload = {
   amountInCents: number;
   fromAccountId: string;
   toAccountId: string;
+  occurredAt?: string;
+};
+
+export type AccountPayload = {
+  name: string;
+  type: "checking" | "savings" | "wallet" | "investment" | "other";
+  initialBalanceInCents: number;
+};
+
+export type AccountUpdatePayload = {
+  name: string;
+  type: "checking" | "savings" | "wallet" | "investment" | "other";
+  initialBalanceInCents: number;
+  isActive: boolean;
+};
+
+export type TransactionFilters = {
+  from: string;
+  to: string;
+  category: string;
+  account: string;
+  method: "" | "PIX" | "CASH" | "OTHER";
+  person: string;
+  text: string;
+};
+
+export type TransactionUpdatePayload = {
+  occurredAt: string;
+  type: "income" | "expense";
+  amountInCents: number;
+  accountId: string;
+  paymentMethod: "PIX" | "CASH" | "OTHER";
+  categoryId: string;
+  description: string;
+  personId?: string;
 };
 
 export const API_BASE_URL =
@@ -59,8 +116,65 @@ export async function fetchAccounts(): Promise<AccountSummary[]> {
   return requestJson<AccountSummary[]>("/api/accounts");
 }
 
-export async function fetchTransactions(): Promise<TransactionSummary[]> {
-  return requestJson<TransactionSummary[]>("/api/transactions");
+export async function fetchTransactions(
+  filters?: Partial<TransactionFilters>,
+): Promise<TransactionSummary[]> {
+  const searchParams = new URLSearchParams();
+
+  if (filters?.from) {
+    searchParams.set("from", filters.from);
+  }
+  if (filters?.to) {
+    searchParams.set("to", filters.to);
+  }
+  if (filters?.category) {
+    searchParams.set("category", filters.category);
+  }
+  if (filters?.account) {
+    searchParams.set("account", filters.account);
+  }
+  if (filters?.method) {
+    searchParams.set("method", filters.method);
+  }
+  if (filters?.person) {
+    searchParams.set("person", filters.person);
+  }
+  if (filters?.text) {
+    searchParams.set("text", filters.text);
+  }
+
+  const query = searchParams.toString();
+
+  return requestJson<TransactionSummary[]>(
+    query.length > 0 ? `/api/transactions?${query}` : "/api/transactions",
+  );
+}
+
+export async function createAccount(payload: AccountPayload): Promise<AccountSummary> {
+  return requestJson<AccountSummary>("/api/accounts", {
+    method: "POST",
+    body: JSON.stringify({
+      id: `acc-${Date.now()}`,
+      name: payload.name,
+      type: payload.type,
+      initial_balance: payload.initialBalanceInCents,
+    }),
+  });
+}
+
+export async function updateAccount(
+  accountId: string,
+  payload: AccountUpdatePayload,
+): Promise<AccountSummary> {
+  return requestJson<AccountSummary>(`/api/accounts/${accountId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      name: payload.name,
+      type: payload.type,
+      initial_balance: payload.initialBalanceInCents,
+      is_active: payload.isActive,
+    }),
+  });
 }
 
 export async function createCashTransaction(
@@ -72,12 +186,13 @@ export async function createCashTransaction(
     method: "POST",
     body: JSON.stringify({
       id: `ui-${Date.now()}`,
-      occurred_at: new Date().toISOString().replace(".000", ""),
+      occurred_at: payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
       amount: payload.amountInCents,
       account_id: payload.accountId,
       payment_method: payload.paymentMethod,
       category_id: payload.categoryId,
       description: payload.description,
+      person_id: payload.personId || undefined,
     }),
   });
 }
@@ -87,12 +202,49 @@ export async function createTransfer(payload: TransferPayload): Promise<Transact
     method: "POST",
     body: JSON.stringify({
       id: `trf-${Date.now()}`,
-      occurred_at: new Date().toISOString().replace(".000", ""),
+      occurred_at: payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
       from_account_id: payload.fromAccountId,
       to_account_id: payload.toAccountId,
       amount: payload.amountInCents,
       description: payload.description,
     }),
+  });
+}
+
+export async function updateTransaction(
+  transactionId: string,
+  payload: TransactionUpdatePayload,
+): Promise<TransactionSummary> {
+  return requestJson<TransactionSummary>(`/api/transactions/${transactionId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      occurred_at: payload.occurredAt,
+      type: payload.type,
+      amount: payload.amountInCents,
+      account_id: payload.accountId,
+      payment_method: payload.paymentMethod,
+      category_id: payload.categoryId,
+      description: payload.description,
+      person_id: payload.personId || undefined,
+    }),
+  });
+}
+
+export async function voidTransaction(
+  transactionId: string,
+  reason?: string,
+): Promise<TransactionSummary> {
+  return requestJson<TransactionSummary>(`/api/transactions/${transactionId}/void`, {
+    method: "POST",
+    body: JSON.stringify({
+      reason: reason || undefined,
+    }),
+  });
+}
+
+export async function resetApplicationData(): Promise<{ status: string; message: string }> {
+  return requestJson<{ status: string; message: string }>("/api/dev/reset", {
+    method: "POST",
   });
 }
 

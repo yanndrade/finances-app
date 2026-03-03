@@ -85,6 +85,8 @@ def build_router(
     account_service: AccountService,
     transaction_service: TransactionService,
     transfer_service: TransferService,
+    event_store: EventStore,
+    projector: Projector,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -318,6 +320,15 @@ def build_router(
                 detail=str(exc),
             ) from exc
 
+    @router.post("/api/dev/reset")
+    def reset_application_data() -> dict[str, str]:
+        event_store.reset()
+        projector.reset()
+        return {
+            "status": "ok",
+            "message": "Application data reset.",
+        }
+
     return router
 
 
@@ -355,5 +366,13 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.include_router(build_router(account_service, transaction_service, transfer_service))
+    app.include_router(
+        build_router(
+            account_service,
+            transaction_service,
+            transfer_service,
+            event_store,
+            projector,
+        )
+    )
     return app

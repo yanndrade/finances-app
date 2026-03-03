@@ -1069,6 +1069,24 @@ def test_projector_summarizes_dashboard_month_from_projections(tmp_path: Path) -
                 "status": "active",
             },
         ],
+        "spending_by_category": [
+            {
+                "category_id": "food",
+                "total": 15_00,
+            }
+        ],
+        "previous_month": {
+            "total_income": 0,
+            "total_expense": 99_00,
+            "net_flow": -99_00,
+        },
+        "daily_balance_series": [
+            {
+                "date": "2026-03-02",
+                "balance": 25_00,
+            }
+        ],
+        "review_queue": [],
     }
 
 

@@ -1,0 +1,42 @@
+- generic [ref=e3]:
+  - navigation "Main navigation" [ref=e4]:
+    - generic [ref=e5]:
+      - paragraph [ref=e6]: Finances
+      - strong [ref=e7]: Controle pessoal
+      - paragraph [ref=e8]: Desktop focado em caixa, contas e movimentacoes.
+    - list [ref=e9]:
+      - listitem [ref=e10]:
+        - button "Dashboard" [ref=e11] [cursor=pointer]:
+          - generic [ref=e12]: Dashboard
+          - generic [ref=e13]: Visao mensal do caixa
+      - listitem [ref=e14]:
+        - button "Transacoes" [ref=e15] [cursor=pointer]:
+          - generic [ref=e16]: Transacoes
+          - generic [ref=e17]: Filtros, edicao e estorno
+      - listitem [ref=e18]:
+        - button "Contas" [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: Contas
+          - generic [ref=e21]: Saldo, criacao e ajustes
+      - listitem [ref=e22]:
+        - button "Movimentar" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Movimentar
+          - generic [ref=e25]: Entradas, saidas e transferencias
+    - button "Configurações" [active] [pressed] [ref=e27] [cursor=pointer]:
+      - generic [ref=e28]: Configurações
+      - generic [ref=e29]: Desenvolvimento e preferências
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - paragraph [ref=e33]: Release 0.6
+      - heading "Configurações" [level=1] [ref=e150]
+      - paragraph [ref=e35]: Ferramentas de desenvolvimento e espaço reservado para preferências futuras.
+    - generic [ref=e152]:
+      - generic [ref=e154]:
+        - paragraph [ref=e155]: Configurações
+        - heading "Ferramentas de desenvolvimento" [level=2] [ref=e156]
+        - paragraph [ref=e157]: Recursos temporários para testar o aplicativo durante o desenvolvimento.
+      - generic [ref=e158]:
+        - generic [ref=e159]:
+          - paragraph [ref=e160]: Ação destrutiva
+          - heading "Zerar aplicação" [level=3] [ref=e161]
+          - paragraph [ref=e162]: Isso apaga todos os dados do banco e volta o sistema para o estado de primeira execução.
+        - button "Apagar todos os dados" [ref=e163] [cursor=pointer]

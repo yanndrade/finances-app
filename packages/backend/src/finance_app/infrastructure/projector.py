@@ -117,6 +117,10 @@ class Projector:
         self.bootstrap()
         return self.run()
 
+    def reset(self) -> None:
+        ProjectionBase.metadata.drop_all(self._engine)
+        self.bootstrap()
+
     def get_last_applied_event_id(self) -> int:
         self.bootstrap()
         with self._session_factory() as session:
@@ -244,6 +248,31 @@ class Projector:
                 .scalar()
             )
 
+            # Previous month data for delta comparison
+            prev_month = self._previous_month_key(month)
+            prev_rows: Sequence[TransactionProjectionRecord] = (
+                session.query(TransactionProjectionRecord)
+                .filter(TransactionProjectionRecord.occurred_at.like(f"{prev_month}-%"))
+                .filter(TransactionProjectionRecord.status == "active")
+                .all()
+            )
+
+            # Review queue: transactions missing description or with placeholder category
+            review_rows: Sequence[TransactionProjectionRecord] = (
+                session.query(TransactionProjectionRecord)
+                .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
+                .filter(TransactionProjectionRecord.status == "active")
+                .filter(TransactionProjectionRecord.type != "transfer")
+                .filter(
+                    or_(
+                        TransactionProjectionRecord.description.is_(None),
+                        TransactionProjectionRecord.description == "",
+                    )
+                )
+                .order_by(TransactionProjectionRecord.occurred_at.desc())
+                .all()
+            )
+
         recent_transactions = [
             TransactionProjection(
                 transaction_id=row.transaction_id,
@@ -268,6 +297,55 @@ class Projector:
             row.amount for row in month_rows if row.type == "expense"
         )
 
+        # Spending by category (expenses only, excluding transfers)
+        category_totals: dict[str, int] = {}
+        for row in month_rows:
+            if row.type == "expense":
+                category_totals[row.category_id] = (
+                    category_totals.get(row.category_id, 0) + row.amount
+                )
+        spending_by_category = sorted(
+            [{"category_id": cat, "total": total} for cat, total in category_totals.items()],
+            key=lambda item: item["total"],
+            reverse=True,
+        )
+
+        # Previous month totals
+        prev_income = sum(row.amount for row in prev_rows if row.type == "income")
+        prev_expense = sum(row.amount for row in prev_rows if row.type == "expense")
+
+        # Daily balance series (cumulative running total for sparkline)
+        daily_map: dict[str, int] = {}
+        for row in month_rows:
+            if row.type == "transfer":
+                continue
+            day = row.occurred_at[:10]
+            delta = row.amount if row.type == "income" else -row.amount
+            daily_map[day] = daily_map.get(day, 0) + delta
+        running = 0
+        daily_balance_series = []
+        for day in sorted(daily_map.keys()):
+            running += daily_map[day]
+            daily_balance_series.append({"date": day, "balance": running})
+
+        review_queue = [
+            TransactionProjection(
+                transaction_id=row.transaction_id,
+                occurred_at=row.occurred_at,
+                type=row.type,
+                amount=row.amount,
+                account_id=row.account_id,
+                payment_method=row.payment_method,
+                category_id=row.category_id,
+                description=row.description,
+                person_id=row.person_id,
+                status=row.status,
+                transfer_id=row.transfer_id,
+                direction=row.direction,
+            ).to_dict()
+            for row in review_rows
+        ]
+
         return {
             "month": month,
             "total_income": total_income,
@@ -275,7 +353,22 @@ class Projector:
             "net_flow": total_income - total_expense,
             "current_balance": int(balance_total or 0),
             "recent_transactions": recent_transactions,
+            "spending_by_category": spending_by_category,
+            "previous_month": {
+                "total_income": prev_income,
+                "total_expense": prev_expense,
+                "net_flow": prev_income - prev_expense,
+            },
+            "daily_balance_series": daily_balance_series,
+            "review_queue": review_queue,
         }
+
+    @staticmethod
+    def _previous_month_key(month: str) -> str:
+        year, mon = int(month[:4]), int(month[5:7])
+        if mon == 1:
+            return f"{year - 1}-12"
+        return f"{year}-{mon - 1:02d}"
 
     def _apply_event(self, session: Session, event: StoredEvent) -> None:
         if event.type == "AccountCreated":

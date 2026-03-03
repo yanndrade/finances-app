@@ -720,6 +720,24 @@ def test_dashboard_endpoint_returns_monthly_summary_from_projections(tmp_path) -
                 "status": "active",
             },
         ],
+        "spending_by_category": [
+            {
+                "category_id": "food",
+                "total": 20_00,
+            }
+        ],
+        "previous_month": {
+            "total_income": 0,
+            "total_expense": 0,
+            "net_flow": 0,
+        },
+        "daily_balance_series": [
+            {
+                "date": "2026-03-02",
+                "balance": 30_00,
+            }
+        ],
+        "review_queue": [],
     }
 
 
@@ -755,6 +773,61 @@ def test_backend_allows_cors_for_local_frontend_origins(tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+
+
+def test_dev_reset_endpoint_clears_projection_and_event_data(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T08:00:00Z",
+            "amount": 15_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Morning coffee",
+            "person_id": None,
+        },
+    )
+
+    reset_response = client.post("/api/dev/reset")
+
+    assert reset_response.status_code == 200
+    assert reset_response.json() == {"status": "ok", "message": "Application data reset."}
+
+    accounts_response = client.get("/api/accounts")
+    transactions_response = client.get("/api/transactions")
+    dashboard_response = client.get("/api/dashboard", params={"month": "2026-03"})
+
+    assert accounts_response.status_code == 200
+    assert accounts_response.json() == []
+
+    assert transactions_response.status_code == 200
+    assert transactions_response.json() == []
+
+    assert dashboard_response.status_code == 200
+    assert dashboard_response.json() == {
+        "month": "2026-03",
+        "total_income": 0,
+        "total_expense": 0,
+        "net_flow": 0,
+        "current_balance": 0,
+        "recent_transactions": [],
+        "spending_by_category": [],
+        "previous_month": {
+            "total_income": 0,
+            "total_expense": 0,
+            "net_flow": 0,
+        },
+        "daily_balance_series": [],
+        "review_queue": [],
+    }
 
 
 def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:

@@ -1,0 +1,107 @@
+- generic [ref=e3]:
+  - navigation "Main navigation" [ref=e4]:
+    - generic [ref=e5]:
+      - paragraph [ref=e6]: Finances
+      - strong [ref=e7]: Controle pessoal
+      - paragraph [ref=e8]: Desktop focado em caixa, contas e movimentacoes.
+    - list [ref=e9]:
+      - listitem [ref=e10]:
+        - button "Dashboard" [pressed] [ref=e11] [cursor=pointer]:
+          - generic [ref=e12]: Dashboard
+          - generic [ref=e13]: Visao mensal do caixa
+      - listitem [ref=e14]:
+        - button "Transacoes" [ref=e15] [cursor=pointer]:
+          - generic [ref=e16]: Transacoes
+          - generic [ref=e17]: Filtros, edicao e estorno
+      - listitem [ref=e18]:
+        - button "Contas" [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: Contas
+          - generic [ref=e21]: Saldo, criacao e ajustes
+      - listitem [ref=e22]:
+        - button "Movimentar" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Movimentar
+          - generic [ref=e25]: Entradas, saidas e transferencias
+    - button "Configurações" [ref=e27] [cursor=pointer]:
+      - generic [ref=e28]: Configurações
+      - generic [ref=e29]: Desenvolvimento e preferências
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - paragraph [ref=e33]: Release 0.6
+      - heading "Visao geral do caixa" [level=1] [ref=e164]
+      - paragraph [ref=e35]: Saude financeira, controle de gastos e acoes pendentes — tudo em um lugar.
+    - generic [ref=e165]:
+      - generic "Mes do dashboard" [ref=e167]:
+        - text: Mes
+        - textbox "Mes do dashboard" [ref=e168]: 2026-03
+      - region "Saude financeira" [ref=e169]:
+        - generic [ref=e171]:
+          - paragraph [ref=e172]: Saude
+          - heading "Como voce esta" [level=2] [ref=e173]
+        - generic [ref=e174]:
+          - article [ref=e175]:
+            - paragraph [ref=e176]: Saldo consolidado
+            - strong [ref=e177]: R$ 0,00
+            - paragraph [ref=e178]: Sparkline aparece com 2+ dias de dados
+          - article [ref=e179]:
+            - paragraph [ref=e180]: Cash flow do mes
+            - generic [ref=e181]:
+              - 'button "Entradas R$ 0,00 Variacao: 0%" [ref=e182] [cursor=pointer]':
+                - generic [ref=e183]: Entradas
+                - strong [ref=e184]: R$ 0,00
+                - 'generic "Variacao: 0%" [ref=e185]': → 0%
+              - 'button "Saidas R$ 0,00 Variacao: 0%" [ref=e186] [cursor=pointer]':
+                - generic [ref=e187]: Saidas
+                - strong [ref=e188]: R$ 0,00
+                - 'generic "Variacao: 0%" [ref=e189]': → 0%
+              - 'button "Resultado R$ 0,00 Variacao: 0%" [ref=e190] [cursor=pointer]':
+                - generic [ref=e191]: Resultado
+                - strong [ref=e192]: R$ 0,00
+                - 'generic "Variacao: 0%" [ref=e193]': → 0%
+      - region "Controle financeiro" [ref=e194]:
+        - generic [ref=e196]:
+          - paragraph [ref=e197]: Controle
+          - heading "Onde voce esta gastando" [level=2] [ref=e198]
+        - generic [ref=e199]:
+          - article [ref=e200]:
+            - paragraph [ref=e201]: Gastos por categoria
+            - heading "Este mes" [level=3] [ref=e202]
+            - generic [ref=e203]:
+              - paragraph [ref=e204]: Sem despesas registradas ainda.
+              - paragraph [ref=e205]: Adicione transacoes para ver seus gastos por categoria.
+          - article [ref=e206]:
+            - paragraph [ref=e207]: Contas
+            - heading "Resumo por conta" [level=3] [ref=e208]
+            - generic [ref=e209]:
+              - paragraph [ref=e210]: Nenhuma conta cadastrada.
+              - paragraph [ref=e211]: Crie sua primeira conta para comecar a organizar seu dinheiro.
+          - article [ref=e212]:
+            - paragraph [ref=e213]: Proximas contas
+            - heading "Recorrencias" [level=3] [ref=e214]
+            - generic [ref=e215]:
+              - paragraph [ref=e216]: Recorrencias ainda nao implementadas.
+              - paragraph [ref=e217]: "Em breve: assinaturas, boletos fixos e lembretes de pagamento."
+      - region "Acoes pendentes" [ref=e218]:
+        - generic [ref=e220]:
+          - paragraph [ref=e221]: Acao
+          - heading "O que precisa de atencao" [level=2] [ref=e222]
+        - generic [ref=e223]:
+          - article [ref=e224]:
+            - generic [ref=e226]:
+              - paragraph [ref=e227]: Para revisar
+              - heading "Tudo em dia" [level=3] [ref=e228]
+            - generic [ref=e229]:
+              - paragraph [ref=e230]: Nenhuma transacao precisa de revisao.
+              - paragraph [ref=e231]: Transacoes sem descricao ou categoria aparecerao aqui.
+          - article [ref=e232]:
+            - generic [ref=e234]:
+              - paragraph [ref=e235]: Transacoes
+              - heading "Ultimas movimentacoes" [level=3] [ref=e236]
+            - generic [ref=e237]:
+              - button "Todas" [ref=e238] [cursor=pointer]
+              - button "Entradas" [ref=e239] [cursor=pointer]
+              - button "Saidas" [ref=e240] [cursor=pointer]
+              - button "Transferencias" [ref=e241] [cursor=pointer]
+            - generic [ref=e242]:
+              - paragraph [ref=e243]: Nenhuma transacao encontrada.
+              - paragraph [ref=e244]: Comece adicionando suas primeiras transacoes.
+              - button "Adicionar transacao" [ref=e245] [cursor=pointer]

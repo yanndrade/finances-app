@@ -29,7 +29,20 @@ describe("Dashboard view", () => {
                   person_id: null,
                   status: "active"
                 }
-              ]
+              ],
+              spending_by_category: [
+                { category_id: "food", total: 2000 }
+              ],
+              previous_month: {
+                total_income: 4000,
+                total_expense: 1500,
+                net_flow: 2500,
+              },
+              daily_balance_series: [
+                { date: "2026-03-01", balance: 5000 },
+                { date: "2026-03-02", balance: 3000 },
+              ],
+              review_queue: [],
             }),
           ),
         );
@@ -81,7 +94,7 @@ describe("Dashboard view", () => {
     render(<App />);
 
     expect((await screen.findAllByText("R$ 155,00")).length).toBeGreaterThan(0);
-    expect(screen.getByText("R$ 50,00")).toBeInTheDocument();
+    expect(screen.getAllByText("R$ 50,00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("R$ 20,00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Main Wallet").length).toBeGreaterThan(0);
     expect(screen.getByText("Lunch")).toBeInTheDocument();
