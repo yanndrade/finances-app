@@ -952,6 +952,84 @@ def test_projector_applies_invoice_payments_to_invoice_status_and_cash_balance(
     ]
 
 
+def test_projector_lists_invoice_items_for_a_single_invoice(tmp_path: Path) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-15T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-15T12:00:00Z",
+                "amount": 100_00,
+                "category_id": "electronics",
+                "card_id": "card-1",
+                "description": "Headphones",
+                "installments_count": 3,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-10T12:00:00Z",
+            payload={
+                "id": "purchase-2",
+                "purchase_date": "2026-03-10T12:00:00Z",
+                "amount": 20_00,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Lunch",
+                "installments_count": 1,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+
+    assert applied == 3
+    assert projector.list_invoice_items(invoice_id="card-1:2026-04") == [
+        {
+            "invoice_item_id": "purchase-1:1",
+            "invoice_id": "card-1:2026-04",
+            "purchase_id": "purchase-1",
+            "card_id": "card-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "category_id": "electronics",
+            "description": "Headphones",
+            "installment_number": 1,
+            "installments_count": 3,
+            "amount": 33_33,
+        }
+    ]
+
+
 def test_projector_updates_voids_and_filters_transactions(tmp_path: Path) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",

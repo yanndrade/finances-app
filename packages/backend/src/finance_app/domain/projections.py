@@ -100,6 +100,34 @@ class InvoiceProjection:
 
 
 @dataclass(frozen=True)
+class InvoiceItemProjection:
+    invoice_item_id: str
+    invoice_id: str
+    purchase_id: str
+    card_id: str
+    purchase_date: str
+    category_id: str
+    description: str | None
+    installment_number: int
+    installments_count: int
+    amount: int
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        return {
+            "invoice_item_id": self.invoice_item_id,
+            "invoice_id": self.invoice_id,
+            "purchase_id": self.purchase_id,
+            "card_id": self.card_id,
+            "purchase_date": self.purchase_date,
+            "category_id": self.category_id,
+            "description": self.description,
+            "installment_number": self.installment_number,
+            "installments_count": self.installments_count,
+            "amount": self.amount,
+        }
+
+
+@dataclass(frozen=True)
 class BalanceStateProjection:
     account_id: str
     current_balance: int
