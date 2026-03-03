@@ -18,6 +18,10 @@ from finance_app.application.transactions import (
     TransactionService,
     TransactionServiceError,
 )
+from finance_app.application.transfers import (
+    InvalidTransferAccountsError,
+    TransferService,
+)
 from finance_app.infrastructure.event_store import EventStore
 from finance_app.infrastructure.projector import Projector
 
@@ -66,9 +70,19 @@ class VoidTransactionRequest(BaseModel):
     reason: str | None = None
 
 
+class CreateTransferRequest(BaseModel):
+    id: str = Field(min_length=1)
+    occurred_at: str
+    from_account_id: str = Field(min_length=1)
+    to_account_id: str = Field(min_length=1)
+    amount: int = Field(gt=0)
+    description: str | None = None
+
+
 def build_router(
     account_service: AccountService,
     transaction_service: TransactionService,
+    transfer_service: TransferService,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -262,6 +276,34 @@ def build_router(
         except TransactionNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
+    @router.post("/api/transfers", status_code=status.HTTP_201_CREATED)
+    def create_transfer(
+        payload: CreateTransferRequest,
+    ) -> list[dict[str, str | int | None]]:
+        try:
+            return transfer_service.create_transfer(
+                transfer_id=payload.id,
+                occurred_at=payload.occurred_at,
+                from_account_id=payload.from_account_id,
+                to_account_id=payload.to_account_id,
+                amount=payload.amount,
+                description=payload.description,
+            )
+        except AccountNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except TransactionAlreadyExistsError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        except (InvalidTransactionDateError, InvalidTransferAccountsError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+        except TransactionServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
     return router
 
 
@@ -281,6 +323,11 @@ def create_app(
         projector=projector,
         account_reader=account_service,
     )
+    transfer_service = TransferService(
+        event_store=event_store,
+        projector=projector,
+        account_reader=account_service,
+    )
     app = FastAPI(title="finance-app backend")
-    app.include_router(build_router(account_service, transaction_service))
+    app.include_router(build_router(account_service, transaction_service, transfer_service))
     return app

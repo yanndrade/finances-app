@@ -62,6 +62,8 @@ class TransactionProjectionRecord(ProjectionBase):
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     person_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     status: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    transfer_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    direction: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Projector:
@@ -214,6 +216,8 @@ class Projector:
                 description=row.description,
                 person_id=row.person_id,
                 status=row.status,
+                transfer_id=row.transfer_id,
+                direction=row.direction,
             ).to_dict()
             for row in rows
         ]
@@ -237,6 +241,10 @@ class Projector:
 
         if event.type == "TransactionVoided":
             self._apply_transaction_voided(session, event.payload)
+            return
+
+        if event.type == "TransferCreated":
+            self._apply_transfer_created(session, event.payload)
 
     def _apply_account_created(
         self,
@@ -317,6 +325,8 @@ class Projector:
                 description=_optional_string(payload.get("description")),
                 person_id=_optional_string(payload.get("person_id")),
                 status=str(payload.get("status", "active")),
+                transfer_id=_optional_string(payload.get("transfer_id")),
+                direction=_optional_string(payload.get("direction")),
             )
         )
         self._apply_balance_delta(
@@ -384,6 +394,8 @@ class Projector:
         existing.description = _optional_string(payload.get("description"))
         existing.person_id = _optional_string(payload.get("person_id"))
         existing.status = new_status
+        existing.transfer_id = _optional_string(payload.get("transfer_id"))
+        existing.direction = _optional_string(payload.get("direction"))
 
     def _apply_transaction_voided(
         self,
@@ -406,6 +418,64 @@ class Projector:
             ),
         )
         existing.status = "voided"
+
+    def _apply_transfer_created(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        transfer_id = str(payload["id"])
+        occurred_at = str(payload["occurred_at"])
+        amount = int(payload["amount"])
+        description = _optional_string(payload.get("description"))
+
+        debit_id = f"{transfer_id}:debit"
+        if session.get(TransactionProjectionRecord, debit_id) is None:
+            session.add(
+                TransactionProjectionRecord(
+                    transaction_id=debit_id,
+                    occurred_at=occurred_at,
+                    type="transfer",
+                    amount=amount,
+                    account_id=str(payload["from_account_id"]),
+                    payment_method="OTHER",
+                    category_id="transfer",
+                    description=description,
+                    person_id=None,
+                    status="active",
+                    transfer_id=transfer_id,
+                    direction="debit",
+                )
+            )
+            self._apply_balance_delta(
+                session,
+                account_id=str(payload["from_account_id"]),
+                delta=-amount,
+            )
+
+        credit_id = f"{transfer_id}:credit"
+        if session.get(TransactionProjectionRecord, credit_id) is None:
+            session.add(
+                TransactionProjectionRecord(
+                    transaction_id=credit_id,
+                    occurred_at=occurred_at,
+                    type="transfer",
+                    amount=amount,
+                    account_id=str(payload["to_account_id"]),
+                    payment_method="OTHER",
+                    category_id="transfer",
+                    description=description,
+                    person_id=None,
+                    status="active",
+                    transfer_id=transfer_id,
+                    direction="credit",
+                )
+            )
+            self._apply_balance_delta(
+                session,
+                account_id=str(payload["to_account_id"]),
+                delta=amount,
+            )
 
     def _projection_schema_requires_rebuild(self) -> bool:
         inspector = inspect(self._engine)
@@ -440,6 +510,8 @@ class Projector:
             "description",
             "person_id",
             "status",
+            "transfer_id",
+            "direction",
         }
         if transaction_columns != expected_transaction_columns:
             return True
