@@ -679,3 +679,217 @@ def test_projector_updates_voids_and_filters_transactions(tmp_path: Path) -> Non
             "current_balance": 75_00,
         }
     ]
+
+
+def test_projector_rebuilds_issue_15_projection_when_transfer_columns_are_missing(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+
+    projection_url = f"sqlite:///{(tmp_path / 'app.db').as_posix()}"
+    engine = get_engine(projection_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE accounts (
+                    account_id VARCHAR PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    type VARCHAR NOT NULL,
+                    initial_balance INTEGER NOT NULL,
+                    is_active BOOLEAN NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE balance_state (
+                    account_id VARCHAR PRIMARY KEY,
+                    current_balance INTEGER NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE transactions (
+                    transaction_id VARCHAR PRIMARY KEY,
+                    occurred_at VARCHAR NOT NULL,
+                    type VARCHAR NOT NULL,
+                    amount INTEGER NOT NULL,
+                    account_id VARCHAR NOT NULL,
+                    payment_method VARCHAR NOT NULL,
+                    category_id VARCHAR NOT NULL,
+                    description VARCHAR NULL,
+                    person_id VARCHAR NULL,
+                    status VARCHAR NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE event_cursor (
+                    singleton_id INTEGER PRIMARY KEY,
+                    last_applied_event_id INTEGER NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO event_cursor (singleton_id, last_applied_event_id)
+                VALUES (1, 1)
+                """
+            )
+        )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=projection_url,
+    )
+
+    applied = projector.run()
+
+    assert applied == 1
+    assert projector.list_transactions() == []
+
+
+def test_projector_materializes_internal_transfers_and_moves_balances(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "acc-2",
+                "name": "Broker",
+                "type": "investment",
+                "initial_balance": 300_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="TransferCreated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "trf-1",
+                "occurred_at": "2026-03-02T12:02:00Z",
+                "from_account_id": "acc-1",
+                "to_account_id": "acc-2",
+                "amount": 25_00,
+                "description": "Broker top-up",
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+
+    assert applied == 3
+    assert projector.list_transactions() == [
+        {
+            "transaction_id": "trf-1:debit",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "type": "transfer",
+            "amount": 25_00,
+            "account_id": "acc-1",
+            "payment_method": "OTHER",
+            "category_id": "transfer",
+            "description": "Broker top-up",
+            "person_id": None,
+            "status": "active",
+            "transfer_id": "trf-1",
+            "direction": "debit",
+        },
+        {
+            "transaction_id": "trf-1:credit",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "type": "transfer",
+            "amount": 25_00,
+            "account_id": "acc-2",
+            "payment_method": "OTHER",
+            "category_id": "transfer",
+            "description": "Broker top-up",
+            "person_id": None,
+            "status": "active",
+            "transfer_id": "trf-1",
+            "direction": "credit",
+        },
+    ]
+    assert projector.list_transactions(account_id="acc-1") == [
+        {
+            "transaction_id": "trf-1:debit",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "type": "transfer",
+            "amount": 25_00,
+            "account_id": "acc-1",
+            "payment_method": "OTHER",
+            "category_id": "transfer",
+            "description": "Broker top-up",
+            "person_id": None,
+            "status": "active",
+            "transfer_id": "trf-1",
+            "direction": "debit",
+        }
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 75_00,
+        },
+        {
+            "account_id": "acc-2",
+            "current_balance": 325_00,
+        },
+    ]

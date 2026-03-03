@@ -416,6 +416,194 @@ def test_cash_transaction_update_can_clear_nullable_fields(tmp_path) -> None:
     assert response.json()["person_id"] is None
 
 
+def test_transfer_endpoint_creates_linked_internal_movements(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Broker", "investment", 300_00)
+
+    response = client.post(
+        "/api/transfers",
+        json={
+            "id": "trf-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "from_account_id": "acc-1",
+            "to_account_id": "acc-2",
+            "amount": 25_00,
+            "description": "Broker top-up",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json() == [
+        {
+            "transaction_id": "trf-1:debit",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "type": "transfer",
+            "amount": 25_00,
+            "account_id": "acc-1",
+            "payment_method": "OTHER",
+            "category_id": "transfer",
+            "description": "Broker top-up",
+            "person_id": None,
+            "status": "active",
+            "transfer_id": "trf-1",
+            "direction": "debit",
+        },
+        {
+            "transaction_id": "trf-1:credit",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "type": "transfer",
+            "amount": 25_00,
+            "account_id": "acc-2",
+            "payment_method": "OTHER",
+            "category_id": "transfer",
+            "description": "Broker top-up",
+            "person_id": None,
+            "status": "active",
+            "transfer_id": "trf-1",
+            "direction": "credit",
+        },
+    ]
+
+    accounts_response = client.get("/api/accounts")
+
+    assert accounts_response.status_code == 200
+    assert accounts_response.json() == [
+        {
+            "account_id": "acc-1",
+            "name": "Main Wallet",
+            "type": "wallet",
+            "initial_balance": 100_00,
+            "is_active": True,
+            "current_balance": 75_00,
+        },
+        {
+            "account_id": "acc-2",
+            "name": "Broker",
+            "type": "investment",
+            "initial_balance": 300_00,
+            "is_active": True,
+            "current_balance": 325_00,
+        },
+    ]
+
+
+def test_transfer_endpoint_rejects_same_origin_and_destination(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    response = client.post(
+        "/api/transfers",
+        json={
+            "id": "trf-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "from_account_id": "acc-1",
+            "to_account_id": "acc-1",
+            "amount": 25_00,
+            "description": "Invalid self-transfer",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_voiding_transfer_credit_reverses_destination_balance_correctly(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Broker", "investment", 300_00)
+
+    transfer_response = client.post(
+        "/api/transfers",
+        json={
+            "id": "trf-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "from_account_id": "acc-1",
+            "to_account_id": "acc-2",
+            "amount": 25_00,
+            "description": "Broker top-up",
+        },
+    )
+    assert transfer_response.status_code == 201
+
+    void_response = client.post(
+        "/api/transactions/trf-1:credit/void",
+        json={"reason": "Undo transfer"},
+    )
+
+    assert void_response.status_code == 200
+
+    accounts_response = client.get("/api/accounts")
+
+    assert accounts_response.status_code == 200
+    assert accounts_response.json() == [
+        {
+            "account_id": "acc-1",
+            "name": "Main Wallet",
+            "type": "wallet",
+            "initial_balance": 100_00,
+            "is_active": True,
+            "current_balance": 75_00,
+        },
+        {
+            "account_id": "acc-2",
+            "name": "Broker",
+            "type": "investment",
+            "initial_balance": 300_00,
+            "is_active": True,
+            "current_balance": 300_00,
+        },
+    ]
+
+
+def test_transfer_endpoint_rejects_collisions_with_derived_leg_ids(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Broker", "investment", 300_00)
+    _create_expense(
+        client,
+        {
+            "id": "trf-1:debit",
+            "occurred_at": "2026-03-02T08:00:00Z",
+            "amount": 15_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Existing transaction",
+            "person_id": None,
+        },
+    )
+
+    response = client.post(
+        "/api/transfers",
+        json={
+            "id": "trf-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "from_account_id": "acc-1",
+            "to_account_id": "acc-2",
+            "amount": 25_00,
+            "description": "Broker top-up",
+        },
+    )
+
+    assert response.status_code == 409
+
+
 def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:
     response = client.post(
         "/api/accounts",

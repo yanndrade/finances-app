@@ -43,9 +43,11 @@ class TransactionProjection:
     description: str | None
     person_id: str | None
     status: str
+    transfer_id: str | None = None
+    direction: str | None = None
 
     def to_dict(self) -> dict[str, str | int | None]:
-        return {
+        data: dict[str, str | int | None] = {
             "transaction_id": self.transaction_id,
             "occurred_at": self.occurred_at,
             "type": self.type,
@@ -57,3 +59,8 @@ class TransactionProjection:
             "person_id": self.person_id,
             "status": self.status,
         }
+        if self.transfer_id is not None:
+            data["transfer_id"] = self.transfer_id
+        if self.direction is not None:
+            data["direction"] = self.direction
+        return data
