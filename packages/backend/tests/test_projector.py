@@ -893,3 +893,255 @@ def test_projector_materializes_internal_transfers_and_moves_balances(
             "current_balance": 325_00,
         },
     ]
+
+
+def test_projector_summarizes_dashboard_month_from_projections(tmp_path: Path) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "acc-2",
+                "name": "Savings",
+                "type": "savings",
+                "initial_balance": 50_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="IncomeCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "tx-1",
+                "occurred_at": "2026-03-02T12:01:00Z",
+                "type": "income",
+                "amount": 40_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "salary",
+                "description": "Side job",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "tx-2",
+                "occurred_at": "2026-03-02T12:02:00Z",
+                "type": "expense",
+                "amount": 15_00,
+                "account_id": "acc-1",
+                "payment_method": "CASH",
+                "category_id": "food",
+                "description": "Lunch",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="TransferCreated",
+            timestamp="2026-03-02T12:03:00Z",
+            payload={
+                "id": "trf-1",
+                "occurred_at": "2026-03-02T12:03:00Z",
+                "from_account_id": "acc-1",
+                "to_account_id": "acc-2",
+                "amount": 10_00,
+                "description": "Move to savings",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-02T12:04:00Z",
+            payload={
+                "id": "tx-3",
+                "occurred_at": "2026-02-28T23:00:00Z",
+                "type": "expense",
+                "amount": 99_00,
+                "account_id": "acc-1",
+                "payment_method": "OTHER",
+                "category_id": "ignored",
+                "description": "Previous month",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+
+    assert applied == 6
+    assert projector.get_dashboard_summary(month="2026-03") == {
+        "month": "2026-03",
+        "total_income": 40_00,
+        "total_expense": 15_00,
+        "net_flow": 25_00,
+        "current_balance": 76_00,
+        "recent_transactions": [
+            {
+                "transaction_id": "trf-1:debit",
+                "occurred_at": "2026-03-02T12:03:00Z",
+                "type": "transfer",
+                "amount": 10_00,
+                "account_id": "acc-1",
+                "payment_method": "OTHER",
+                "category_id": "transfer",
+                "description": "Move to savings",
+                "person_id": None,
+                "status": "active",
+                "transfer_id": "trf-1",
+                "direction": "debit",
+            },
+            {
+                "transaction_id": "trf-1:credit",
+                "occurred_at": "2026-03-02T12:03:00Z",
+                "type": "transfer",
+                "amount": 10_00,
+                "account_id": "acc-2",
+                "payment_method": "OTHER",
+                "category_id": "transfer",
+                "description": "Move to savings",
+                "person_id": None,
+                "status": "active",
+                "transfer_id": "trf-1",
+                "direction": "credit",
+            },
+            {
+                "transaction_id": "tx-2",
+                "occurred_at": "2026-03-02T12:02:00Z",
+                "type": "expense",
+                "amount": 15_00,
+                "account_id": "acc-1",
+                "payment_method": "CASH",
+                "category_id": "food",
+                "description": "Lunch",
+                "person_id": None,
+                "status": "active",
+            },
+            {
+                "transaction_id": "tx-1",
+                "occurred_at": "2026-03-02T12:01:00Z",
+                "type": "income",
+                "amount": 40_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "salary",
+                "description": "Side job",
+                "person_id": None,
+                "status": "active",
+            },
+        ],
+        "spending_by_category": [
+            {
+                "category_id": "food",
+                "total": 15_00,
+            }
+        ],
+        "previous_month": {
+            "total_income": 0,
+            "total_expense": 99_00,
+            "net_flow": -99_00,
+        },
+        "daily_balance_series": [
+            {
+                "date": "2026-03-02",
+                "balance": 25_00,
+            }
+        ],
+        "review_queue": [],
+    }
+
+
+def test_projector_keeps_dashboard_totals_unbounded_when_preview_is_limited(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 0,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+
+    for index in range(12):
+        append_event.execute(
+            NewEvent(
+                type="IncomeCreated",
+                timestamp=f"2026-03-02T12:{index:02d}:00Z",
+                payload={
+                    "id": f"tx-{index}",
+                    "occurred_at": f"2026-03-02T12:{index:02d}:00Z",
+                    "type": "income",
+                    "amount": 1_00,
+                    "account_id": "acc-1",
+                    "payment_method": "PIX",
+                    "category_id": "salary",
+                    "description": f"Income {index}",
+                    "person_id": None,
+                    "status": "active",
+                },
+                version=1,
+            )
+        )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+    summary = projector.get_dashboard_summary(month="2026-03")
+
+    assert summary["total_income"] == 12_00
+    assert summary["net_flow"] == 12_00
+    assert len(summary["recent_transactions"]) == 10

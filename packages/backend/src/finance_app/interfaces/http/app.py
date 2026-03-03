@@ -1,6 +1,8 @@
+import re
 from typing import Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from finance_app.application.accounts import (
@@ -83,6 +85,8 @@ def build_router(
     account_service: AccountService,
     transaction_service: TransactionService,
     transfer_service: TransferService,
+    event_store: EventStore,
+    projector: Projector,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -234,6 +238,18 @@ def build_router(
                 detail=str(exc),
             ) from exc
 
+    @router.get("/api/dashboard")
+    def get_dashboard(
+        month: str = Query(...),
+    ) -> dict[str, object]:
+        if re.fullmatch(r"\d{4}-\d{2}", month) is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Month must use YYYY-MM format.",
+            )
+
+        return transaction_service.get_dashboard_summary(month=month)
+
     @router.patch("/api/transactions/{transaction_id}")
     def update_transaction(
         transaction_id: str,
@@ -304,6 +320,15 @@ def build_router(
                 detail=str(exc),
             ) from exc
 
+    @router.post("/api/dev/reset")
+    def reset_application_data() -> dict[str, str]:
+        event_store.reset()
+        projector.reset()
+        return {
+            "status": "ok",
+            "message": "Application data reset.",
+        }
+
     return router
 
 
@@ -329,5 +354,25 @@ def create_app(
         account_reader=account_service,
     )
     app = FastAPI(title="finance-app backend")
-    app.include_router(build_router(account_service, transaction_service, transfer_service))
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ],
+        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.include_router(
+        build_router(
+            account_service,
+            transaction_service,
+            transfer_service,
+            event_store,
+            projector,
+        )
+    )
     return app

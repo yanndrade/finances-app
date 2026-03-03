@@ -1,0 +1,132 @@
+- generic [ref=e3]:
+  - navigation "Main navigation" [ref=e4]:
+    - generic [ref=e5]:
+      - paragraph [ref=e6]: Finances
+      - strong [ref=e7]: Controle pessoal
+      - paragraph [ref=e8]: Desktop focado em caixa, contas e movimentacoes.
+    - list [ref=e9]:
+      - listitem [ref=e10]:
+        - button "Dashboard" [pressed] [ref=e11] [cursor=pointer]:
+          - generic [ref=e12]: Dashboard
+          - generic [ref=e13]: Visao mensal do caixa
+      - listitem [ref=e14]:
+        - button "Transacoes" [ref=e15] [cursor=pointer]:
+          - generic [ref=e16]: Transacoes
+          - generic [ref=e17]: Filtros, edicao e estorno
+      - listitem [ref=e18]:
+        - button "Contas" [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: Contas
+          - generic [ref=e21]: Saldo, criacao e ajustes
+      - listitem [ref=e22]:
+        - button "Movimentar" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Movimentar
+          - generic [ref=e25]: Entradas, saidas e transferencias
+    - button "Configurações" [ref=e27] [cursor=pointer]:
+      - generic [ref=e28]: Configurações
+      - generic [ref=e29]: Desenvolvimento e preferências
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - paragraph [ref=e33]: Release 0.6
+      - heading "Visao geral do caixa" [level=1] [ref=e34]
+      - paragraph [ref=e35]: Saude financeira, controle de gastos e acoes pendentes — tudo em um lugar.
+    - generic [ref=e37]:
+      - generic "Mes do dashboard" [ref=e39]:
+        - text: Mes
+        - textbox "Mes do dashboard" [ref=e40]: 2026-03
+      - region "Saude financeira" [ref=e48]:
+        - generic [ref=e50]:
+          - paragraph [ref=e51]: Saude
+          - heading "Como voce esta" [level=2] [ref=e52]
+        - generic [ref=e53]:
+          - article [ref=e54]:
+            - paragraph [ref=e55]: Saldo consolidado
+            - strong [ref=e56]: R$ 22.221,68
+            - paragraph [ref=e57]: Sparkline aparece com 2+ dias de dados
+          - article [ref=e58]:
+            - paragraph [ref=e59]: Cash flow do mes
+            - generic [ref=e60]:
+              - 'button "Entradas R$ 0,00 Variacao: 0%" [ref=e61] [cursor=pointer]':
+                - generic [ref=e62]: Entradas
+                - strong [ref=e63]: R$ 0,00
+                - 'generic "Variacao: 0%" [ref=e64]': → 0%
+              - 'button "Saidas R$ 0,00 Variacao: 0%" [ref=e65] [cursor=pointer]':
+                - generic [ref=e66]: Saidas
+                - strong [ref=e67]: R$ 0,00
+                - 'generic "Variacao: 0%" [ref=e68]': → 0%
+              - 'button "Resultado R$ 0,00 Variacao: 0%" [ref=e69] [cursor=pointer]':
+                - generic [ref=e70]: Resultado
+                - strong [ref=e71]: R$ 0,00
+                - 'generic "Variacao: 0%" [ref=e72]': → 0%
+      - region "Controle financeiro" [ref=e73]:
+        - generic [ref=e75]:
+          - paragraph [ref=e76]: Controle
+          - heading "Onde voce esta gastando" [level=2] [ref=e77]
+        - generic [ref=e78]:
+          - article [ref=e79]:
+            - paragraph [ref=e80]: Gastos por categoria
+            - heading "Este mes" [level=3] [ref=e81]
+            - generic [ref=e82]:
+              - paragraph [ref=e83]: Sem despesas registradas ainda.
+              - paragraph [ref=e84]: Adicione transacoes para ver seus gastos por categoria.
+          - article [ref=e85]:
+            - paragraph [ref=e86]: Contas
+            - heading "Resumo por conta" [level=3] [ref=e87]
+            - generic [ref=e88]:
+              - generic [ref=e89]:
+                - generic [ref=e90]:
+                  - strong [ref=e91]: Itaú
+                  - paragraph [ref=e92]: checking
+                - strong [ref=e93]: R$ 20.666,92
+              - generic [ref=e94]:
+                - generic [ref=e95]:
+                  - strong [ref=e96]: Bradesco
+                  - paragraph [ref=e97]: checking
+                - strong [ref=e98]: R$ 0,00
+              - generic [ref=e99]:
+                - generic [ref=e100]:
+                  - strong [ref=e101]: Nubank
+                  - paragraph [ref=e102]: checking
+                - strong [ref=e103]: R$ 1.554,76
+          - article [ref=e104]:
+            - paragraph [ref=e105]: Proximas contas
+            - heading "Recorrencias" [level=3] [ref=e106]
+            - generic [ref=e107]:
+              - paragraph [ref=e108]: Recorrencias ainda nao implementadas.
+              - paragraph [ref=e109]: "Em breve: assinaturas, boletos fixos e lembretes de pagamento."
+      - region "Acoes pendentes" [ref=e110]:
+        - generic [ref=e112]:
+          - paragraph [ref=e113]: Acao
+          - heading "O que precisa de atencao" [level=2] [ref=e114]
+        - generic [ref=e115]:
+          - article [ref=e116]:
+            - generic [ref=e118]:
+              - paragraph [ref=e119]: Para revisar
+              - heading "Tudo em dia" [level=3] [ref=e120]
+            - generic [ref=e121]:
+              - paragraph [ref=e122]: Nenhuma transacao precisa de revisao.
+              - paragraph [ref=e123]: Transacoes sem descricao ou categoria aparecerao aqui.
+          - article [ref=e124]:
+            - generic [ref=e126]:
+              - paragraph [ref=e127]: Transacoes
+              - heading "Ultimas movimentacoes" [level=3] [ref=e128]
+            - generic [ref=e129]:
+              - button "Todas" [ref=e130] [cursor=pointer]
+              - button "Entradas" [ref=e131] [cursor=pointer]
+              - button "Saidas" [ref=e132] [cursor=pointer]
+              - button "Transferencias" [ref=e133] [cursor=pointer]
+            - generic [ref=e134]:
+              - generic [ref=e135]:
+                - generic [ref=e136]:
+                  - strong [ref=e137]: Pagar débito Bradesco
+                  - paragraph [ref=e138]: Transferencia • Itaú
+                - generic [ref=e139]:
+                  - strong [ref=e140]: R$ 10.333,46
+                  - generic [ref=e141]: 03/03, 10:35
+              - generic [ref=e142]:
+                - generic [ref=e143]:
+                  - strong [ref=e144]: Pagar débito Bradesco
+                  - paragraph [ref=e145]: Transferencia • Bradesco
+                - generic [ref=e146]:
+                  - strong [ref=e147]: R$ 10.333,46
+                  - generic [ref=e148]: 03/03, 10:35
+              - button "Ver historico completo" [ref=e149] [cursor=pointer]
