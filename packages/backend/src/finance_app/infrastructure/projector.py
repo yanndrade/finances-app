@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from threading import RLock
 
 from sqlalchemy import Boolean
 from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import func
+from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy import inspect
 from sqlalchemy import or_
 from sqlalchemy.orm import DeclarativeBase
@@ -90,6 +92,7 @@ class Projector:
     ) -> None:
         self._event_store = EventStore(database_url=event_database_url)
         self._engine = get_engine(projection_database_url)
+        self._lock = RLock()
         self._session_factory = sessionmaker(
             bind=self._engine,
             autoflush=False,
@@ -97,58 +100,64 @@ class Projector:
         )
 
     def bootstrap(self) -> None:
-        if self._projection_schema_requires_rebuild():
-            ProjectionBase.metadata.drop_all(self._engine)
+        with self._lock:
+            if self._projection_schema_requires_rebuild():
+                ProjectionBase.metadata.drop_all(self._engine)
 
-        ProjectionBase.metadata.create_all(self._engine)
-        with self._session_factory.begin() as session:
-            cursor = session.get(EventCursorRecord, 1)
-            if cursor is None:
-                session.add(EventCursorRecord(singleton_id=1, last_applied_event_id=0))
+            ProjectionBase.metadata.create_all(self._engine)
+            with self._session_factory.begin() as session:
+                cursor = session.get(EventCursorRecord, 1)
+                if cursor is None:
+                    session.add(EventCursorRecord(singleton_id=1, last_applied_event_id=0))
 
     def run(self) -> int:
-        self.bootstrap()
-        last_applied_event_id = self.get_last_applied_event_id()
-        events = self._event_store.list_events_after(last_applied_event_id)
+        with self._lock:
+            self.bootstrap()
+            last_applied_event_id = self.get_last_applied_event_id()
+            events = self._event_store.list_events_after(last_applied_event_id)
 
-        if not events:
-            return 0
+            if not events:
+                return 0
 
-        with self._session_factory.begin() as session:
-            cursor = session.get(EventCursorRecord, 1)
-            assert cursor is not None
+            with self._session_factory.begin() as session:
+                cursor = session.get(EventCursorRecord, 1)
+                assert cursor is not None
 
-            for event in events:
-                self._apply_event(session, event)
-                session.flush()
-                cursor.last_applied_event_id = event.event_id
+                for event in events:
+                    self._apply_event(session, event)
+                    session.flush()
+                    cursor.last_applied_event_id = event.event_id
 
-        return len(events)
+            return len(events)
 
     def rebuild(self) -> int:
-        ProjectionBase.metadata.drop_all(self._engine)
-        self.bootstrap()
-        return self.run()
+        with self._lock:
+            ProjectionBase.metadata.drop_all(self._engine)
+            self.bootstrap()
+            return self.run()
 
     def reset(self) -> None:
-        ProjectionBase.metadata.drop_all(self._engine)
-        self.bootstrap()
+        with self._lock:
+            ProjectionBase.metadata.drop_all(self._engine)
+            self.bootstrap()
 
     def get_last_applied_event_id(self) -> int:
-        self.bootstrap()
-        with self._session_factory() as session:
-            cursor = session.get(EventCursorRecord, 1)
-            assert cursor is not None
-            return cursor.last_applied_event_id
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                cursor = session.get(EventCursorRecord, 1)
+                assert cursor is not None
+                return cursor.last_applied_event_id
 
     def list_accounts(self) -> list[dict[str, str | int | bool]]:
-        self.bootstrap()
-        with self._session_factory() as session:
-            rows = (
-                session.query(AccountProjectionRecord)
-                .order_by(AccountProjectionRecord.account_id.asc())
-                .all()
-            )
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                rows = (
+                    session.query(AccountProjectionRecord)
+                    .order_by(AccountProjectionRecord.account_id.asc())
+                    .all()
+                )
 
         return [
             AccountProjection(
@@ -162,13 +171,14 @@ class Projector:
         ]
 
     def list_cards(self) -> list[dict[str, str | int | bool]]:
-        self.bootstrap()
-        with self._session_factory() as session:
-            rows = (
-                session.query(CardProjectionRecord)
-                .order_by(CardProjectionRecord.card_id.asc())
-                .all()
-            )
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                rows = (
+                    session.query(CardProjectionRecord)
+                    .order_by(CardProjectionRecord.card_id.asc())
+                    .all()
+                )
 
         return [
             CardProjection(
@@ -184,13 +194,14 @@ class Projector:
         ]
 
     def list_balance_states(self) -> list[dict[str, str | int]]:
-        self.bootstrap()
-        with self._session_factory() as session:
-            rows = (
-                session.query(BalanceStateRecord)
-                .order_by(BalanceStateRecord.account_id.asc())
-                .all()
-            )
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                rows = (
+                    session.query(BalanceStateRecord)
+                    .order_by(BalanceStateRecord.account_id.asc())
+                    .all()
+                )
 
         return [
             BalanceStateProjection(
@@ -211,40 +222,41 @@ class Projector:
         person_id: str | None = None,
         text: str | None = None,
     ) -> list[dict[str, str | int | None]]:
-        self.bootstrap()
-        with self._session_factory() as session:
-            query = session.query(TransactionProjectionRecord)
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                query = session.query(TransactionProjectionRecord)
 
-            if occurred_from is not None:
-                query = query.filter(TransactionProjectionRecord.occurred_at >= occurred_from)
-            if occurred_to is not None:
-                query = query.filter(TransactionProjectionRecord.occurred_at <= occurred_to)
-            if category_id is not None:
-                query = query.filter(TransactionProjectionRecord.category_id == category_id)
-            if account_id is not None:
-                query = query.filter(TransactionProjectionRecord.account_id == account_id)
-            if payment_method is not None:
-                query = query.filter(
-                    TransactionProjectionRecord.payment_method == payment_method
-                )
-            if person_id is not None:
-                query = query.filter(TransactionProjectionRecord.person_id == person_id)
-            if text is not None:
-                search = f"%{text}%"
-                query = query.filter(
-                    or_(
-                        TransactionProjectionRecord.description.ilike(search),
-                        TransactionProjectionRecord.category_id.ilike(search),
+                if occurred_from is not None:
+                    query = query.filter(TransactionProjectionRecord.occurred_at >= occurred_from)
+                if occurred_to is not None:
+                    query = query.filter(TransactionProjectionRecord.occurred_at <= occurred_to)
+                if category_id is not None:
+                    query = query.filter(TransactionProjectionRecord.category_id == category_id)
+                if account_id is not None:
+                    query = query.filter(TransactionProjectionRecord.account_id == account_id)
+                if payment_method is not None:
+                    query = query.filter(
+                        TransactionProjectionRecord.payment_method == payment_method
                     )
-                )
+                if person_id is not None:
+                    query = query.filter(TransactionProjectionRecord.person_id == person_id)
+                if text is not None:
+                    search = f"%{text}%"
+                    query = query.filter(
+                        or_(
+                            TransactionProjectionRecord.description.ilike(search),
+                            TransactionProjectionRecord.category_id.ilike(search),
+                        )
+                    )
 
-            rows = (
-                query.order_by(
-                    TransactionProjectionRecord.occurred_at.desc(),
-                    TransactionProjectionRecord.transaction_id.desc(),
+                rows = (
+                    query.order_by(
+                        TransactionProjectionRecord.occurred_at.desc(),
+                        TransactionProjectionRecord.transaction_id.desc(),
+                    )
+                    .all()
                 )
-                .all()
-            )
 
         return [
             TransactionProjection(
@@ -265,48 +277,49 @@ class Projector:
         ]
 
     def get_dashboard_summary(self, *, month: str) -> dict[str, object]:
-        self.bootstrap()
-        with self._session_factory() as session:
-            month_rows: Sequence[TransactionProjectionRecord] = (
-                session.query(TransactionProjectionRecord)
-                .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
-                .filter(TransactionProjectionRecord.status == "active")
-                .order_by(
-                    TransactionProjectionRecord.occurred_at.desc(),
-                    TransactionProjectionRecord.transaction_id.desc(),
-                )
-                .all()
-            )
-            recent_rows = month_rows[:10]
-            balance_total = (
-                session.query(func.coalesce(func.sum(BalanceStateRecord.current_balance), 0))
-                .scalar()
-            )
-
-            # Previous month data for delta comparison
-            prev_month = self._previous_month_key(month)
-            prev_rows: Sequence[TransactionProjectionRecord] = (
-                session.query(TransactionProjectionRecord)
-                .filter(TransactionProjectionRecord.occurred_at.like(f"{prev_month}-%"))
-                .filter(TransactionProjectionRecord.status == "active")
-                .all()
-            )
-
-            # Review queue: transactions missing description or with placeholder category
-            review_rows: Sequence[TransactionProjectionRecord] = (
-                session.query(TransactionProjectionRecord)
-                .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
-                .filter(TransactionProjectionRecord.status == "active")
-                .filter(TransactionProjectionRecord.type != "transfer")
-                .filter(
-                    or_(
-                        TransactionProjectionRecord.description.is_(None),
-                        TransactionProjectionRecord.description == "",
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                month_rows: Sequence[TransactionProjectionRecord] = (
+                    session.query(TransactionProjectionRecord)
+                    .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
+                    .filter(TransactionProjectionRecord.status == "active")
+                    .order_by(
+                        TransactionProjectionRecord.occurred_at.desc(),
+                        TransactionProjectionRecord.transaction_id.desc(),
                     )
+                    .all()
                 )
-                .order_by(TransactionProjectionRecord.occurred_at.desc())
-                .all()
-            )
+                recent_rows = month_rows[:10]
+                balance_total = (
+                    session.query(func.coalesce(func.sum(BalanceStateRecord.current_balance), 0))
+                    .scalar()
+                )
+
+                # Previous month data for delta comparison
+                prev_month = self._previous_month_key(month)
+                prev_rows: Sequence[TransactionProjectionRecord] = (
+                    session.query(TransactionProjectionRecord)
+                    .filter(TransactionProjectionRecord.occurred_at.like(f"{prev_month}-%"))
+                    .filter(TransactionProjectionRecord.status == "active")
+                    .all()
+                )
+
+                # Review queue: transactions missing description or with placeholder category
+                review_rows: Sequence[TransactionProjectionRecord] = (
+                    session.query(TransactionProjectionRecord)
+                    .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
+                    .filter(TransactionProjectionRecord.status == "active")
+                    .filter(TransactionProjectionRecord.type != "transfer")
+                    .filter(
+                        or_(
+                            TransactionProjectionRecord.description.is_(None),
+                            TransactionProjectionRecord.description == "",
+                        )
+                    )
+                    .order_by(TransactionProjectionRecord.occurred_at.desc())
+                    .all()
+                )
 
         recent_transactions = [
             TransactionProjection(
@@ -709,9 +722,9 @@ class Projector:
         if "accounts" not in table_names:
             return False
 
-        account_columns = {
-            column["name"] for column in inspector.get_columns("accounts")
-        }
+        account_columns = self._safe_column_names(inspector, "accounts")
+        if account_columns is None:
+            return True
         if "is_active" not in account_columns:
             return True
 
@@ -721,7 +734,9 @@ class Projector:
         if "cards" not in table_names:
             return True
 
-        card_columns = {column["name"] for column in inspector.get_columns("cards")}
+        card_columns = self._safe_column_names(inspector, "cards")
+        if card_columns is None:
+            return True
         expected_card_columns = {
             "card_id",
             "name",
@@ -737,9 +752,9 @@ class Projector:
         if "transactions" not in table_names:
             return True
 
-        transaction_columns = {
-            column["name"] for column in inspector.get_columns("transactions")
-        }
+        transaction_columns = self._safe_column_names(inspector, "transactions")
+        if transaction_columns is None:
+            return True
         expected_transaction_columns = {
             "transaction_id",
             "occurred_at",
@@ -758,6 +773,18 @@ class Projector:
             return True
 
         return False
+
+    def _safe_column_names(
+        self,
+        inspector: object,
+        table_name: str,
+    ) -> set[str] | None:
+        try:
+            columns = inspector.get_columns(table_name)  # type: ignore[attr-defined]
+        except NoSuchTableError:
+            return None
+
+        return {str(column["name"]) for column in columns}
 
     def _apply_balance_delta(
         self,
