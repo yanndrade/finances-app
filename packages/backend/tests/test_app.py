@@ -830,6 +830,166 @@ def test_dev_reset_endpoint_clears_projection_and_event_data(tmp_path) -> None:
     }
 
 
+def test_cards_endpoints_support_create_list_and_update(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Checking", "checking", 500_00)
+
+    create_response = client.post(
+        "/api/cards",
+        json={
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+
+    assert create_response.status_code == 201
+    assert create_response.json() == {
+        "card_id": "card-1",
+        "name": "Nubank",
+        "limit": 150_000,
+        "closing_day": 10,
+        "due_day": 20,
+        "payment_account_id": "acc-1",
+        "is_active": True,
+    }
+
+    list_response = client.get("/api/cards")
+
+    assert list_response.status_code == 200
+    assert list_response.json() == [
+        {
+            "card_id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+            "is_active": True,
+        }
+    ]
+
+    update_response = client.patch(
+        "/api/cards/card-1",
+        json={
+            "name": "Nubank Platinum",
+            "limit": 200_000,
+            "closing_day": 8,
+            "due_day": 18,
+            "payment_account_id": "acc-2",
+            "is_active": False,
+        },
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json() == {
+        "card_id": "card-1",
+        "name": "Nubank Platinum",
+        "limit": 200_000,
+        "closing_day": 8,
+        "due_day": 18,
+        "payment_account_id": "acc-2",
+        "is_active": False,
+    }
+
+
+def test_cards_endpoints_validate_cycle_days_and_payment_account(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    invalid_closing_response = client.post(
+        "/api/cards",
+        json={
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 0,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    invalid_due_response = client.post(
+        "/api/cards",
+        json={
+            "id": "card-2",
+            "name": "Visa",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 29,
+            "payment_account_id": "acc-1",
+        },
+    )
+    missing_account_response = client.post(
+        "/api/cards",
+        json={
+            "id": "card-3",
+            "name": "Mastercard",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "missing",
+        },
+    )
+
+    assert invalid_closing_response.status_code == 422
+    assert invalid_due_response.status_code == 422
+    assert missing_account_response.status_code == 404
+
+
+def test_cards_endpoints_return_422_for_card_domain_validation_errors(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app, raise_server_exceptions=False)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    create_response = client.post(
+        "/api/cards",
+        json={
+            "id": "card-1",
+            "name": "   ",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+
+    _create_card(
+        client,
+        {
+            "id": "card-2",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    update_response = client.patch(
+        "/api/cards/card-2",
+        json={
+            "payment_account_id": "   ",
+        },
+    )
+
+    assert create_response.status_code == 422
+    assert update_response.status_code == 422
+
+
 def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:
     response = client.post(
         "/api/accounts",
@@ -840,6 +1000,12 @@ def _create_account(client: TestClient, account_id: str, name: str, account_type
             "initial_balance": initial_balance,
         },
     )
+
+    assert response.status_code == 201
+
+
+def _create_card(client: TestClient, payload: dict[str, str | int]) -> None:
+    response = client.post("/api/cards", json=payload)
 
     assert response.status_code == 201
 

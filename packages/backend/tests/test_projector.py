@@ -1,10 +1,14 @@
+import threading
 from pathlib import Path
 
+import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import NoSuchTableError
 
 from finance_app.application.event_store import AppendEventUseCase
 from finance_app.application.projector import ProjectEventsUseCase, RebuildProjectionsUseCase
 from finance_app.domain.events import NewEvent
+from finance_app.infrastructure import projector as projector_module
 from finance_app.infrastructure.db import get_engine
 from finance_app.infrastructure.event_store import EventStore
 from finance_app.infrastructure.projector import Projector
@@ -527,6 +531,89 @@ def test_projector_materializes_cash_transactions_and_updates_balance(tmp_path: 
             "current_balance": 130_00,
         }
     ]
+
+
+def test_projector_bootstrap_serializes_concurrent_schema_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    original_create_all = projector_module.ProjectionBase.metadata.create_all
+    entered_first = threading.Event()
+    allow_release = threading.Event()
+    state_lock = threading.Lock()
+    active_calls = 0
+    saw_concurrent_create = False
+    failures: list[Exception] = []
+
+    monkeypatch.setattr(projector, "_projection_schema_requires_rebuild", lambda: False)
+
+    def wrapped_create_all(*args: object, **kwargs: object) -> None:
+        nonlocal active_calls, saw_concurrent_create
+        is_first_call = False
+
+        with state_lock:
+            active_calls += 1
+            if active_calls == 1:
+                is_first_call = True
+                entered_first.set()
+            else:
+                saw_concurrent_create = True
+                allow_release.set()
+
+        if is_first_call:
+            allow_release.wait(timeout=0.25)
+
+        try:
+            original_create_all(*args, **kwargs)
+        finally:
+            with state_lock:
+                active_calls -= 1
+
+    monkeypatch.setattr(projector_module.ProjectionBase.metadata, "create_all", wrapped_create_all)
+
+    def call_bootstrap() -> None:
+        try:
+            projector.bootstrap()
+        except Exception as exc:  # pragma: no cover - captured for assertion
+            failures.append(exc)
+
+    first = threading.Thread(target=call_bootstrap)
+    second = threading.Thread(target=call_bootstrap)
+
+    first.start()
+    assert entered_first.wait(timeout=1)
+    second.start()
+    first.join()
+    second.join()
+
+    assert failures == []
+    assert saw_concurrent_create is False
+
+
+def test_projector_rebuilds_when_account_table_disappears_during_introspection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    class FlakyInspector:
+        def get_table_names(self) -> list[str]:
+            return ["accounts"]
+
+        def get_columns(self, table_name: str) -> list[dict[str, str]]:
+            raise NoSuchTableError(table_name)
+
+    monkeypatch.setattr(projector_module, "inspect", lambda _engine: FlakyInspector())
+
+    assert projector._projection_schema_requires_rebuild() is True
 
 
 def test_projector_updates_voids_and_filters_transactions(tmp_path: Path) -> None:

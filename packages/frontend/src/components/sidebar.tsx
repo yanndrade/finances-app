@@ -2,6 +2,7 @@ export type AppView =
   | "dashboard"
   | "transactions"
   | "accounts"
+  | "cards"
   | "movements"
   | "settings";
 
@@ -29,6 +30,11 @@ const NAV_ITEMS: Array<{
     id: "accounts",
     label: "Contas",
     description: "Saldo, criacao e ajustes",
+  },
+  {
+    id: "cards",
+    label: "Cards",
+    description: "Cadastro e ciclo de pagamento",
   },
   {
     id: "movements",

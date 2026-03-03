@@ -6,23 +6,30 @@ import { AppShell } from "./components/app-shell";
 import type { AppView } from "./components/sidebar";
 import { ToastViewport, type AppToast } from "./components/toast-viewport";
 import { AccountsView } from "./features/accounts/accounts-view";
+import { CardsView } from "./features/cards/cards-view";
 import { DashboardView } from "./features/dashboard/dashboard-view";
 import { MovementsPanel } from "./features/movements/movements-panel";
 import { SettingsView } from "./features/settings/settings-view";
 import { TransactionsView } from "./features/transactions/transactions-view";
 import {
   createAccount,
+  createCard,
   createCashTransaction,
   createTransfer,
   fetchAccounts,
+  fetchCards,
   fetchDashboardSummary,
   fetchTransactions,
   resetApplicationData,
   updateAccount,
+  updateCard,
   updateTransaction,
   voidTransaction,
   type AccountPayload,
   type AccountSummary,
+  type CardPayload,
+  type CardSummary,
+  type CardUpdatePayload,
   type AccountUpdatePayload,
   type CashTransactionPayload,
   type DashboardSummary,
@@ -64,6 +71,11 @@ const VIEW_META: Record<
     description:
       "Mantenha o mapa das suas contas atualizado com saldos iniciais e status ativos.",
   },
+  cards: {
+    title: "Cartoes e ciclo",
+    description:
+      "Cadastre limites, datas de fechamento e a conta padrao de pagamento de cada cartao.",
+  },
   movements: {
     title: "Entrada r\u00e1pida de caixa",
     description:
@@ -86,6 +98,7 @@ export function App() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
+  const [cards, setCards] = useState<CardSummary[]>([]);
   const [transactions, setTransactions] = useState<TransactionSummary[]>([]);
   const [transactionFilters, setTransactionFilters] = useState<TransactionFilters>(
     EMPTY_TRANSACTION_FILTERS,
@@ -127,12 +140,14 @@ export function App() {
     setLoading(true);
 
     try {
-      const [nextDashboard, nextAccounts, nextTransactions] = await Promise.all([
+      const [nextCards, nextDashboard, nextAccounts, nextTransactions] = await Promise.all([
+        fetchCards(),
         fetchDashboardSummary(month),
         fetchAccounts(),
         fetchTransactions(filters),
       ]);
 
+      setCards(nextCards);
       setDashboard(nextDashboard);
       setAccounts(nextAccounts);
       setTransactions(nextTransactions);
@@ -198,6 +213,17 @@ export function App() {
     await runMutation(() => createAccount(payload), "Conta criada com sucesso.");
   }
 
+  async function handleCreateCard(payload: CardPayload): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => createCard(payload),
+      "Cartao criado com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel criar o cartao.");
+    }
+  }
+
   async function handleUpdateAccount(
     accountId: string,
     payload: AccountUpdatePayload,
@@ -206,6 +232,17 @@ export function App() {
       () => updateAccount(accountId, payload),
       "Conta atualizada com sucesso.",
     );
+  }
+
+  async function handleUpdateCard(cardId: string, payload: CardUpdatePayload): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => updateCard(cardId, payload),
+      "Cartao atualizado com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel atualizar o cartao.");
+    }
   }
 
   async function handleApplyTransactionFilters(filters: TransactionFilters): Promise<void> {
@@ -294,6 +331,16 @@ export function App() {
           isSubmitting={isSubmitting}
           onCreateAccount={handleCreateAccount}
           onUpdateAccount={handleUpdateAccount}
+        />
+      ) : null}
+
+      {activeView === "cards" ? (
+        <CardsView
+          accounts={accounts}
+          cards={cards}
+          isSubmitting={isSubmitting}
+          onCreateCard={handleCreateCard}
+          onUpdateCard={handleUpdateCard}
         />
       ) : null}
 

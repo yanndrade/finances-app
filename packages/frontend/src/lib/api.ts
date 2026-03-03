@@ -36,6 +36,16 @@ export type AccountSummary = {
   current_balance: number;
 };
 
+export type CardSummary = {
+  card_id: string;
+  name: string;
+  limit: number;
+  closing_day: number;
+  due_day: number;
+  payment_account_id: string;
+  is_active: boolean;
+};
+
 export type TransactionSummary = {
   transaction_id: string;
   occurred_at: string;
@@ -83,6 +93,18 @@ export type AccountUpdatePayload = {
   isActive: boolean;
 };
 
+export type CardPayload = {
+  name: string;
+  limitInCents: number;
+  closingDay: number;
+  dueDay: number;
+  paymentAccountId: string;
+};
+
+export type CardUpdatePayload = CardPayload & {
+  isActive: boolean;
+};
+
 export type TransactionFilters = {
   from: string;
   to: string;
@@ -114,6 +136,10 @@ export async function fetchDashboardSummary(month: string): Promise<DashboardSum
 
 export async function fetchAccounts(): Promise<AccountSummary[]> {
   return requestJson<AccountSummary[]>("/api/accounts");
+}
+
+export async function fetchCards(): Promise<CardSummary[]> {
+  return requestJson<CardSummary[]>("/api/cards");
 }
 
 export async function fetchTransactions(
@@ -172,6 +198,37 @@ export async function updateAccount(
       name: payload.name,
       type: payload.type,
       initial_balance: payload.initialBalanceInCents,
+      is_active: payload.isActive,
+    }),
+  });
+}
+
+export async function createCard(payload: CardPayload): Promise<CardSummary> {
+  return requestJson<CardSummary>("/api/cards", {
+    method: "POST",
+    body: JSON.stringify({
+      id: `card-${Date.now()}`,
+      name: payload.name,
+      limit: payload.limitInCents,
+      closing_day: payload.closingDay,
+      due_day: payload.dueDay,
+      payment_account_id: payload.paymentAccountId,
+    }),
+  });
+}
+
+export async function updateCard(
+  cardId: string,
+  payload: CardUpdatePayload,
+): Promise<CardSummary> {
+  return requestJson<CardSummary>(`/api/cards/${cardId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      name: payload.name,
+      limit: payload.limitInCents,
+      closing_day: payload.closingDay,
+      due_day: payload.dueDay,
+      payment_account_id: payload.paymentAccountId,
       is_active: payload.isActive,
     }),
   });
