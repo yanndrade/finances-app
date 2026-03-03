@@ -29,3 +29,31 @@ class BalanceStateProjection:
             "account_id": self.account_id,
             "current_balance": self.current_balance,
         }
+
+
+@dataclass(frozen=True)
+class TransactionProjection:
+    transaction_id: str
+    occurred_at: str
+    type: str
+    amount: int
+    account_id: str
+    payment_method: str
+    category_id: str
+    description: str | None
+    person_id: str | None
+    status: str
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        return {
+            "transaction_id": self.transaction_id,
+            "occurred_at": self.occurred_at,
+            "type": self.type,
+            "amount": self.amount,
+            "account_id": self.account_id,
+            "payment_method": self.payment_method,
+            "category_id": self.category_id,
+            "description": self.description,
+            "person_id": self.person_id,
+            "status": self.status,
+        }

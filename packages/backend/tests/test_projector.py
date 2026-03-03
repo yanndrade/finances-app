@@ -322,3 +322,360 @@ def test_projector_rebuilds_legacy_projection_schema_on_upgrade(tmp_path: Path) 
             "current_balance": 100_00,
         }
     ]
+
+
+def test_projector_rebuilds_issue_14_projection_when_transactions_table_is_missing(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+
+    projection_url = f"sqlite:///{(tmp_path / 'app.db').as_posix()}"
+    engine = get_engine(projection_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE accounts (
+                    account_id VARCHAR PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    type VARCHAR NOT NULL,
+                    initial_balance INTEGER NOT NULL,
+                    is_active BOOLEAN NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO accounts (account_id, name, type, initial_balance, is_active)
+                VALUES ('acc-1', 'Main Wallet', 'wallet', 10000, 1)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE balance_state (
+                    account_id VARCHAR PRIMARY KEY,
+                    current_balance INTEGER NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO balance_state (account_id, current_balance)
+                VALUES ('acc-1', 10000)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE event_cursor (
+                    singleton_id INTEGER PRIMARY KEY,
+                    last_applied_event_id INTEGER NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO event_cursor (singleton_id, last_applied_event_id)
+                VALUES (1, 1)
+                """
+            )
+        )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=projection_url,
+    )
+
+    applied = projector.run()
+
+    assert applied == 1
+    assert projector.get_last_applied_event_id() == 1
+    assert projector.list_accounts() == [
+        {
+            "account_id": "acc-1",
+            "name": "Main Wallet",
+            "type": "wallet",
+            "initial_balance": 100_00,
+            "is_active": True,
+        }
+    ]
+    assert projector.list_transactions() == []
+
+
+def test_projector_materializes_cash_transactions_and_updates_balance(tmp_path: Path) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="IncomeCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "tx-1",
+                "occurred_at": "2026-03-02T12:01:00Z",
+                "type": "income",
+                "amount": 50_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "salary",
+                "description": "Salary",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "tx-2",
+                "occurred_at": "2026-03-02T12:02:00Z",
+                "type": "expense",
+                "amount": 20_00,
+                "account_id": "acc-1",
+                "payment_method": "CASH",
+                "category_id": "food",
+                "description": "Lunch",
+                "person_id": "restaurant",
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+
+    assert applied == 3
+    assert projector.list_transactions() == [
+        {
+            "transaction_id": "tx-2",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "type": "expense",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "restaurant",
+            "status": "active",
+        },
+        {
+            "transaction_id": "tx-1",
+            "occurred_at": "2026-03-02T12:01:00Z",
+            "type": "income",
+            "amount": 50_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "salary",
+            "description": "Salary",
+            "person_id": None,
+            "status": "active",
+        },
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 130_00,
+        }
+    ]
+
+
+def test_projector_updates_voids_and_filters_transactions(tmp_path: Path) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="IncomeCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "tx-1",
+                "occurred_at": "2026-03-02T12:01:00Z",
+                "type": "income",
+                "amount": 50_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "salary",
+                "description": "Salary",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "tx-2",
+                "occurred_at": "2026-03-02T12:02:00Z",
+                "type": "expense",
+                "amount": 20_00,
+                "account_id": "acc-1",
+                "payment_method": "OTHER",
+                "category_id": "groceries",
+                "description": "Market run",
+                "person_id": "mom",
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="TransactionUpdated",
+            timestamp="2026-03-02T12:03:00Z",
+            payload={
+                "id": "tx-2",
+                "occurred_at": "2026-03-02T12:03:00Z",
+                "type": "expense",
+                "amount": 25_00,
+                "account_id": "acc-1",
+                "payment_method": "CASH",
+                "category_id": "groceries",
+                "description": "Market groceries",
+                "person_id": "mom",
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="TransactionVoided",
+            timestamp="2026-03-02T12:04:00Z",
+            payload={
+                "id": "tx-1",
+                "reason": "Duplicate",
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+
+    assert applied == 5
+    assert projector.list_transactions() == [
+        {
+            "transaction_id": "tx-2",
+            "occurred_at": "2026-03-02T12:03:00Z",
+            "type": "expense",
+            "amount": 25_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "groceries",
+            "description": "Market groceries",
+            "person_id": "mom",
+            "status": "active",
+        },
+        {
+            "transaction_id": "tx-1",
+            "occurred_at": "2026-03-02T12:01:00Z",
+            "type": "income",
+            "amount": 50_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "salary",
+            "description": "Salary",
+            "person_id": None,
+            "status": "voided",
+        },
+    ]
+    assert projector.list_transactions(
+        category_id="groceries",
+        account_id="acc-1",
+        payment_method="CASH",
+        person_id="mom",
+        text="groc",
+        occurred_from="2026-03-02T12:00:00Z",
+        occurred_to="2026-03-02T12:05:00Z",
+    ) == [
+        {
+            "transaction_id": "tx-2",
+            "occurred_at": "2026-03-02T12:03:00Z",
+            "type": "expense",
+            "amount": 25_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "groceries",
+            "description": "Market groceries",
+            "person_id": "mom",
+            "status": "active",
+        }
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 75_00,
+        }
+    ]
