@@ -69,6 +69,10 @@ describe("Dashboard view", () => {
         return Promise.resolve(new Response(JSON.stringify([])));
       }
 
+      if (url.includes("/api/invoices")) {
+        return Promise.resolve(new Response(JSON.stringify([])));
+      }
+
       if (url.includes("/api/transactions")) {
         return Promise.resolve(
           new Response(
@@ -104,7 +108,7 @@ describe("Dashboard view", () => {
     expect(screen.getByText("Lunch")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(fetchMock).toHaveBeenCalledTimes(5);
     });
   });
 });

@@ -14,11 +14,13 @@ import { TransactionsView } from "./features/transactions/transactions-view";
 import {
   createAccount,
   createCard,
+  createCardPurchase,
   createCashTransaction,
   createTransfer,
   fetchAccounts,
   fetchCards,
   fetchDashboardSummary,
+  fetchInvoices,
   fetchTransactions,
   resetApplicationData,
   updateAccount,
@@ -28,11 +30,13 @@ import {
   type AccountPayload,
   type AccountSummary,
   type CardPayload,
+  type CardPurchasePayload,
   type CardSummary,
   type CardUpdatePayload,
   type AccountUpdatePayload,
   type CashTransactionPayload,
   type DashboardSummary,
+  type InvoiceSummary,
   type TransactionFilters,
   type TransactionSummary,
   type TransactionUpdatePayload,
@@ -74,7 +78,7 @@ const VIEW_META: Record<
   cards: {
     title: "Cartoes e ciclo",
     description:
-      "Cadastre limites, datas de fechamento e a conta padrao de pagamento de cada cartao.",
+      "Cadastre cartoes, lance compras e acompanhe a distribuicao das faturas por ciclo.",
   },
   movements: {
     title: "Entrada r\u00e1pida de caixa",
@@ -99,6 +103,7 @@ export function App() {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [cards, setCards] = useState<CardSummary[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
   const [transactions, setTransactions] = useState<TransactionSummary[]>([]);
   const [transactionFilters, setTransactionFilters] = useState<TransactionFilters>(
     EMPTY_TRANSACTION_FILTERS,
@@ -140,14 +145,16 @@ export function App() {
     setLoading(true);
 
     try {
-      const [nextCards, nextDashboard, nextAccounts, nextTransactions] = await Promise.all([
+      const [nextCards, nextInvoices, nextDashboard, nextAccounts, nextTransactions] = await Promise.all([
         fetchCards(),
+        fetchInvoices(),
         fetchDashboardSummary(month),
         fetchAccounts(),
         fetchTransactions(filters),
       ]);
 
       setCards(nextCards);
+      setInvoices(nextInvoices);
       setDashboard(nextDashboard);
       setAccounts(nextAccounts);
       setTransactions(nextTransactions);
@@ -245,6 +252,17 @@ export function App() {
     }
   }
 
+  async function handleCreateCardPurchase(payload: CardPurchasePayload): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => createCardPurchase(payload),
+      "Compra no cartao registrada com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel registrar a compra no cartao.");
+    }
+  }
+
   async function handleApplyTransactionFilters(filters: TransactionFilters): Promise<void> {
     await refreshData({ filters });
   }
@@ -338,8 +356,10 @@ export function App() {
         <CardsView
           accounts={accounts}
           cards={cards}
+          invoices={invoices}
           isSubmitting={isSubmitting}
           onCreateCard={handleCreateCard}
+          onCreateCardPurchase={handleCreateCardPurchase}
           onUpdateCard={handleUpdateCard}
         />
       ) : null}

@@ -9,6 +9,17 @@ import type {
   TransactionSummary,
 } from "./lib/api";
 
+type InvoiceSummary = {
+  invoice_id: string;
+  card_id: string;
+  reference_month: string;
+  closing_date: string;
+  due_date: string;
+  total_amount: number;
+  purchase_count: number;
+  status: string;
+};
+
 function buildAccount(overrides: Partial<AccountSummary> = {}): AccountSummary {
   return {
     account_id: "acc-1",
@@ -73,16 +84,32 @@ function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
   };
 }
 
+function buildInvoice(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
+  return {
+    invoice_id: "card-1:2026-03",
+    card_id: "card-1",
+    reference_month: "2026-03",
+    closing_date: "2026-03-10",
+    due_date: "2026-03-20",
+    total_amount: 100_00,
+    purchase_count: 1,
+    status: "open",
+    ...overrides,
+  };
+}
+
 function installAppFetchMock(initialState?: {
   accounts?: AccountSummary[];
   cards?: CardSummary[];
   transactions?: TransactionSummary[];
   dashboard?: DashboardSummary;
+  invoices?: InvoiceSummary[];
 }) {
   const state = {
     accounts: initialState?.accounts ?? [buildAccount()],
     cards: initialState?.cards ?? [buildCard()],
     transactions: initialState?.transactions ?? [buildTransaction()],
+    invoices: initialState?.invoices ?? [],
     dashboard:
       initialState?.dashboard ??
       buildDashboard({
@@ -104,6 +131,19 @@ function installAppFetchMock(initialState?: {
 
     if (url.includes("/api/cards") && method === "GET") {
       return new Response(JSON.stringify(state.cards));
+    }
+
+    if (url.includes("/api/invoices") && method === "GET") {
+      const currentUrl = new URL(url);
+      const cardId = currentUrl.searchParams.get("card");
+
+      return new Response(
+        JSON.stringify(
+          cardId === null
+            ? state.invoices
+            : state.invoices.filter((invoice) => invoice.card_id === cardId),
+        ),
+      );
     }
 
     if (url.includes("/api/transactions") && method === "GET") {
@@ -170,6 +210,50 @@ function installAppFetchMock(initialState?: {
       state.cards = [...state.cards, nextCard];
 
       return new Response(JSON.stringify(nextCard), { status: 201 });
+    }
+
+    if (url.endsWith("/api/card-purchases") && method === "POST") {
+      const payload = JSON.parse(String(init?.body)) as {
+        purchase_date: string;
+        amount: number;
+        card_id: string;
+      };
+      const card = state.cards.find((item) => item.card_id === payload.card_id);
+      if (!card) {
+        return new Response("Card not found", { status: 404 });
+      }
+
+      const nextInvoice = allocateMockInvoice({
+        amount: payload.amount,
+        card,
+        purchaseDate: payload.purchase_date,
+      });
+      const existingInvoice = state.invoices.find(
+        (invoice) => invoice.invoice_id === nextInvoice.invoice_id,
+      );
+
+      if (existingInvoice) {
+        existingInvoice.total_amount += payload.amount;
+        existingInvoice.purchase_count += 1;
+      } else {
+        state.invoices = [nextInvoice, ...state.invoices];
+      }
+
+      return new Response(
+        JSON.stringify({
+          purchase_id: "purchase-ui-1",
+          purchase_date: payload.purchase_date,
+          amount: payload.amount,
+          category_id: "transport",
+          card_id: payload.card_id,
+          description: "Taxi",
+          invoice_id: nextInvoice.invoice_id,
+          reference_month: nextInvoice.reference_month,
+          closing_date: nextInvoice.closing_date,
+          due_date: nextInvoice.due_date,
+        }),
+        { status: 201 },
+      );
     }
 
     if (url.includes("/api/cards/") && method === "PATCH") {
@@ -346,14 +430,15 @@ describe("App", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: /criar cartao/i }));
 
-    expect(await screen.findByText("Visa Infinite")).toBeInTheDocument();
+    const cardsSection = await screen.findByRole("region", { name: /gerenciar cartoes/i });
+    expect(within(cardsSection).getByText("Visa Infinite")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /editar visa infinite/i }));
     await userEvent.clear(screen.getByLabelText(/nome do cartao/i));
     await userEvent.type(screen.getByLabelText(/nome do cartao/i), "Visa Black");
     await userEvent.click(screen.getByRole("button", { name: /salvar cartao/i }));
 
-    expect(await screen.findByText("Visa Black")).toBeInTheDocument();
+    expect(within(cardsSection).getByText("Visa Black")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(
@@ -364,6 +449,44 @@ describe("App", () => {
       expect(
         fetchMock.mock.calls.some(([url, init]) => {
           return String(url).includes("/api/cards/") && init?.method === "PATCH";
+        }),
+      ).toBe(true);
+    });
+  });
+
+  it("creates a card purchase and shows the allocated invoice in the cards view", async () => {
+    const fetchMock = installAppFetchMock({
+      invoices: [],
+    });
+
+    render(<App />);
+
+    await screen.findByText("Como voce esta");
+    await userEvent.click(screen.getByRole("button", { name: /^cards$/i }));
+
+    expect(
+      await screen.findByText(/nenhuma fatura aberta para os cartoes cadastrados/i),
+    ).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText(/cartao da compra/i), "card-1");
+    await userEvent.clear(screen.getByLabelText(/data da compra/i));
+    await userEvent.type(screen.getByLabelText(/data da compra/i), "2026-03-11T12:00");
+    const amountInput = screen.getByLabelText(/valor da compra/i);
+    await userEvent.clear(amountInput);
+    await userEvent.type(amountInput, "5000");
+    await userEvent.type(screen.getByLabelText(/categoria da compra/i), "transport");
+    await userEvent.type(screen.getByLabelText(/descricao da compra/i), "Taxi");
+    await userEvent.click(screen.getByRole("button", { name: /registrar compra/i }));
+
+    const invoicesSection = await screen.findByRole("region", { name: /faturas abertas/i });
+    expect(within(invoicesSection).getByText(/referencia 2026-04/i)).toBeInTheDocument();
+    expect(within(invoicesSection).getByText("R$ 50,00")).toBeInTheDocument();
+    expect(within(invoicesSection).getByText(/1 compra/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return String(url).endsWith("/api/card-purchases") && init?.method === "POST";
         }),
       ).toBe(true);
     });
@@ -474,3 +597,39 @@ describe("App", () => {
     expect((await screen.findAllByText("R$ 0,00")).length).toBeGreaterThan(0);
   });
 });
+
+function allocateMockInvoice({
+  amount,
+  card,
+  purchaseDate,
+}: {
+  amount: number;
+  card: CardSummary;
+  purchaseDate: string;
+}): InvoiceSummary {
+  const normalizedPurchaseDate = purchaseDate.endsWith("Z")
+    ? purchaseDate
+    : `${purchaseDate}:00Z`;
+  const purchase = new Date(normalizedPurchaseDate);
+  const target = new Date(Date.UTC(purchase.getUTCFullYear(), purchase.getUTCMonth(), 1));
+
+  if (purchase.getUTCDate() > card.closing_day) {
+    target.setUTCMonth(target.getUTCMonth() + 1);
+  }
+
+  const referenceMonth = `${target.getUTCFullYear()}-${String(
+    target.getUTCMonth() + 1,
+  ).padStart(2, "0")}`;
+  const closingDate = `${referenceMonth}-${String(card.closing_day).padStart(2, "0")}`;
+  const dueDate = `${referenceMonth}-${String(card.due_day).padStart(2, "0")}`;
+
+  return buildInvoice({
+    invoice_id: `${card.card_id}:${referenceMonth}`,
+    card_id: card.card_id,
+    reference_month: referenceMonth,
+    closing_date: closingDate,
+    due_date: dueDate,
+    total_amount: amount,
+    purchase_count: 1,
+  });
+}
