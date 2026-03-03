@@ -351,11 +351,7 @@ class Projector:
             return
 
         previous_account_id = existing.account_id
-        previous_delta = self._signed_amount(
-            transaction_type=existing.type,
-            amount=existing.amount,
-            status=existing.status,
-        )
+        previous_delta = self._transaction_balance_impact(existing)
 
         new_account_id = str(payload["account_id"])
         new_type = str(payload["type"])
@@ -365,6 +361,7 @@ class Projector:
             transaction_type=new_type,
             amount=new_amount,
             status=new_status,
+            direction=_optional_string(payload.get("direction")),
         )
 
         if previous_account_id == new_account_id:
@@ -411,11 +408,7 @@ class Projector:
         self._apply_balance_delta(
             session,
             account_id=existing.account_id,
-            delta=-self._signed_amount(
-                transaction_type=existing.type,
-                amount=existing.amount,
-                status=existing.status,
-            ),
+            delta=-self._transaction_balance_impact(existing),
         )
         existing.status = "voided"
 
@@ -546,11 +539,23 @@ class Projector:
         transaction_type: str,
         amount: int,
         status: str,
+        direction: str | None = None,
     ) -> int:
         if status != "active":
             return 0
 
+        if transaction_type == "transfer":
+            return amount if direction == "credit" else -amount
+
         return amount if transaction_type == "income" else -amount
+
+    def _transaction_balance_impact(self, row: TransactionProjectionRecord) -> int:
+        return self._signed_amount(
+            transaction_type=row.type,
+            amount=row.amount,
+            status=row.status,
+            direction=row.direction,
+        )
 
 
 def _optional_string(value: object | None) -> str | None:

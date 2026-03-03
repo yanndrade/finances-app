@@ -47,6 +47,7 @@ class TransferService:
             raise TransactionAlreadyExistsError(
                 f"Transaction '{transfer_id}' already exists."
             )
+        self._ensure_transfer_ids_are_available(transfer_id)
 
         if from_account_id == to_account_id:
             raise InvalidTransferAccountsError(
@@ -85,6 +86,18 @@ class TransferService:
             for row in self._projector.list_transactions()
             if row.get("transfer_id") == transfer_id
         ]
+
+    def _ensure_transfer_ids_are_available(self, transfer_id: str) -> None:
+        conflicting_ids = {
+            transfer_id,
+            f"{transfer_id}:debit",
+            f"{transfer_id}:credit",
+        }
+        for row in self._projector.list_transactions():
+            if str(row["transaction_id"]) in conflicting_ids:
+                raise TransactionAlreadyExistsError(
+                    f"Transaction '{str(row['transaction_id'])}' already exists."
+                )
 
     def _sync_projections(self) -> None:
         self._event_store.create_schema()
