@@ -1,4 +1,4 @@
-import { normalizeTimestampForApi } from "./api";
+import { createCardPurchase, normalizeTimestampForApi } from "./api";
 
 
 describe("api timestamp normalization", () => {
@@ -8,5 +8,41 @@ describe("api timestamp normalization", () => {
         localOffsetMinutes: 180,
       }),
     ).toBe("2026-03-11T03:30:00Z");
+  });
+
+  it("sends installments_count when creating a card purchase", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          purchase_id: "purchase-ui-1",
+          purchase_date: "2026-03-11T03:30:00Z",
+          amount: 50_00,
+          category_id: "transport",
+          card_id: "card-1",
+          description: "Taxi",
+          installments_count: 3,
+          invoice_id: "card-1:2026-04",
+          reference_month: "2026-04",
+          closing_date: "2026-04-10",
+          due_date: "2026-04-20",
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createCardPurchase({
+      cardId: "card-1",
+      purchaseDate: "2026-03-11T00:30",
+      amountInCents: 50_00,
+      installmentsCount: 3,
+      categoryId: "transport",
+      description: "Taxi",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      installments_count: 3,
+    });
   });
 });

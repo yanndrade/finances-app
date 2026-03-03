@@ -39,6 +39,7 @@ type PurchaseFormState = {
   cardId: string;
   purchaseDate: string;
   amount: string;
+  installmentsCount: string;
   categoryId: string;
   description: string;
 };
@@ -157,6 +158,7 @@ export function CardsView({
         cardId: purchaseForm.cardId,
         purchaseDate: purchaseForm.purchaseDate,
         amountInCents: parseInt(purchaseForm.amount, 10),
+        installmentsCount: parseInt(purchaseForm.installmentsCount, 10),
         categoryId: purchaseForm.categoryId.trim(),
         description: purchaseForm.description.trim() || undefined,
       });
@@ -342,6 +344,22 @@ export function CardsView({
               value={purchaseForm.amount}
             />
             <label>
+              Parcelas
+              <input
+                aria-label="Parcelas"
+                min="1"
+                onChange={(event) =>
+                  setPurchaseForm((current) => ({
+                    ...current,
+                    installmentsCount: event.target.value,
+                  }))
+                }
+                required
+                type="number"
+                value={purchaseForm.installmentsCount}
+              />
+            </label>
+            <label>
               Categoria da compra
               <input
                 aria-label="Categoria da compra"
@@ -370,6 +388,9 @@ export function CardsView({
               />
             </label>
             <p className="field-hint">
+              Compras parceladas dividem igualmente, com centavos residuais na ultima parcela.
+            </p>
+            <p className="field-hint">
               Compras no dia do fechamento entram na fatura atual; depois disso, vao para o proximo ciclo.
             </p>
             {purchaseError !== null ? (
@@ -390,7 +411,7 @@ export function CardsView({
             <p className="eyebrow">Faturas</p>
             <h2 className="section-title">Resumo das faturas abertas</h2>
             <p className="section-copy">
-              Confira valor acumulado, vencimento e volume de compras por cartao.
+              Confira valor acumulado, vencimento e volume de parcelas previstas por cartao.
             </p>
           </div>
         </div>
@@ -413,7 +434,7 @@ export function CardsView({
                   Fecha em {invoice.closing_date} e vence em {invoice.due_date}
                 </p>
                 <p className="account-card__meta">
-                  {invoice.purchase_count} {invoice.purchase_count === 1 ? "compra" : "compras"}
+                  {invoice.purchase_count} {invoice.purchase_count === 1 ? "parcela" : "parcelas"}
                 </p>
               </article>
             ))}
@@ -667,6 +688,7 @@ function createEmptyPurchaseForm(cards: CardSummary[]): PurchaseFormState {
     cardId: cards.find((card) => card.is_active)?.card_id ?? "",
     purchaseDate: currentLocalDateTime(),
     amount: "0",
+    installmentsCount: "1",
     categoryId: "",
     description: "",
   };
@@ -728,6 +750,11 @@ function validatePurchaseForm(form: PurchaseFormState): string | null {
   const amount = parseInt(form.amount, 10);
   if (!Number.isFinite(amount) || amount <= 0) {
     return "Informe um valor maior que zero.";
+  }
+
+  const installmentsCount = parseInt(form.installmentsCount, 10);
+  if (!Number.isFinite(installmentsCount) || installmentsCount <= 0) {
+    return "Informe pelo menos uma parcela.";
   }
 
   if (!form.categoryId.trim()) {

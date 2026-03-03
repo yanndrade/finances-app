@@ -16,7 +16,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import sessionmaker
 
-from finance_app.domain.cards import allocate_invoice_cycle
+from finance_app.domain.cards import PurchaseInstallmentAllocation
+from finance_app.domain.cards import allocate_purchase_installments
 from finance_app.domain.events import StoredEvent
 from finance_app.domain.projections import (
     AccountProjection,
@@ -72,6 +73,24 @@ class CardPurchaseProjectionRecord(ProjectionBase):
     category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     card_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
+    installments_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    invoice_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    reference_month: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    closing_date: Mapped[str] = mapped_column(String, nullable=False)
+    due_date: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class CardPurchaseInstallmentRecord(ProjectionBase):
+    __tablename__ = "card_purchase_installments"
+
+    installment_id: Mapped[str] = mapped_column(String, primary_key=True)
+    purchase_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    card_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    purchase_date: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    installment_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    installments_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
     invoice_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     reference_month: Mapped[str] = mapped_column(String, nullable=False, index=True)
     closing_date: Mapped[str] = mapped_column(String, nullable=False)
@@ -252,6 +271,7 @@ class Projector:
                 category_id=row.category_id,
                 card_id=row.card_id,
                 description=row.description,
+                installments_count=row.installments_count,
                 invoice_id=row.invoice_id,
                 reference_month=row.reference_month,
                 closing_date=row.closing_date,
@@ -421,6 +441,14 @@ class Projector:
                     .order_by(TransactionProjectionRecord.occurred_at.desc())
                     .all()
                 )
+                installment_rows: Sequence[CardPurchaseInstallmentRecord] = (
+                    session.query(CardPurchaseInstallmentRecord)
+                    .filter(CardPurchaseInstallmentRecord.reference_month == month)
+                    .order_by(
+                        CardPurchaseInstallmentRecord.installment_id.asc(),
+                    )
+                    .all()
+                )
 
         recent_transactions = [
             TransactionProjection(
@@ -453,6 +481,10 @@ class Projector:
                 category_totals[row.category_id] = (
                     category_totals.get(row.category_id, 0) + row.amount
                 )
+        for row in installment_rows:
+            category_totals[row.category_id] = (
+                category_totals.get(row.category_id, 0) + row.amount
+            )
         spending_by_category = sorted(
             [{"category_id": cat, "total": total} for cat, total in category_totals.items()],
             key=lambda item: item["total"],
@@ -667,12 +699,16 @@ class Projector:
         if card is None:
             return
 
-        allocation = allocate_invoice_cycle(
+        allocations = allocate_purchase_installments(
             purchase_date=str(payload["purchase_date"]),
+            total_amount=int(payload["amount"]),
+            installments_count=int(payload.get("installments_count", 1)),
             closing_day=card.closing_day,
             due_day=card.due_day,
         )
-        reference_month = allocation.reference_month
+        visible_allocations = [allocation for allocation in allocations if allocation.amount > 0]
+        first_allocation = visible_allocations[0]
+        reference_month = first_allocation.reference_month
         invoice_id = f"{card_id}:{reference_month}"
 
         session.add(
@@ -683,30 +719,63 @@ class Projector:
                 category_id=str(payload["category_id"]),
                 card_id=card_id,
                 description=_optional_string(payload.get("description")),
+                installments_count=int(payload.get("installments_count", 1)),
                 invoice_id=invoice_id,
                 reference_month=reference_month,
-                closing_date=allocation.closing_date,
-                due_date=allocation.due_date,
+                closing_date=first_allocation.closing_date,
+                due_date=first_allocation.due_date,
             )
         )
 
+        for allocation in visible_allocations:
+            installment_id = f"{purchase_id}:{allocation.installment_number}"
+            session.add(
+                CardPurchaseInstallmentRecord(
+                    installment_id=installment_id,
+                    purchase_id=purchase_id,
+                    card_id=card_id,
+                    purchase_date=str(payload["purchase_date"]),
+                    category_id=str(payload["category_id"]),
+                    installment_number=allocation.installment_number,
+                    installments_count=int(payload.get("installments_count", 1)),
+                    amount=allocation.amount,
+                    invoice_id=f"{card_id}:{allocation.reference_month}",
+                    reference_month=allocation.reference_month,
+                    closing_date=allocation.closing_date,
+                    due_date=allocation.due_date,
+                )
+            )
+            self._apply_invoice_item(
+                session,
+                card_id=card_id,
+                allocation=allocation,
+            )
+
+    def _apply_invoice_item(
+        self,
+        session: Session,
+        *,
+        card_id: str,
+        allocation: PurchaseInstallmentAllocation,
+    ) -> None:
+        invoice_id = f"{card_id}:{allocation.reference_month}"
         invoice = session.get(InvoiceProjectionRecord, invoice_id)
         if invoice is None:
             session.add(
                 InvoiceProjectionRecord(
                     invoice_id=invoice_id,
                     card_id=card_id,
-                    reference_month=reference_month,
+                    reference_month=allocation.reference_month,
                     closing_date=allocation.closing_date,
                     due_date=allocation.due_date,
-                    total_amount=int(payload["amount"]),
+                    total_amount=allocation.amount,
                     purchase_count=1,
                     status="open",
                 )
             )
             return
 
-        invoice.total_amount += int(payload["amount"])
+        invoice.total_amount += allocation.amount
         invoice.purchase_count += 1
 
     def _apply_transaction_created(
@@ -924,12 +993,36 @@ class Projector:
             "category_id",
             "card_id",
             "description",
+            "installments_count",
             "invoice_id",
             "reference_month",
             "closing_date",
             "due_date",
         }
         if card_purchase_columns != expected_card_purchase_columns:
+            return True
+
+        if "card_purchase_installments" not in table_names:
+            return True
+
+        installment_columns = self._safe_column_names(inspector, "card_purchase_installments")
+        if installment_columns is None:
+            return True
+        expected_installment_columns = {
+            "installment_id",
+            "purchase_id",
+            "card_id",
+            "purchase_date",
+            "category_id",
+            "installment_number",
+            "installments_count",
+            "amount",
+            "invoice_id",
+            "reference_month",
+            "closing_date",
+            "due_date",
+        }
+        if installment_columns != expected_installment_columns:
             return True
 
         if "invoices" not in table_names:

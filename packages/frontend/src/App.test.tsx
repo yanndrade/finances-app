@@ -217,26 +217,30 @@ function installAppFetchMock(initialState?: {
         purchase_date: string;
         amount: number;
         card_id: string;
+        installments_count?: number;
       };
       const card = state.cards.find((item) => item.card_id === payload.card_id);
       if (!card) {
         return new Response("Card not found", { status: 404 });
       }
 
-      const nextInvoice = allocateMockInvoice({
+      const nextInvoices = allocateMockInvoices({
         amount: payload.amount,
         card,
+        installmentsCount: payload.installments_count ?? 1,
         purchaseDate: payload.purchase_date,
       });
-      const existingInvoice = state.invoices.find(
-        (invoice) => invoice.invoice_id === nextInvoice.invoice_id,
-      );
+      for (const nextInvoice of nextInvoices) {
+        const existingInvoice = state.invoices.find(
+          (invoice) => invoice.invoice_id === nextInvoice.invoice_id,
+        );
 
-      if (existingInvoice) {
-        existingInvoice.total_amount += payload.amount;
-        existingInvoice.purchase_count += 1;
-      } else {
-        state.invoices = [nextInvoice, ...state.invoices];
+        if (existingInvoice) {
+          existingInvoice.total_amount += nextInvoice.total_amount;
+          existingInvoice.purchase_count += nextInvoice.purchase_count;
+        } else {
+          state.invoices = [nextInvoice, ...state.invoices];
+        }
       }
 
       return new Response(
@@ -247,10 +251,11 @@ function installAppFetchMock(initialState?: {
           category_id: "transport",
           card_id: payload.card_id,
           description: "Taxi",
-          invoice_id: nextInvoice.invoice_id,
-          reference_month: nextInvoice.reference_month,
-          closing_date: nextInvoice.closing_date,
-          due_date: nextInvoice.due_date,
+          installments_count: payload.installments_count ?? 1,
+          invoice_id: nextInvoices[0].invoice_id,
+          reference_month: nextInvoices[0].reference_month,
+          closing_date: nextInvoices[0].closing_date,
+          due_date: nextInvoices[0].due_date,
         }),
         { status: 201 },
       );
@@ -454,7 +459,7 @@ describe("App", () => {
     });
   });
 
-  it("creates a card purchase and shows the allocated invoice in the cards view", async () => {
+  it("creates an installment card purchase and shows the projected invoices in the cards view", async () => {
     const fetchMock = installAppFetchMock({
       invoices: [],
     });
@@ -474,14 +479,18 @@ describe("App", () => {
     const amountInput = screen.getByLabelText(/valor da compra/i);
     await userEvent.clear(amountInput);
     await userEvent.type(amountInput, "5000");
+    await userEvent.clear(screen.getByLabelText(/parcelas/i));
+    await userEvent.type(screen.getByLabelText(/parcelas/i), "3");
     await userEvent.type(screen.getByLabelText(/categoria da compra/i), "transport");
     await userEvent.type(screen.getByLabelText(/descricao da compra/i), "Taxi");
     await userEvent.click(screen.getByRole("button", { name: /registrar compra/i }));
 
     const invoicesSection = await screen.findByRole("region", { name: /faturas abertas/i });
     expect(within(invoicesSection).getByText(/referencia 2026-04/i)).toBeInTheDocument();
-    expect(within(invoicesSection).getByText("R$ 50,00")).toBeInTheDocument();
-    expect(within(invoicesSection).getByText(/1 compra/i)).toBeInTheDocument();
+    expect(within(invoicesSection).getByText(/referencia 2026-06/i)).toBeInTheDocument();
+    expect(within(invoicesSection).getAllByText("R$ 16,66").length).toBe(2);
+    expect(within(invoicesSection).getByText("R$ 16,68")).toBeInTheDocument();
+    expect(within(invoicesSection).getAllByText(/1 parcela/i).length).toBeGreaterThan(0);
 
     await waitFor(() => {
       expect(
@@ -598,38 +607,43 @@ describe("App", () => {
   });
 });
 
-function allocateMockInvoice({
+function allocateMockInvoices({
   amount,
   card,
+  installmentsCount,
   purchaseDate,
 }: {
   amount: number;
   card: CardSummary;
+  installmentsCount: number;
   purchaseDate: string;
-}): InvoiceSummary {
+}): InvoiceSummary[] {
   const normalizedPurchaseDate = purchaseDate.endsWith("Z")
     ? purchaseDate
     : `${purchaseDate}:00Z`;
   const purchase = new Date(normalizedPurchaseDate);
-  const target = new Date(Date.UTC(purchase.getUTCFullYear(), purchase.getUTCMonth(), 1));
+  const baseAmount = Math.floor(amount / installmentsCount);
+  const remainder = amount % installmentsCount;
+  const firstOffset = purchase.getUTCDate() > card.closing_day ? 1 : 0;
 
-  if (purchase.getUTCDate() > card.closing_day) {
-    target.setUTCMonth(target.getUTCMonth() + 1);
-  }
+  return Array.from({ length: installmentsCount }, (_value, index) => {
+    const target = new Date(
+      Date.UTC(purchase.getUTCFullYear(), purchase.getUTCMonth() + firstOffset + index, 1),
+    );
+    const referenceMonth = `${target.getUTCFullYear()}-${String(
+      target.getUTCMonth() + 1,
+    ).padStart(2, "0")}`;
+    const closingDate = `${referenceMonth}-${String(card.closing_day).padStart(2, "0")}`;
+    const dueDate = `${referenceMonth}-${String(card.due_day).padStart(2, "0")}`;
 
-  const referenceMonth = `${target.getUTCFullYear()}-${String(
-    target.getUTCMonth() + 1,
-  ).padStart(2, "0")}`;
-  const closingDate = `${referenceMonth}-${String(card.closing_day).padStart(2, "0")}`;
-  const dueDate = `${referenceMonth}-${String(card.due_day).padStart(2, "0")}`;
-
-  return buildInvoice({
-    invoice_id: `${card.card_id}:${referenceMonth}`,
-    card_id: card.card_id,
-    reference_month: referenceMonth,
-    closing_date: closingDate,
-    due_date: dueDate,
-    total_amount: amount,
-    purchase_count: 1,
+    return buildInvoice({
+      invoice_id: `${card.card_id}:${referenceMonth}`,
+      card_id: card.card_id,
+      reference_month: referenceMonth,
+      closing_date: closingDate,
+      due_date: dueDate,
+      total_amount: index === installmentsCount - 1 ? baseAmount + remainder : baseAmount,
+      purchase_count: 1,
+    });
   });
 }

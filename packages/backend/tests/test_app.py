@@ -1040,6 +1040,7 @@ def test_card_purchase_endpoint_allocates_purchases_into_prd_invoice_cycles(tmp_
         "category_id": "food",
         "card_id": "card-1",
         "description": "Groceries",
+        "installments_count": 1,
         "invoice_id": "card-1:2026-03",
         "reference_month": "2026-03",
         "closing_date": "2026-03-10",
@@ -1110,6 +1111,100 @@ def test_invoice_list_aggregates_card_purchases_without_zero_value_rows(tmp_path
             "total_amount": 50_00,
             "purchase_count": 2,
             "status": "open",
+        }
+    ]
+
+
+def test_card_purchase_endpoint_supports_installments_and_monthly_budget_projection(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+
+    create_response = client.post(
+        "/api/card-purchases",
+        json={
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 100_00,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Headphones",
+            "installments_count": 3,
+        },
+    )
+
+    invoices_response = client.get("/api/invoices", params={"card": "card-1"})
+    dashboard_response = client.get("/api/dashboard", params={"month": "2026-05"})
+
+    assert create_response.status_code == 201
+    assert create_response.json() == {
+        "purchase_id": "purchase-1",
+        "purchase_date": "2026-03-15T12:00:00Z",
+        "amount": 100_00,
+        "category_id": "electronics",
+        "card_id": "card-1",
+        "description": "Headphones",
+        "installments_count": 3,
+        "invoice_id": "card-1:2026-04",
+        "reference_month": "2026-04",
+        "closing_date": "2026-04-10",
+        "due_date": "2026-04-20",
+    }
+    assert invoices_response.status_code == 200
+    assert invoices_response.json() == [
+        {
+            "invoice_id": "card-1:2026-06",
+            "card_id": "card-1",
+            "reference_month": "2026-06",
+            "closing_date": "2026-06-10",
+            "due_date": "2026-06-20",
+            "total_amount": 33_34,
+            "purchase_count": 1,
+            "status": "open",
+        },
+        {
+            "invoice_id": "card-1:2026-05",
+            "card_id": "card-1",
+            "reference_month": "2026-05",
+            "closing_date": "2026-05-10",
+            "due_date": "2026-05-20",
+            "total_amount": 33_33,
+            "purchase_count": 1,
+            "status": "open",
+        },
+        {
+            "invoice_id": "card-1:2026-04",
+            "card_id": "card-1",
+            "reference_month": "2026-04",
+            "closing_date": "2026-04-10",
+            "due_date": "2026-04-20",
+            "total_amount": 33_33,
+            "purchase_count": 1,
+            "status": "open",
+        },
+    ]
+    assert dashboard_response.status_code == 200
+    assert dashboard_response.json()["total_expense"] == 0
+    assert dashboard_response.json()["spending_by_category"] == [
+        {
+            "category_id": "electronics",
+            "total": 33_33,
         }
     ]
 
