@@ -106,6 +106,8 @@ class InvoiceProjectionRecord(ProjectionBase):
     closing_date: Mapped[str] = mapped_column(String, nullable=False)
     due_date: Mapped[str] = mapped_column(String, nullable=False)
     total_amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    paid_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    remaining_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     purchase_count: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, default="open")
 
@@ -308,6 +310,8 @@ class Projector:
                 closing_date=row.closing_date,
                 due_date=row.due_date,
                 total_amount=row.total_amount,
+                paid_amount=row.paid_amount,
+                remaining_amount=row.remaining_amount,
                 purchase_count=row.purchase_count,
                 status=row.status,
             ).to_dict()
@@ -572,6 +576,10 @@ class Projector:
             self._apply_card_purchase_created(session, event.payload)
             return
 
+        if event.type == "InvoicePaid":
+            self._apply_invoice_paid(session, event.payload)
+            return
+
         if event.type in {"IncomeCreated", "ExpenseCreated"}:
             self._apply_transaction_created(session, event.payload)
             return
@@ -769,6 +777,8 @@ class Projector:
                     closing_date=allocation.closing_date,
                     due_date=allocation.due_date,
                     total_amount=allocation.amount,
+                    paid_amount=0,
+                    remaining_amount=allocation.amount,
                     purchase_count=1,
                     status="open",
                 )
@@ -776,7 +786,55 @@ class Projector:
             return
 
         invoice.total_amount += allocation.amount
+        invoice.remaining_amount += allocation.amount
         invoice.purchase_count += 1
+        self._sync_invoice_status(invoice)
+
+    def _apply_invoice_paid(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        payment_id = str(payload["id"])
+        transaction_id = f"{payment_id}:invoice-payment"
+        if session.get(TransactionProjectionRecord, transaction_id) is not None:
+            return
+
+        invoice_id = str(payload["invoice_id"])
+        invoice = session.get(InvoiceProjectionRecord, invoice_id)
+        if invoice is None:
+            return
+
+        amount = int(payload["amount"])
+        paid_amount = min(amount, invoice.remaining_amount)
+        if paid_amount <= 0:
+            return
+
+        invoice.paid_amount += paid_amount
+        invoice.remaining_amount -= paid_amount
+        self._sync_invoice_status(invoice)
+
+        session.add(
+            TransactionProjectionRecord(
+                transaction_id=transaction_id,
+                occurred_at=str(payload["paid_at"]),
+                type="expense",
+                amount=paid_amount,
+                account_id=str(payload["account_id"]),
+                payment_method="OTHER",
+                category_id="invoice_payment",
+                description=f"Pagamento de fatura {invoice_id}",
+                person_id=None,
+                status="active",
+                transfer_id=None,
+                direction=None,
+            )
+        )
+        self._apply_balance_delta(
+            session,
+            account_id=str(payload["account_id"]),
+            delta=-paid_amount,
+        )
 
     def _apply_transaction_created(
         self,
@@ -1038,6 +1096,8 @@ class Projector:
             "closing_date",
             "due_date",
             "total_amount",
+            "paid_amount",
+            "remaining_amount",
             "purchase_count",
             "status",
         }
@@ -1126,6 +1186,18 @@ class Projector:
             status=row.status,
             direction=row.direction,
         )
+
+    def _sync_invoice_status(self, invoice: InvoiceProjectionRecord) -> None:
+        if invoice.remaining_amount <= 0:
+            invoice.status = "paid"
+            invoice.remaining_amount = 0
+            return
+
+        if invoice.paid_amount > 0:
+            invoice.status = "partial"
+            return
+
+        invoice.status = "open"
 
 
 def _optional_string(value: object | None) -> str | None:
