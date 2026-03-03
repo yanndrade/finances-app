@@ -40,3 +40,29 @@ def test_allocate_purchase_installments_spreads_remainder_into_last_invoice() ->
         "2026-05-20",
         "2026-06-20",
     ]
+
+
+def test_allocate_purchase_installments_advances_invoice_months_for_month_end_dates() -> None:
+    allocations = allocate_purchase_installments(
+        purchase_date="2026-01-31T12:00:00Z",
+        total_amount=90_00,
+        installments_count=3,
+        closing_day=28,
+        due_day=5,
+    )
+
+    assert [allocation.reference_month for allocation in allocations] == [
+        "2026-02",
+        "2026-03",
+        "2026-04",
+    ]
+    assert [allocation.closing_date for allocation in allocations] == [
+        "2026-02-28",
+        "2026-03-28",
+        "2026-04-28",
+    ]
+    assert [allocation.due_date for allocation in allocations] == [
+        "2026-03-05",
+        "2026-04-05",
+        "2026-05-05",
+    ]

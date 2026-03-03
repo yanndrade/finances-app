@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import calendar
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
@@ -57,15 +56,22 @@ def allocate_purchase_installments(
     if installments_count < 1:
         raise ValueError("installments_count must be at least 1.")
 
-    purchase_dt = parse_utc_timestamp(purchase_date)
     base_amount = total_amount // installments_count
     remainder = total_amount % installments_count
+    first_invoice_cycle = allocate_invoice_cycle(
+        purchase_date=purchase_date,
+        closing_day=closing_day,
+        due_day=due_day,
+    )
+    first_year = int(first_invoice_cycle.reference_month[:4])
+    first_month = int(first_invoice_cycle.reference_month[5:7])
     allocations: list[PurchaseInstallmentAllocation] = []
 
     for installment_index in range(installments_count):
-        shifted_purchase_dt = _shift_datetime_month(purchase_dt, installment_index)
-        invoice_cycle = _allocate_invoice_cycle_for_datetime(
-            purchase_dt=shifted_purchase_dt,
+        target_year, target_month = _shift_month(first_year, first_month, installment_index)
+        invoice_cycle = _build_invoice_cycle_for_reference_month(
+            target_year=target_year,
+            target_month=target_month,
             closing_day=closing_day,
             due_day=due_day,
         )
@@ -98,6 +104,22 @@ def _allocate_invoice_cycle_for_datetime(
     if purchase_dt.day > closing_day:
         target_year, target_month = _shift_month(target_year, target_month, 1)
 
+    return _build_invoice_cycle_for_reference_month(
+        target_year=target_year,
+        target_month=target_month,
+        closing_day=closing_day,
+        due_day=due_day,
+    )
+
+
+def _build_invoice_cycle_for_reference_month(
+    *,
+    target_year: int,
+    target_month: int,
+    closing_day: int,
+    due_day: int,
+) -> InvoiceCycleAllocation:
+
     closing = date(target_year, target_month, closing_day)
     due_year = target_year
     due_month = target_month
@@ -110,14 +132,6 @@ def _allocate_invoice_cycle_for_datetime(
         closing_date=closing.isoformat(),
         due_date=due.isoformat(),
     )
-
-
-def _shift_datetime_month(value: datetime, delta: int) -> datetime:
-    target_year, target_month = _shift_month(value.year, value.month, delta)
-    last_day = calendar.monthrange(target_year, target_month)[1]
-    target_day = min(value.day, last_day)
-
-    return value.replace(year=target_year, month=target_month, day=target_day)
 
 
 def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
