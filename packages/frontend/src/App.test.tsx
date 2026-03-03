@@ -488,7 +488,7 @@ describe("App", () => {
     const invoicesSection = await screen.findByRole("region", { name: /faturas abertas/i });
     expect(within(invoicesSection).getByText(/referencia 2026-04/i)).toBeInTheDocument();
     expect(within(invoicesSection).getByText(/referencia 2026-06/i)).toBeInTheDocument();
-    expect(within(invoicesSection).getByText("R$ 16,66")).toBeInTheDocument();
+    expect(within(invoicesSection).getAllByText("R$ 16,66").length).toBe(2);
     expect(within(invoicesSection).getByText("R$ 16,68")).toBeInTheDocument();
     expect(within(invoicesSection).getAllByText(/1 parcela/i).length).toBeGreaterThan(0);
 

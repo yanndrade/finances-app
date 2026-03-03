@@ -53,6 +53,7 @@ export type CardPurchaseSummary = {
   category_id: string;
   card_id: string;
   description: string | null;
+  installments_count: number;
   invoice_id: string;
   reference_month: string;
   closing_date: string;
@@ -133,6 +134,7 @@ export type CardPurchasePayload = {
   cardId: string;
   purchaseDate: string;
   amountInCents: number;
+  installmentsCount: number;
   categoryId: string;
   description?: string;
 };
@@ -281,6 +283,7 @@ export async function createCardPurchase(
       id: `purchase-${Date.now()}`,
       purchase_date: normalizeTimestampForApi(payload.purchaseDate),
       amount: payload.amountInCents,
+      installments_count: payload.installmentsCount,
       category_id: payload.categoryId,
       card_id: payload.cardId,
       description: payload.description || undefined,
