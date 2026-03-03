@@ -1,4 +1,4 @@
-import { createCardPurchase, normalizeTimestampForApi } from "./api";
+import { createCardPurchase, normalizeTimestampForApi, payInvoice } from "./api";
 
 
 describe("api timestamp normalization", () => {
@@ -44,5 +44,49 @@ describe("api timestamp normalization", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
       installments_count: 3,
     });
+  });
+
+  it("converts payment datetime-local values and sends invoice payment payload", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          invoice_id: "card-1:2026-04",
+          card_id: "card-1",
+          reference_month: "2026-04",
+          closing_date: "2026-04-10",
+          due_date: "2026-04-20",
+          total_amount: 90_00,
+          paid_amount: 30_00,
+          remaining_amount: 60_00,
+          purchase_count: 1,
+          status: "partial",
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-03T12:00:00Z"));
+    const timezoneSpy = vi.spyOn(Date.prototype, "getTimezoneOffset").mockReturnValue(180);
+
+    await payInvoice({
+      invoiceId: "card-1:2026-04",
+      amountInCents: 30_00,
+      accountId: "acc-2",
+      paidAt: "2026-03-20T09:00",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/invoices/card-1%3A2026-04/payments");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      id: "payment-1772539200000",
+      amount: 30_00,
+      account_id: "acc-2",
+      paid_at: "2026-03-20T12:00:00Z",
+    });
+
+    timezoneSpy.mockRestore();
+    vi.useRealTimers();
   });
 });

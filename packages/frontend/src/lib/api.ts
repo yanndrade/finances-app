@@ -67,6 +67,8 @@ export type InvoiceSummary = {
   closing_date: string;
   due_date: string;
   total_amount: number;
+  paid_amount: number;
+  remaining_amount: number;
   purchase_count: number;
   status: string;
 };
@@ -137,6 +139,13 @@ export type CardPurchasePayload = {
   installmentsCount: number;
   categoryId: string;
   description?: string;
+};
+
+export type InvoicePaymentPayload = {
+  invoiceId: string;
+  amountInCents: number;
+  accountId: string;
+  paidAt: string;
 };
 
 export type TransactionFilters = {
@@ -289,6 +298,21 @@ export async function createCardPurchase(
       description: payload.description || undefined,
     }),
   });
+}
+
+export async function payInvoice(payload: InvoicePaymentPayload): Promise<InvoiceSummary> {
+  return requestJson<InvoiceSummary>(
+    `/api/invoices/${encodeURIComponent(payload.invoiceId)}/payments`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        id: `payment-${Date.now()}`,
+        amount: payload.amountInCents,
+        account_id: payload.accountId,
+        paid_at: normalizeTimestampForApi(payload.paidAt),
+      }),
+    },
+  );
 }
 
 export async function createCashTransaction(
