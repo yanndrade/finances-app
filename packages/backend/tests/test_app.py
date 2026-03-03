@@ -356,6 +356,66 @@ def test_cash_transaction_endpoints_require_existing_account_and_utc_timestamp(t
     assert invalid_timestamp_response.status_code == 422
 
 
+def test_cash_transaction_endpoints_return_422_for_whitespace_required_fields(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    response = client.post(
+        "/api/expenses",
+        json={
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "   ",
+            "description": "Lunch",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_cash_transaction_update_can_clear_nullable_fields(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T08:00:00Z",
+            "amount": 15_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Morning coffee",
+            "person_id": "cafe",
+        },
+    )
+
+    response = client.patch(
+        "/api/transactions/tx-1",
+        json={
+            "description": None,
+            "person_id": None,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["description"] is None
+    assert response.json()["person_id"] is None
+
+
 def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:
     response = client.post(
         "/api/accounts",

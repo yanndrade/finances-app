@@ -8,6 +8,7 @@ from finance_app.domain.events import NewEvent
 PAYMENT_METHODS = ("PIX", "CASH", "OTHER")
 TRANSACTION_TYPES = ("income", "expense")
 TRANSACTION_STATUSES = ("active", "voided")
+UNSET = object()
 
 
 class TransactionServiceError(Exception):
@@ -161,14 +162,14 @@ class TransactionService:
         self,
         transaction_id: str,
         *,
-        occurred_at: str | None = None,
-        transaction_type: str | None = None,
-        amount: int | None = None,
-        account_id: str | None = None,
-        payment_method: str | None = None,
-        category_id: str | None = None,
-        description: str | None = None,
-        person_id: str | None = None,
+        occurred_at: str | None | object = UNSET,
+        transaction_type: str | None | object = UNSET,
+        amount: int | None | object = UNSET,
+        account_id: str | None | object = UNSET,
+        payment_method: str | None | object = UNSET,
+        category_id: str | None | object = UNSET,
+        description: str | None | object = UNSET,
+        person_id: str | None | object = UNSET,
     ) -> dict[str, str | int | None]:
         self._sync_projections()
         existing = self._find_transaction(transaction_id)
@@ -181,33 +182,33 @@ class TransactionService:
         merged = {
             "id": transaction_id,
             "occurred_at": (
-                occurred_at if occurred_at is not None else str(existing["occurred_at"])
+                occurred_at if occurred_at is not UNSET else str(existing["occurred_at"])
             ),
             "type": (
                 transaction_type
-                if transaction_type is not None
+                if transaction_type is not UNSET
                 else str(existing["type"])
             ),
-            "amount": amount if amount is not None else int(existing["amount"]),
+            "amount": amount if amount is not UNSET else int(existing["amount"]),
             "account_id": (
-                account_id if account_id is not None else str(existing["account_id"])
+                account_id if account_id is not UNSET else str(existing["account_id"])
             ),
             "payment_method": (
                 payment_method
-                if payment_method is not None
+                if payment_method is not UNSET
                 else str(existing["payment_method"])
             ),
             "category_id": (
                 category_id
-                if category_id is not None
+                if category_id is not UNSET
                 else str(existing["category_id"])
             ),
             "description": (
                 description
-                if description is not None
+                if description is not UNSET
                 else existing["description"]
             ),
-            "person_id": person_id if person_id is not None else existing["person_id"],
+            "person_id": person_id if person_id is not UNSET else existing["person_id"],
             "status": str(existing["status"]),
         }
 

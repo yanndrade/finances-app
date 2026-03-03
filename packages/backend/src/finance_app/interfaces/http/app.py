@@ -16,6 +16,7 @@ from finance_app.application.transactions import (
     TransactionAlreadyExistsError,
     TransactionNotFoundError,
     TransactionService,
+    TransactionServiceError,
 )
 from finance_app.infrastructure.event_store import EventStore
 from finance_app.infrastructure.projector import Projector
@@ -152,6 +153,11 @@ def build_router(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
             ) from exc
+        except TransactionServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
 
     @router.post("/api/expenses", status_code=status.HTTP_201_CREATED)
     def create_expense(
@@ -173,6 +179,11 @@ def build_router(
         except TransactionAlreadyExistsError as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
         except InvalidTransactionDateError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+        except TransactionServiceError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
@@ -203,29 +214,36 @@ def build_router(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
             ) from exc
+        except TransactionServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
 
     @router.patch("/api/transactions/{transaction_id}")
     def update_transaction(
         transaction_id: str,
         payload: UpdateTransactionRequest,
     ) -> list[dict[str, str | int | None]] | dict[str, str | int | None]:
+        updates = payload.model_dump(exclude_unset=True)
+        if "type" in updates:
+            updates["transaction_type"] = updates.pop("type")
+
         try:
             return transaction_service.update_transaction(
                 transaction_id,
-                occurred_at=payload.occurred_at,
-                transaction_type=payload.type,
-                amount=payload.amount,
-                account_id=payload.account_id,
-                payment_method=payload.payment_method,
-                category_id=payload.category_id,
-                description=payload.description,
-                person_id=payload.person_id,
+                **updates,
             )
         except AccountNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
         except TransactionNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
         except InvalidTransactionDateError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+        except TransactionServiceError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
