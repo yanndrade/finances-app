@@ -2,6 +2,7 @@ import re
 from typing import Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from finance_app.application.accounts import (
@@ -342,5 +343,17 @@ def create_app(
         account_reader=account_service,
     )
     app = FastAPI(title="finance-app backend")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ],
+        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.include_router(build_router(account_service, transaction_service, transfer_service))
     return app

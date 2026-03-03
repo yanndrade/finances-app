@@ -1070,3 +1070,60 @@ def test_projector_summarizes_dashboard_month_from_projections(tmp_path: Path) -
             },
         ],
     }
+
+
+def test_projector_keeps_dashboard_totals_unbounded_when_preview_is_limited(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 0,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+
+    for index in range(12):
+        append_event.execute(
+            NewEvent(
+                type="IncomeCreated",
+                timestamp=f"2026-03-02T12:{index:02d}:00Z",
+                payload={
+                    "id": f"tx-{index}",
+                    "occurred_at": f"2026-03-02T12:{index:02d}:00Z",
+                    "type": "income",
+                    "amount": 1_00,
+                    "account_id": "acc-1",
+                    "payment_method": "PIX",
+                    "category_id": "salary",
+                    "description": f"Income {index}",
+                    "person_id": None,
+                    "status": "active",
+                },
+                version=1,
+            )
+        )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+    summary = projector.get_dashboard_summary(month="2026-03")
+
+    assert summary["total_income"] == 12_00
+    assert summary["net_flow"] == 12_00
+    assert len(summary["recent_transactions"]) == 10

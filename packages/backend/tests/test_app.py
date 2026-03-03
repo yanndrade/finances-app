@@ -738,6 +738,25 @@ def test_dashboard_endpoint_rejects_invalid_month_format(tmp_path) -> None:
     assert response.status_code == 422
 
 
+def test_backend_allows_cors_for_local_frontend_origins(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    response = client.options(
+        "/api/dashboard",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+
+
 def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:
     response = client.post(
         "/api/accounts",

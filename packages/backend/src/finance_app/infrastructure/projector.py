@@ -236,9 +236,9 @@ class Projector:
                     TransactionProjectionRecord.occurred_at.desc(),
                     TransactionProjectionRecord.transaction_id.desc(),
                 )
-                .limit(10)
                 .all()
             )
+            recent_rows = month_rows[:10]
             balance_total = (
                 session.query(func.coalesce(func.sum(BalanceStateRecord.current_balance), 0))
                 .scalar()
@@ -259,7 +259,7 @@ class Projector:
                 transfer_id=row.transfer_id,
                 direction=row.direction,
             ).to_dict()
-            for row in month_rows
+            for row in recent_rows
         ]
         total_income = sum(
             row.amount for row in month_rows if row.type == "income"
