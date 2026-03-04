@@ -6,9 +6,12 @@ import type {
   TransactionSummary,
   TransactionUpdatePayload,
 } from "../../lib/api";
+import { getCategoryOptions } from "../../lib/categories";
 import {
+  formatCategoryName,
   formatCurrency,
   formatDateTime,
+  formatPaymentMethod,
   formatTransactionStatus,
   formatTransactionType,
   toDateTimeInputValue,
@@ -49,6 +52,7 @@ export function TransactionsView({
   onVoidTransaction,
 }: TransactionsViewProps) {
   const [filterForm, setFilterForm] = useState<TransactionFilters>(filters);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<TransactionEditForm | null>(null);
 
@@ -83,17 +87,10 @@ export function TransactionsView({
     setEditForm(null);
   }
 
+  const editCategoryOptions = getCategoryOptions(editForm?.categoryId);
+
   return (
     <section aria-label="Historico e filtros" className="panel-card">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Transacoes</p>
-          <h2 className="section-title">Historico e filtros</h2>
-          <p className="section-copy">
-            Filtre o fluxo do caixa, ajuste lancamentos e estorne quando necessario.
-          </p>
-        </div>
-      </div>
       <form className="filters-grid" onSubmit={handleFilterSubmit}>
         <label>
           Buscar
@@ -121,7 +118,7 @@ export function TransactionsView({
           />
         </label>
         <label>
-          Ate
+          {"At\u00E9"}
           <input
             onChange={(event) =>
               setFilterForm((current) => ({
@@ -152,47 +149,60 @@ export function TransactionsView({
             ))}
           </select>
         </label>
-        <label>
-          Metodo do filtro
-          <select
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                method: event.target.value as TransactionFilters["method"],
-              }))
-            }
-            value={filterForm.method}
+        <div className="inline-actions">
+          <button
+            className="secondary-button"
+            onClick={() => setShowAdvancedFilters((current) => !current)}
+            type="button"
           >
-            <option value="">Todos</option>
-            <option value="PIX">PIX</option>
-            <option value="CASH">CASH</option>
-            <option value="OTHER">OTHER</option>
-          </select>
-        </label>
-        <label>
-          Categoria do filtro
-          <input
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                category: event.target.value,
-              }))
-            }
-            value={filterForm.category}
-          />
-        </label>
-        <label>
-          Pessoa do filtro
-          <input
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                person: event.target.value,
-              }))
-            }
-            value={filterForm.person}
-          />
-        </label>
+            Filtros avancados
+          </button>
+        </div>
+        {showAdvancedFilters ? (
+          <>
+            <label>
+              {"M\u00E9todo do filtro"}
+              <select
+                onChange={(event) =>
+                  setFilterForm((current) => ({
+                    ...current,
+                    method: event.target.value as TransactionFilters["method"],
+                  }))
+                }
+                value={filterForm.method}
+              >
+                <option value="">Todos</option>
+                <option value="PIX">PIX</option>
+                <option value="CASH">Dinheiro</option>
+                <option value="OTHER">Outro</option>
+              </select>
+            </label>
+            <label>
+              Categoria do filtro
+              <input
+                onChange={(event) =>
+                  setFilterForm((current) => ({
+                    ...current,
+                    category: event.target.value,
+                  }))
+                }
+                value={filterForm.category}
+              />
+            </label>
+            <label>
+              Pessoa do filtro
+              <input
+                onChange={(event) =>
+                  setFilterForm((current) => ({
+                    ...current,
+                    person: event.target.value,
+                  }))
+                }
+                value={filterForm.person}
+              />
+            </label>
+          </>
+        ) : null}
         <div className="inline-actions">
           <button className="primary-button" disabled={isSubmitting} type="submit">
             Aplicar filtros
@@ -274,7 +284,7 @@ export function TransactionsView({
             <label>
               Metodo da transacao
               <select
-                aria-label="Metodo da transacao"
+                aria-label={"M\u00E9todo da transa\u00E7\u00E3o"}
                 onChange={(event) =>
                   setEditForm((current) =>
                     current === null
@@ -288,8 +298,8 @@ export function TransactionsView({
                 value={editForm.paymentMethod}
               >
                 <option value="PIX">PIX</option>
-                <option value="CASH">CASH</option>
-                <option value="OTHER">OTHER</option>
+                <option value="CASH">Dinheiro</option>
+                <option value="OTHER">Outro</option>
               </select>
             </label>
             <label>
@@ -333,7 +343,7 @@ export function TransactionsView({
             </label>
             <label>
               Categoria da transacao
-              <input
+              <select
                 aria-label="Categoria da transacao"
                 onChange={(event) =>
                   setEditForm((current) =>
@@ -347,7 +357,13 @@ export function TransactionsView({
                 }
                 required
                 value={editForm.categoryId}
-              />
+              >
+                {editCategoryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               Pessoa da transacao
@@ -393,14 +409,14 @@ export function TransactionsView({
             <thead>
               <tr>
                 <th>Data</th>
-                <th>Descricao</th>
+                <th>{"Descri\u00E7\u00E3o"}</th>
                 <th>Categoria</th>
                 <th>Conta</th>
-                <th>Metodo</th>
+                <th>{"M\u00E9todo"}</th>
                 <th>Tipo</th>
                 <th>Status</th>
                 <th>Valor</th>
-                <th>Acoes</th>
+                <th>{"A\u00E7\u00F5es"}</th>
               </tr>
             </thead>
             <tbody>
@@ -408,9 +424,9 @@ export function TransactionsView({
                 <tr key={transaction.transaction_id}>
                   <td>{formatDateTime(transaction.occurred_at)}</td>
                   <td>{transaction.description ?? transaction.category_id}</td>
-                  <td>{transaction.category_id}</td>
+                  <td>{formatCategoryName(transaction.category_id)}</td>
                   <td>{resolveAccountName(transaction.account_id, accounts)}</td>
-                  <td>{transaction.payment_method}</td>
+                  <td>{formatPaymentMethod(transaction.payment_method)}</td>
                   <td>{formatTransactionType(transaction.type)}</td>
                   <td>
                     <span

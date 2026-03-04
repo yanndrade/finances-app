@@ -34,7 +34,7 @@ export function toIsoDateTime(localValue: string): string {
 export function formatAccountType(accountType: string): string {
   const labels: Record<string, string> = {
     checking: "Conta corrente",
-    savings: "Poupanca",
+    savings: "Poupan\u00E7a",
     wallet: "Carteira",
     investment: "Investimento",
     other: "Outra",
@@ -46,16 +46,26 @@ export function formatAccountType(accountType: string): string {
 export function formatTransactionType(transactionType: string): string {
   const labels: Record<string, string> = {
     income: "Entrada",
-    expense: "Saida",
-    transfer: "Transferencia",
+    expense: "Sa\u00EDda",
+    transfer: "Transfer\u00EAncia",
   };
 
   return labels[transactionType] ?? transactionType;
 }
 
+export function formatPaymentMethod(paymentMethod: string): string {
+  const labels: Record<string, string> = {
+    PIX: "PIX",
+    CASH: "Dinheiro",
+    OTHER: "Outro",
+  };
+
+  return labels[paymentMethod] ?? paymentMethod;
+}
+
 export function formatTransactionStatus(status: string): string {
   const labels: Record<string, string> = {
-    active: "Ativa",
+    active: "Efetivada",
     voided: "Estornada",
   };
 
@@ -91,17 +101,18 @@ export function formatDelta(current: number, previous: number): DeltaInfo {
 
 export function formatCategoryName(categoryId: string): string {
   const labels: Record<string, string> = {
-    food: "Alimentação",
+    food: "Alimenta\u00E7\u00E3o",
     transport: "Transporte",
     housing: "Moradia",
-    health: "Saúde",
-    education: "Educação",
+    health: "Sa\u00FAde",
+    education: "Educa\u00E7\u00E3o",
     entertainment: "Lazer",
-    clothing: "Vestuário",
+    clothing: "Vestu\u00E1rio",
     utilities: "Contas",
-    salary: "Salário",
+    salary: "Sal\u00E1rio",
     freelance: "Freelance",
-    transfer: "Transferência",
+    transfer: "Transfer\u00EAncia",
+    invoice_payment: "Pagamento de fatura",
     other: "Outros",
   };
 

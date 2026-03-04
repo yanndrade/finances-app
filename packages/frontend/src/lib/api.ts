@@ -73,6 +73,19 @@ export type InvoiceSummary = {
   status: string;
 };
 
+export type InvoiceItemSummary = {
+  invoice_item_id: string;
+  invoice_id: string;
+  purchase_id: string;
+  card_id: string;
+  purchase_date: string;
+  category_id: string;
+  description: string | null;
+  installment_number: number;
+  installments_count: number;
+  amount: number;
+};
+
 export type TransactionSummary = {
   transaction_id: string;
   occurred_at: string;
@@ -189,6 +202,12 @@ export async function fetchInvoices(cardId?: string): Promise<InvoiceSummary[]> 
   const query = cardId ? `?card=${encodeURIComponent(cardId)}` : "";
 
   return requestJson<InvoiceSummary[]>(`/api/invoices${query}`);
+}
+
+export async function fetchInvoiceItems(invoiceId: string): Promise<InvoiceItemSummary[]> {
+  return requestJson<InvoiceItemSummary[]>(
+    `/api/invoices/${encodeURIComponent(invoiceId)}/items`,
+  );
 }
 
 export async function fetchTransactions(

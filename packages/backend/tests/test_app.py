@@ -1335,6 +1335,69 @@ def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -
     ]
 
 
+def test_invoice_items_endpoint_lists_only_requested_invoice_rows(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Headphones",
+            "installments_count": 3,
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-2",
+            "purchase_date": "2026-03-10T12:00:00Z",
+            "amount": 20_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Lunch",
+        },
+    )
+
+    response = client.get("/api/invoices/card-1:2026-04/items")
+    missing_response = client.get("/api/invoices/card-1:2099-01/items")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "invoice_item_id": "purchase-1:1",
+            "invoice_id": "card-1:2026-04",
+            "purchase_id": "purchase-1",
+            "card_id": "card-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "category_id": "electronics",
+            "description": "Headphones",
+            "installment_number": 1,
+            "installments_count": 3,
+            "amount": 30_00,
+        }
+    ]
+    assert missing_response.status_code == 404
+
+
 def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:
     response = client.post(
         "/api/accounts",

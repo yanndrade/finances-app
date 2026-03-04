@@ -14,6 +14,8 @@ from finance_app.application.accounts import (
 )
 from finance_app.application.card_purchases import (
     CardPurchaseAlreadyExistsError,
+    CardPurchaseNotFoundError,
+    InvoiceNotFoundError as CardInvoiceNotFoundError,
     CardPurchaseService,
     CardPurchaseServiceError,
 )
@@ -300,6 +302,23 @@ def build_router(
     ) -> list[dict[str, str | int]]:
         try:
             return card_purchase_service.list_invoices(card_id=card_id)
+        except CardPurchaseServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.get("/api/invoices/{invoice_id}/items")
+    def list_invoice_items(
+        invoice_id: str,
+    ) -> list[dict[str, str | int | None]]:
+        try:
+            return card_purchase_service.list_invoice_items(invoice_id=invoice_id)
+        except (CardPurchaseNotFoundError, CardInvoiceNotFoundError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
         except CardPurchaseServiceError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

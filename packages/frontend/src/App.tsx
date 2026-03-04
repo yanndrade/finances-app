@@ -1,16 +1,10 @@
 import "./styles.css";
 
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 
 import { AppShell } from "./components/app-shell";
 import type { AppView } from "./components/sidebar";
 import { ToastViewport, type AppToast } from "./components/toast-viewport";
-import { AccountsView } from "./features/accounts/accounts-view";
-import { CardsView } from "./features/cards/cards-view";
-import { DashboardView } from "./features/dashboard/dashboard-view";
-import { MovementsPanel } from "./features/movements/movements-panel";
-import { SettingsView } from "./features/settings/settings-view";
-import { TransactionsView } from "./features/transactions/transactions-view";
 import {
   createAccount,
   createCard,
@@ -45,6 +39,36 @@ import {
   type TransferPayload,
 } from "./lib/api";
 
+const QuickAddComposer = lazy(async () => {
+  const module = await import("./components/quick-add-composer");
+  return { default: module.QuickAddComposer };
+});
+
+const AccountsView = lazy(async () => {
+  const module = await import("./features/accounts/accounts-view");
+  return { default: module.AccountsView };
+});
+
+const CardsView = lazy(async () => {
+  const module = await import("./features/cards/cards-view");
+  return { default: module.CardsView };
+});
+
+const DashboardView = lazy(async () => {
+  const module = await import("./features/dashboard/dashboard-view");
+  return { default: module.DashboardView };
+});
+
+const SettingsView = lazy(async () => {
+  const module = await import("./features/settings/settings-view");
+  return { default: module.SettingsView };
+});
+
+const TransactionsView = lazy(async () => {
+  const module = await import("./features/transactions/transactions-view");
+  return { default: module.TransactionsView };
+});
+
 const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
   from: "",
   to: "",
@@ -63,34 +87,24 @@ const VIEW_META: Record<
   }
 > = {
   dashboard: {
-    title: "Visao geral do caixa",
-    description:
-      "Saude financeira, controle de gastos e acoes pendentes \u2014 tudo em um lugar.",
+    title: "Vis\u00E3o geral",
+    description: "Resumo mensal e pontos de atencao.",
   },
   transactions: {
-    title: "Transacoes e historico",
-    description:
-      "Filtre o fluxo, ajuste dados pontuais e estorne lancamentos sem perder rastreabilidade.",
+    title: "Transa\u00E7\u00F5es",
+    description: "Filtro, ajuste e hist\u00F3rico.",
   },
   accounts: {
-    title: "Contas e saldos",
-    description:
-      "Mantenha o mapa das suas contas atualizado com saldos iniciais e status ativos.",
+    title: "Contas",
+    description: "Saldos e estrutura da carteira.",
   },
   cards: {
-    title: "Cartoes e ciclo",
-    description:
-      "Cadastre cartoes, lance compras e acompanhe a distribuicao das faturas por ciclo.",
-  },
-  movements: {
-    title: "Entrada r\u00e1pida de caixa",
-    description:
-      "Registre entradas, sa\u00eddas e transfer\u00eancias internas com o m\u00ednimo de fric\u00e7\u00e3o.",
+    title: "Cart\u00F5es",
+    description: "Faturas, ciclos e compras.",
   },
   settings: {
-    title: "Configura\u00e7\u00f5es",
-    description:
-      "Ferramentas de desenvolvimento e espa\u00e7o reservado para prefer\u00eancias futuras.",
+    title: "Configura\u00E7\u00F5es",
+    description: "Ferramentas e prefer\u00EAncias.",
   },
 };
 
@@ -112,6 +126,7 @@ export function App() {
   );
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [toast, setToast] = useState<AppToast>(null);
 
   useEffect(() => {
@@ -319,86 +334,126 @@ export function App() {
       activeView={activeView}
       description={activeMeta.description}
       onNavigate={setActiveView}
+      onOpenQuickAdd={() => setIsQuickAddOpen(true)}
       title={activeMeta.title}
     >
-      {activeView === "dashboard" ? (
-        <DashboardView
-          accounts={accounts}
-          dashboard={dashboard}
-          loading={loading}
-          month={selectedMonth}
-          onMonthChange={setSelectedMonth}
-          onNavigate={setActiveView}
-          onUpdateTransaction={(transactionId, updates) => {
-            if (updates.description !== undefined) {
-              void runMutation(
-                () =>
-                  updateTransaction(transactionId, {
-                    description: updates.description ?? "",
-                  } as TransactionUpdatePayload),
-                "Descricao atualizada com sucesso.",
-              );
-            }
-          }}
-          transactions={transactions}
-        />
-      ) : null}
+      <Suspense fallback={<ViewFallback activeView={activeView} />}>
+        {activeView === "dashboard" ? (
+          <DashboardView
+            accounts={accounts}
+            dashboard={dashboard}
+            loading={loading}
+            month={selectedMonth}
+            onMonthChange={setSelectedMonth}
+            onNavigate={setActiveView}
+            onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+            onUpdateTransaction={(transactionId, updates) => {
+              if (updates.description !== undefined) {
+                void runMutation(
+                  () =>
+                    updateTransaction(transactionId, {
+                      description: updates.description ?? "",
+                    } as TransactionUpdatePayload),
+                  "Descricao atualizada com sucesso.",
+                );
+              }
+            }}
+            transactions={transactions}
+          />
+        ) : null}
 
-      {activeView === "transactions" ? (
-        <TransactionsView
-          accounts={accounts}
-          filters={transactionFilters}
-          isSubmitting={isSubmitting}
-          onApplyFilters={handleApplyTransactionFilters}
-          onUpdateTransaction={handleUpdateTransaction}
-          onVoidTransaction={handleVoidTransaction}
-          transactions={transactions}
-        />
-      ) : null}
+        {activeView === "transactions" ? (
+          <TransactionsView
+            accounts={accounts}
+            filters={transactionFilters}
+            isSubmitting={isSubmitting}
+            onApplyFilters={handleApplyTransactionFilters}
+            onUpdateTransaction={handleUpdateTransaction}
+            onVoidTransaction={handleVoidTransaction}
+            transactions={transactions}
+          />
+        ) : null}
 
-      {activeView === "accounts" ? (
-        <AccountsView
-          accounts={accounts}
-          isSubmitting={isSubmitting}
-          onCreateAccount={handleCreateAccount}
-          onUpdateAccount={handleUpdateAccount}
-        />
-      ) : null}
+        {activeView === "accounts" ? (
+          <AccountsView
+            accounts={accounts}
+            isSubmitting={isSubmitting}
+            onCreateAccount={handleCreateAccount}
+            onUpdateAccount={handleUpdateAccount}
+          />
+        ) : null}
 
-      {activeView === "cards" ? (
-        <CardsView
-          accounts={accounts}
-          cards={cards}
-          invoices={invoices}
-          isSubmitting={isSubmitting}
-          onCreateCard={handleCreateCard}
-          onCreateCardPurchase={handleCreateCardPurchase}
-          onPayInvoice={handlePayInvoice}
-          onUpdateCard={handleUpdateCard}
-        />
-      ) : null}
+        {activeView === "cards" ? (
+          <CardsView
+            accounts={accounts}
+            cards={cards}
+            invoices={invoices}
+            isSubmitting={isSubmitting}
+            onCreateCard={handleCreateCard}
+            onCreateCardPurchase={handleCreateCardPurchase}
+            onPayInvoice={handlePayInvoice}
+            onUpdateCard={handleUpdateCard}
+          />
+        ) : null}
 
-      {activeView === "movements" ? (
-        <MovementsPanel
-          accounts={accounts}
-          isSubmitting={isSubmitting}
-          onSubmitTransaction={handleTransactionSubmit}
-          onSubmitTransfer={handleTransferSubmit}
-        />
-      ) : null}
-
-      {activeView === "settings" ? (
-        <SettingsView
-          isSubmitting={isSubmitting}
-          onResetApplicationData={handleResetAllData}
-        />
-      ) : null}
+        {activeView === "settings" ? (
+          <SettingsView
+            isSubmitting={isSubmitting}
+            onResetApplicationData={handleResetAllData}
+          />
+        ) : null}
+      </Suspense>
 
       <ToastViewport
         onDismiss={() => setToast(null)}
         toast={toast}
       />
+
+      {isQuickAddOpen ? (
+        <Suspense fallback={null}>
+          <QuickAddComposer
+            isOpen={isQuickAddOpen}
+            onClose={() => setIsQuickAddOpen(false)}
+            accounts={accounts}
+            cards={cards}
+            invoices={invoices}
+            onSubmitTransaction={async (payload) => {
+              await handleTransactionSubmit(payload);
+            }}
+            onSubmitTransfer={async (payload) => {
+              await handleTransferSubmit(payload);
+            }}
+            onSubmitCardPurchase={async (payload) => {
+              await handleCreateCardPurchase(payload);
+            }}
+            onSubmitInvoicePayment={async (payload) => {
+              await handlePayInvoice(payload);
+            }}
+            isSubmitting={isSubmitting}
+          />
+        </Suspense>
+      ) : null}
     </AppShell>
+  );
+}
+
+function ViewFallback({ activeView }: { activeView: AppView }) {
+  if (activeView === "dashboard") {
+    return (
+      <div className="space-y-8" aria-hidden="true">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
+          <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
+          <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-[2rem] bg-white p-8 shadow-sm" aria-hidden="true">
+      <div className="h-5 w-40 rounded-full bg-slate-200 animate-pulse" />
+    </div>
   );
 }
 

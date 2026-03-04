@@ -632,15 +632,6 @@ export function MovementsPanel({
     return (
       <div className="screen-stack">
         <section className="panel-card quick-entry-panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Movimentar</p>
-              <h2 className="section-title">Entrada rápida de caixa</h2>
-              <p className="section-copy">
-                Preparando suas contas para uma entrada mais rápida.
-              </p>
-            </div>
-          </div>
           <div className="loading-panel">Carregando contas...</div>
           <div className="skeleton-grid">
             <div className="skeleton skeleton--lg" />
@@ -654,15 +645,6 @@ export function MovementsPanel({
   return (
     <div className="screen-stack">
       <section className="panel-card quick-entry-panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Movimentar</p>
-            <h2 className="section-title">Entrada rápida de caixa</h2>
-            <p className="section-copy">
-              Registre entradas, saídas e transferências internas com o mínimo de fricção.
-            </p>
-          </div>
-        </div>
 
         <div aria-label="Modo de lançamento" className="quick-entry-modes" role="tablist">
           <button

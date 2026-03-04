@@ -24,6 +24,7 @@ from finance_app.domain.projections import (
     BalanceStateProjection,
     CardProjection,
     CardPurchaseProjection,
+    InvoiceItemProjection,
     InvoiceProjection,
     TransactionProjection,
 )
@@ -314,6 +315,53 @@ class Projector:
                 remaining_amount=row.remaining_amount,
                 purchase_count=row.purchase_count,
                 status=row.status,
+            ).to_dict()
+            for row in rows
+        ]
+
+    def list_invoice_items(
+        self,
+        *,
+        invoice_id: str,
+    ) -> list[dict[str, str | int | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                rows = (
+                    session.query(CardPurchaseInstallmentRecord)
+                    .filter(CardPurchaseInstallmentRecord.invoice_id == invoice_id)
+                    .order_by(
+                        CardPurchaseInstallmentRecord.purchase_date.desc(),
+                        CardPurchaseInstallmentRecord.installment_id.desc(),
+                    )
+                    .all()
+                )
+
+                descriptions = {
+                    row.purchase_id: row.description
+                    for row in (
+                        session.query(CardPurchaseProjectionRecord)
+                        .filter(
+                            CardPurchaseProjectionRecord.purchase_id.in_(
+                                [item.purchase_id for item in rows]
+                            )
+                        )
+                        .all()
+                    )
+                }
+
+        return [
+            InvoiceItemProjection(
+                invoice_item_id=row.installment_id,
+                invoice_id=row.invoice_id,
+                purchase_id=row.purchase_id,
+                card_id=row.card_id,
+                purchase_date=row.purchase_date,
+                category_id=row.category_id,
+                description=descriptions.get(row.purchase_id),
+                installment_number=row.installment_number,
+                installments_count=row.installments_count,
+                amount=row.amount,
             ).to_dict()
             for row in rows
         ]

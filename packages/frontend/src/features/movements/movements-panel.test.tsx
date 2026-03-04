@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "../../App";
@@ -23,9 +23,40 @@ const ACCOUNTS = [
   },
 ];
 
+function installDialogEnvironment() {
+  vi.stubGlobal(
+    "ResizeObserver",
+    vi.fn(() => ({
+      observe: vi.fn(),
+      unobserve: vi.fn(),
+      disconnect: vi.fn(),
+    })),
+  );
+  Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+    configurable: true,
+    value: vi.fn(() => false),
+  });
+  Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: vi.fn(),
+  });
+}
+
 describe("Movements panel", () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("submits a new expense and refreshes the dashboard", async () => {
@@ -164,20 +195,24 @@ describe("Movements panel", () => {
     });
 
     vi.stubGlobal("fetch", fetchMock);
+    installDialogEnvironment();
 
     render(<App />);
 
     await screen.findAllByText("R$ 155,00");
-    await userEvent.click(screen.getByRole("button", { name: /^movimentar$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /\+\s*lan.ar/i }));
 
-    await userEvent.type(screen.getByLabelText(/^Descrição$/i), "Dinner");
-    await userEvent.type(screen.getByLabelText(/^Valor$/i), "10");
-    await userEvent.type(screen.getByLabelText(/^Categoria$/i), "food");
-    await userEvent.click(screen.getByRole("button", { name: /salvar saída/i }));
-    await userEvent.click(screen.getByRole("button", { name: /^dashboard$/i }));
+    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
+    await userEvent.type(within(dialog).getByPlaceholderText("0,00"), "10");
+    await userEvent.type(within(dialog).getByLabelText(/^Descricao$/i), "Dinner");
+    await userEvent.selectOptions(within(dialog).getByLabelText(/^Categoria$/i), "food");
+    await userEvent.click(within(dialog).getByRole("button", { name: /^lan.ar$/i }));
 
     expect((await screen.findAllByText("R$ 145,00")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Dinner")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/expenses"),
+      expect.objectContaining({ method: "POST" }),
+    );
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(11);
@@ -298,3 +333,4 @@ describe("Movements panel", () => {
     });
   });
 });
+

@@ -104,8 +104,11 @@ describe("Dashboard view", () => {
     expect((await screen.findAllByText("R$ 155,00")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("R$ 50,00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("R$ 20,00").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Main Wallet").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lunch")).toBeInTheDocument();
+    expect(screen.getAllByText(/alimenta/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/raio-x de despesas/i)).toBeInTheDocument();
+    expect(screen.queryByText("Fixos")).not.toBeInTheDocument();
+    expect(screen.queryByText("Variaveis")).not.toBeInTheDocument();
+    expect(screen.queryByText("Parcelas")).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(5);

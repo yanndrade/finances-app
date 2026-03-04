@@ -118,13 +118,26 @@ export function AccountsView({
       </div>
 
       <section aria-label="Gerenciar contas" className="panel-card">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Carteira</p>
-            <h2 className="section-title">Mapa de contas</h2>
-            <p className="section-copy">
-              Gerencie seus saldos e a visibilidade das suas contas ativas.
-            </p>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="accounts-filters">
+            <div className="search-field">
+              <input
+                placeholder="Buscar conta..."
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="sort-field custom-select-wrapper">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+              >
+                <option value="name">Ordenar por Nome</option>
+                <option value="balance">Ordenar por Saldo</option>
+                <option value="type">Ordenar por Tipo</option>
+              </select>
+            </div>
           </div>
           <button
             className="primary-button"
@@ -132,27 +145,6 @@ export function AccountsView({
           >
             + Adicionar conta
           </button>
-        </div>
-
-        <div className="accounts-filters">
-          <div className="search-field">
-            <input
-              placeholder="Buscar conta..."
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <div className="sort-field custom-select-wrapper">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-            >
-              <option value="name">Ordenar por Nome</option>
-              <option value="balance">Ordenar por Saldo</option>
-              <option value="type">Ordenar por Tipo</option>
-            </select>
-          </div>
         </div>
 
         {filteredAndSortedAccounts.length === 0 ? (

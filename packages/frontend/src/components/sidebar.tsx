@@ -3,7 +3,6 @@ export type AppView =
   | "transactions"
   | "accounts"
   | "cards"
-  | "movements"
   | "settings";
 
 type SidebarProps = {
@@ -18,28 +17,23 @@ const NAV_ITEMS: Array<{
 }> = [
   {
     id: "dashboard",
-    label: "Dashboard",
-    description: "Visao mensal do caixa",
+    label: "Vis\u00E3o geral",
+    description: "Vis\u00E3o mensal do caixa",
   },
   {
     id: "transactions",
-    label: "Transacoes",
-    description: "Filtros, edicao e estorno",
+    label: "Transa\u00E7\u00F5es",
+    description: "Filtros, edi\u00E7\u00E3o e estorno",
   },
   {
     id: "accounts",
     label: "Contas",
-    description: "Saldo, criacao e ajustes",
+    description: "Saldo, cria\u00E7\u00E3o e ajustes",
   },
   {
     id: "cards",
-    label: "Cards",
+    label: "Cart\u00F5es",
     description: "Cadastro e ciclo de pagamento",
-  },
-  {
-    id: "movements",
-    label: "Movimentar",
-    description: "Entradas, saidas e transferencias",
   },
 ];
 
@@ -49,7 +43,7 @@ export function Sidebar({ activeView, onNavigate }: SidebarProps) {
       <div className="brand-block">
         <p className="eyebrow">Finances</p>
         <strong className="brand-title">Controle pessoal</strong>
-        <p className="sidebar-copy">Desktop focado em caixa, contas e movimentacoes.</p>
+        <p className="sidebar-copy">{"Desktop focado em caixa, contas e movimenta\u00E7\u00F5es."}</p>
       </div>
       <ul className="nav-list">
         {NAV_ITEMS.map((item) => (
@@ -75,9 +69,9 @@ export function Sidebar({ activeView, onNavigate }: SidebarProps) {
           onClick={() => onNavigate("settings")}
           type="button"
         >
-          <span className="nav-item__label">Configurações</span>
+          <span className="nav-item__label">{"Configura\u00E7\u00F5es"}</span>
           <span aria-hidden="true" className="nav-item__description">
-            Desenvolvimento e preferências
+            {"Desenvolvimento e prefer\u00EAncias"}
           </span>
         </button>
       </div>

@@ -19,6 +19,10 @@ class CardPurchaseNotFoundError(CardPurchaseServiceError):
     pass
 
 
+class InvoiceNotFoundError(CardPurchaseServiceError):
+    pass
+
+
 class CardPurchaseEventStore(Protocol):
     def create_schema(self) -> None: ...
     def append(self, event: NewEvent) -> int: ...
@@ -36,6 +40,11 @@ class CardPurchaseProjector(Protocol):
         *,
         card_id: str | None = None,
     ) -> list[dict[str, str | int]]: ...
+    def list_invoice_items(
+        self,
+        *,
+        invoice_id: str,
+    ) -> list[dict[str, str | int | None]]: ...
 
 
 class CardReader(Protocol):
@@ -110,6 +119,18 @@ class CardPurchaseService:
         self._sync_projections()
         return self._projector.list_invoices(card_id=card_id)
 
+    def list_invoice_items(
+        self,
+        *,
+        invoice_id: str,
+    ) -> list[dict[str, str | int | None]]:
+        self._sync_projections()
+        if not invoice_id.strip():
+            raise CardPurchaseServiceError("invoice_id is required.")
+        if self._find_invoice(invoice_id) is None:
+            raise InvoiceNotFoundError(f"Invoice '{invoice_id}' was not found.")
+        return self._projector.list_invoice_items(invoice_id=invoice_id)
+
     def _validate_payload(
         self,
         *,
@@ -162,6 +183,15 @@ class CardPurchaseService:
         for purchase in self._projector.list_card_purchases():
             if purchase["purchase_id"] == purchase_id:
                 return purchase
+        return None
+
+    def _find_invoice(
+        self,
+        invoice_id: str,
+    ) -> dict[str, str | int] | None:
+        for invoice in self._projector.list_invoices():
+            if invoice["invoice_id"] == invoice_id:
+                return invoice
         return None
 
     def _utc_now(self) -> str:
