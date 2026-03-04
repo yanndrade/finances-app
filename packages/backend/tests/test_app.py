@@ -666,6 +666,8 @@ def test_dashboard_endpoint_returns_monthly_summary_from_projections(tmp_path) -
         "total_expense": 20_00,
         "net_flow": 30_00,
         "current_balance": 155_00,
+        "pending_reimbursements_total": 0,
+        "pending_reimbursements": [],
         "recent_transactions": [
             {
                 "transaction_id": "trf-1:debit",
@@ -739,6 +741,134 @@ def test_dashboard_endpoint_returns_monthly_summary_from_projections(tmp_path) -
         ],
         "review_queue": [],
     }
+
+
+def test_reimbursements_are_pending_until_marked_received(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    expense_response = client.post(
+        "/api/expenses",
+        json={
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+    assert expense_response.status_code == 201
+
+    pending_dashboard = client.get("/api/dashboard", params={"month": "2026-03"})
+    assert pending_dashboard.status_code == 200
+    assert pending_dashboard.json()["pending_reimbursements_total"] == 20_00
+    assert pending_dashboard.json()["pending_reimbursements"] == [
+        {
+            "transaction_id": "tx-1",
+            "person_id": "friend",
+            "amount": 20_00,
+            "status": "pending",
+            "account_id": "acc-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "received_at": None,
+            "receipt_transaction_id": None,
+        }
+    ]
+
+    received_response = client.post(
+        "/api/reimbursements/tx-1/mark-received",
+        json={"received_at": "2026-03-05T10:00:00Z"},
+    )
+    assert received_response.status_code == 201
+    assert received_response.json() == {
+        "transaction_id": "tx-1",
+        "person_id": "friend",
+        "amount": 20_00,
+        "status": "received",
+        "account_id": "acc-1",
+        "occurred_at": "2026-03-02T12:02:00Z",
+        "received_at": "2026-03-05T10:00:00Z",
+        "receipt_transaction_id": "tx-1:reimbursement-receipt",
+    }
+
+    accounts_response = client.get("/api/accounts")
+    assert accounts_response.status_code == 200
+    assert accounts_response.json()[0]["current_balance"] == 100_00
+
+    transactions_response = client.get("/api/transactions", params={"account": "acc-1"})
+    assert transactions_response.status_code == 200
+    assert any(
+        transaction["transaction_id"] == "tx-1:reimbursement-receipt"
+        and transaction["type"] == "income"
+        and transaction["payment_method"] == "PIX"
+        and transaction["category_id"] == "reimbursement"
+        and transaction["person_id"] == "friend"
+        for transaction in transactions_response.json()
+    )
+
+    received_dashboard = client.get("/api/dashboard", params={"month": "2026-03"})
+    assert received_dashboard.status_code == 200
+    assert received_dashboard.json()["pending_reimbursements_total"] == 0
+    assert received_dashboard.json()["pending_reimbursements"] == []
+
+
+def test_card_purchases_can_generate_pending_reimbursements(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+
+    purchase_response = client.post(
+        "/api/card-purchases",
+        json={
+            "id": "purchase-1",
+            "purchase_date": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+    assert purchase_response.status_code == 201
+
+    pending_dashboard = client.get("/api/dashboard", params={"month": "2026-03"})
+    assert pending_dashboard.status_code == 200
+    assert pending_dashboard.json()["pending_reimbursements_total"] == 20_00
+    assert pending_dashboard.json()["pending_reimbursements"][0]["transaction_id"] == "purchase-1"
+    assert pending_dashboard.json()["pending_reimbursements"][0]["status"] == "pending"
+
+    received_response = client.post(
+        "/api/reimbursements/purchase-1/mark-received",
+        json={"received_at": "2026-03-05T10:00:00Z"},
+    )
+    assert received_response.status_code == 201
+    assert received_response.json()["status"] == "received"
+    assert received_response.json()["receipt_transaction_id"] == "purchase-1:reimbursement-receipt"
+
+    accounts_response = client.get("/api/accounts")
+    assert accounts_response.status_code == 200
+    assert accounts_response.json()[0]["current_balance"] == 120_00
 
 
 def test_dashboard_endpoint_rejects_invalid_month_format(tmp_path) -> None:
@@ -818,6 +948,8 @@ def test_dev_reset_endpoint_clears_projection_and_event_data(tmp_path) -> None:
         "total_expense": 0,
         "net_flow": 0,
         "current_balance": 0,
+        "pending_reimbursements_total": 0,
+        "pending_reimbursements": [],
         "recent_transactions": [],
         "spending_by_category": [],
         "previous_month": {

@@ -7,7 +7,9 @@ type DashboardViewProps = {
   accounts: AccountSummary[];
   transactions: TransactionSummary[];
   loading: boolean;
+  isSubmitting: boolean;
   month: string;
+  onMarkReimbursementReceived: (transactionId: string) => Promise<void>;
   onMonthChange: (month: string) => void;
   onNavigate: (view: AppView) => void;
   onOpenQuickAdd: () => void;
@@ -21,7 +23,9 @@ export function DashboardView({
   dashboard,
   accounts,
   loading,
+  isSubmitting,
   month,
+  onMarkReimbursementReceived,
   onMonthChange,
   onNavigate,
   onOpenQuickAdd,
@@ -57,6 +61,8 @@ export function DashboardView({
         <DashboardBento
           dashboard={dashboard}
           accounts={accounts}
+          isSubmitting={isSubmitting}
+          onMarkReimbursementReceived={onMarkReimbursementReceived}
           onNavigate={onNavigate}
           onOpenQuickAdd={onOpenQuickAdd}
         />

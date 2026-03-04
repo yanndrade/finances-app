@@ -172,3 +172,27 @@ class TransactionProjection:
         if self.direction is not None:
             data["direction"] = self.direction
         return data
+
+
+@dataclass(frozen=True)
+class ReimbursementProjection:
+    transaction_id: str
+    person_id: str
+    amount: int
+    status: str
+    account_id: str
+    occurred_at: str
+    received_at: str | None
+    receipt_transaction_id: str | None
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        return {
+            "transaction_id": self.transaction_id,
+            "person_id": self.person_id,
+            "amount": self.amount,
+            "status": self.status,
+            "account_id": self.account_id,
+            "occurred_at": self.occurred_at,
+            "received_at": self.received_at,
+            "receipt_transaction_id": self.receipt_transaction_id,
+        }

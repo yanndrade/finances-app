@@ -14,12 +14,25 @@ export type DailyBalancePoint = {
   balance: number;
 };
 
+export type PendingReimbursementSummary = {
+  transaction_id: string;
+  person_id: string;
+  amount: number;
+  status: "pending" | "received";
+  account_id: string;
+  occurred_at: string;
+  received_at: string | null;
+  receipt_transaction_id: string | null;
+};
+
 export type DashboardSummary = {
   month: string;
   total_income: number;
   total_expense: number;
   net_flow: number;
   current_balance: number;
+  pending_reimbursements_total?: number;
+  pending_reimbursements?: PendingReimbursementSummary[];
   recent_transactions: TransactionSummary[];
   spending_by_category: CategorySpending[];
   previous_month: PreviousMonthSummary;
@@ -152,6 +165,7 @@ export type CardPurchasePayload = {
   installmentsCount: number;
   categoryId: string;
   description?: string;
+  personId?: string;
 };
 
 export type InvoicePaymentPayload = {
@@ -159,6 +173,11 @@ export type InvoicePaymentPayload = {
   amountInCents: number;
   accountId: string;
   paidAt: string;
+};
+
+export type MarkReimbursementReceivedPayload = {
+  receivedAt: string;
+  accountId?: string;
 };
 
 export type TransactionFilters = {
@@ -315,6 +334,7 @@ export async function createCardPurchase(
       category_id: payload.categoryId,
       card_id: payload.cardId,
       description: payload.description || undefined,
+      person_id: payload.personId || undefined,
     }),
   });
 }
@@ -397,6 +417,22 @@ export async function voidTransaction(
       reason: reason || undefined,
     }),
   });
+}
+
+export async function markReimbursementReceived(
+  transactionId: string,
+  payload: MarkReimbursementReceivedPayload,
+): Promise<PendingReimbursementSummary> {
+  return requestJson<PendingReimbursementSummary>(
+    `/api/reimbursements/${encodeURIComponent(transactionId)}/mark-received`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        received_at: normalizeTimestampForApi(payload.receivedAt),
+        account_id: payload.accountId || undefined,
+      }),
+    },
+  );
 }
 
 export async function resetApplicationData(): Promise<{ status: string; message: string }> {
