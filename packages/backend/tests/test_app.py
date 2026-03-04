@@ -960,6 +960,150 @@ def test_mark_reimbursement_received_updates_projection_account_when_custom_acco
     )
 
 
+def test_recurring_rules_generate_monthly_pendings_without_affecting_balance(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    create_rule_response = client.post(
+        "/api/recurring-rules",
+        json={
+            "id": "rule-rent",
+            "name": "Rent",
+            "amount": 25_00,
+            "due_day": 5,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+        },
+    )
+
+    assert create_rule_response.status_code == 201
+    assert create_rule_response.json() == {
+        "rule_id": "rule-rent",
+        "name": "Rent",
+        "amount": 25_00,
+        "due_day": 5,
+        "account_id": "acc-1",
+        "payment_method": "PIX",
+        "category_id": "rent",
+        "description": "Apartment rent",
+        "is_active": True,
+    }
+
+    pendings_response = client.get("/api/pendings", params={"month": "2026-03"})
+    assert pendings_response.status_code == 200
+    assert pendings_response.json() == [
+        {
+            "pending_id": "rule-rent:2026-03",
+            "rule_id": "rule-rent",
+            "month": "2026-03",
+            "name": "Rent",
+            "amount": 25_00,
+            "due_date": "2026-03-05",
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+            "status": "pending",
+            "transaction_id": None,
+        }
+    ]
+
+    second_pendings_response = client.get("/api/pendings", params={"month": "2026-03"})
+    assert second_pendings_response.status_code == 200
+    assert second_pendings_response.json() == pendings_response.json()
+
+    accounts_response = client.get("/api/accounts")
+    assert accounts_response.status_code == 200
+    assert accounts_response.json()[0]["current_balance"] == 100_00
+
+    dashboard_response = client.get("/api/dashboard", params={"month": "2026-03"})
+    assert dashboard_response.status_code == 200
+    assert dashboard_response.json()["total_expense"] == 0
+    assert dashboard_response.json()["spending_by_category"] == []
+
+
+def test_confirm_pending_creates_expense_using_due_date(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_recurring_rule(
+        client,
+        {
+            "id": "rule-rent",
+            "name": "Rent",
+            "amount": 25_00,
+            "due_day": 5,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+        },
+    )
+
+    list_response = client.get("/api/pendings", params={"month": "2026-03"})
+    assert list_response.status_code == 200
+
+    confirm_response = client.post("/api/pendings/rule-rent:2026-03/confirm")
+    assert confirm_response.status_code == 201
+    assert confirm_response.json() == {
+        "pending_id": "rule-rent:2026-03",
+        "rule_id": "rule-rent",
+        "month": "2026-03",
+        "name": "Rent",
+        "amount": 25_00,
+        "due_date": "2026-03-05",
+        "account_id": "acc-1",
+        "payment_method": "PIX",
+        "category_id": "rent",
+        "description": "Apartment rent",
+        "status": "confirmed",
+        "transaction_id": "rule-rent:2026-03:expense",
+    }
+
+    duplicate_confirm_response = client.post("/api/pendings/rule-rent:2026-03/confirm")
+    assert duplicate_confirm_response.status_code == 409
+
+    transactions_response = client.get("/api/transactions", params={"account": "acc-1"})
+    assert transactions_response.status_code == 200
+    assert transactions_response.json() == [
+        {
+            "transaction_id": "rule-rent:2026-03:expense",
+            "occurred_at": "2026-03-05T00:00:00Z",
+            "type": "expense",
+            "amount": 25_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+            "person_id": None,
+            "status": "active",
+        }
+    ]
+
+    accounts_response = client.get("/api/accounts")
+    assert accounts_response.status_code == 200
+    assert accounts_response.json()[0]["current_balance"] == 75_00
+
+    dashboard_response = client.get("/api/dashboard", params={"month": "2026-03"})
+    assert dashboard_response.status_code == 200
+    assert dashboard_response.json()["total_expense"] == 25_00
+    assert dashboard_response.json()["spending_by_category"] == [
+        {
+            "category_id": "rent",
+            "total": 25_00,
+        }
+    ]
+
+
 def test_dashboard_endpoint_rejects_invalid_month_format(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
@@ -1647,5 +1791,11 @@ def _create_card_purchase(client: TestClient, payload: dict[str, str | int]) -> 
 
 def _create_expense(client: TestClient, payload: dict[str, str | int]) -> None:
     response = client.post("/api/expenses", json=payload)
+
+    assert response.status_code == 201
+
+
+def _create_recurring_rule(client: TestClient, payload: dict[str, str | int]) -> None:
+    response = client.post("/api/recurring-rules", json=payload)
 
     assert response.status_code == 201
