@@ -3,6 +3,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   ChevronRight,
+  HandCoins,
   Target,
   TrendingUp,
   Wallet,
@@ -18,6 +19,8 @@ import { formatCategoryName, formatCurrency } from "../../lib/format";
 type DashboardBentoProps = {
   dashboard: DashboardSummary;
   accounts: AccountSummary[];
+  isSubmitting: boolean;
+  onMarkReimbursementReceived: (transactionId: string) => Promise<void>;
   onNavigate: (view: "transactions") => void;
   onOpenQuickAdd: () => void;
 };
@@ -25,6 +28,8 @@ type DashboardBentoProps = {
 export function DashboardBento({
   dashboard,
   accounts: _accounts,
+  isSubmitting,
+  onMarkReimbursementReceived,
   onNavigate,
   onOpenQuickAdd,
 }: DashboardBentoProps) {
@@ -48,6 +53,8 @@ export function DashboardBento({
     "hsl(221 83% 53%)",
     "hsl(348 83% 47%)",
   ];
+  const pendingReimbursements = dashboard.pending_reimbursements ?? [];
+  const pendingReimbursementsTotal = dashboard.pending_reimbursements_total ?? 0;
 
   return (
     <div className="space-y-6">
@@ -74,6 +81,54 @@ export function DashboardBento({
           bgColor="bg-primary/5"
         />
       </div>
+
+      <Card className="rounded-[2rem] border-none bg-white shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-amber-100 p-2">
+                <HandCoins className="h-5 w-5 text-amber-700" />
+              </div>
+              <CardTitle className="text-lg font-semibold">Reembolsos pendentes</CardTitle>
+            </div>
+            <span className="text-sm font-bold text-amber-700">
+              {formatCurrency(pendingReimbursementsTotal)}
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {pendingReimbursements.length === 0 ? (
+            <p className="text-sm italic text-muted-foreground">
+              Nenhum valor pendente para receber no momento.
+            </p>
+          ) : (
+            pendingReimbursements.slice(0, 5).map((reimbursement) => (
+              <div
+                key={reimbursement.transaction_id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50/70 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-amber-900">
+                    {reimbursement.person_id}
+                  </p>
+                  <p className="text-xs text-amber-700">
+                    {formatCurrency(reimbursement.amount)} {"\u2022"}{" "}
+                    {reimbursement.occurred_at.split("T")[0]}
+                  </p>
+                </div>
+                <Button
+                  onClick={() => void onMarkReimbursementReceived(reimbursement.transaction_id)}
+                  disabled={isSubmitting}
+                  size="sm"
+                  className="rounded-xl bg-amber-600 text-white hover:bg-amber-700"
+                >
+                  Marcar recebido
+                </Button>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <Card className="overflow-hidden rounded-[2rem] border-none bg-white shadow-sm lg:col-span-4">

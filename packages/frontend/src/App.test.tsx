@@ -201,6 +201,75 @@ function installAppFetchMock(initialState?: {
       return new Response(JSON.stringify(state.transactions));
     }
 
+    if (
+      url.includes("/api/reimbursements/") &&
+      url.endsWith("/mark-received") &&
+      method === "POST"
+    ) {
+      const reimbursementId = decodeURIComponent(
+        url.split("/api/reimbursements/")[1]?.replace("/mark-received", "") ?? "",
+      );
+      const payload = JSON.parse(String(init?.body)) as {
+        received_at: string;
+        account_id?: string;
+      };
+      const pendingReimbursements = state.dashboard.pending_reimbursements ?? [];
+      const reimbursement = pendingReimbursements.find(
+        (item) => item.transaction_id === reimbursementId,
+      );
+
+      if (!reimbursement) {
+        return new Response("Reimbursement not found", { status: 404 });
+      }
+
+      const accountId = payload.account_id ?? reimbursement.account_id;
+      const receiptTransactionId = `${reimbursementId}:reimbursement-receipt`;
+      const received = {
+        ...reimbursement,
+        status: "received",
+        account_id: accountId,
+        received_at: payload.received_at,
+        receipt_transaction_id: receiptTransactionId,
+      };
+      state.dashboard.pending_reimbursements = pendingReimbursements.filter(
+        (item) => item.transaction_id !== reimbursementId,
+      );
+      state.dashboard.pending_reimbursements_total = (
+        state.dashboard.pending_reimbursements ?? []
+      ).reduce((sum, item) => sum + item.amount, 0);
+      state.dashboard.total_income += reimbursement.amount;
+      state.dashboard.net_flow += reimbursement.amount;
+      state.dashboard.current_balance += reimbursement.amount;
+
+      state.accounts = state.accounts.map((account) => {
+        if (account.account_id !== accountId) {
+          return account;
+        }
+
+        return {
+          ...account,
+          current_balance: account.current_balance + reimbursement.amount,
+        };
+      });
+
+      const receiptTransaction: TransactionSummary = {
+        transaction_id: receiptTransactionId,
+        occurred_at: payload.received_at,
+        type: "income",
+        amount: reimbursement.amount,
+        account_id: accountId,
+        payment_method: "PIX",
+        category_id: "reimbursement",
+        description: `Reembolso recebido de ${reimbursement.person_id}`,
+        person_id: reimbursement.person_id,
+        status: "active",
+      };
+      state.transactions = [receiptTransaction, ...state.transactions];
+      state.dashboard.recent_transactions = [receiptTransaction, ...state.dashboard.recent_transactions];
+
+      return new Response(JSON.stringify(received), { status: 201 });
+    }
+
     if (url.endsWith("/api/dev/reset") && method === "POST") {
       state.accounts = [];
       state.cards = [];
@@ -210,6 +279,8 @@ function installAppFetchMock(initialState?: {
         total_expense: 0,
         net_flow: 0,
         current_balance: 0,
+        pending_reimbursements_total: 0,
+        pending_reimbursements: [],
         recent_transactions: [],
         spending_by_category: [],
         previous_month: { total_income: 0, total_expense: 0, net_flow: 0 },
@@ -477,6 +548,52 @@ describe("App", () => {
     expect(
       await screen.findByRole("region", { name: /historico e filtros/i }),
     ).toBeInTheDocument();
+  });
+
+  it("marks a pending reimbursement as received from dashboard", async () => {
+    const fetchMock = installAppFetchMock({
+      dashboard: buildDashboard({
+        pending_reimbursements_total: 2_500,
+        pending_reimbursements: [
+          {
+            transaction_id: "tx-1",
+            person_id: "Ana",
+            amount: 2_500,
+            status: "pending",
+            account_id: "acc-1",
+            occurred_at: "2026-03-03T12:00:00Z",
+            received_at: null,
+            receipt_transaction_id: null,
+          },
+        ],
+      }),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    expect(await screen.findByText(/reembolsos pendentes/i)).toBeInTheDocument();
+    expect(screen.getByText("Ana")).toBeInTheDocument();
+    expect(screen.getAllByText("R$ 25,00").length).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole("button", { name: /marcar recebido/i }));
+
+    expect(
+      await screen.findByRole("status", { name: /reembolso confirmado com sucesso/i }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText("Ana")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/nenhum valor pendente/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return String(url).includes("/api/reimbursements/tx-1/mark-received") &&
+            init?.method === "POST";
+        }),
+      ).toBe(true);
+    });
   });
 
   it("opens quick add with controlled category selection", async () => {
@@ -933,4 +1050,3 @@ function allocateMockInvoices({
     });
   });
 }
-

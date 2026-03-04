@@ -32,6 +32,13 @@ from finance_app.application.invoice_payments import (
     InvoicePaymentService,
     InvoicePaymentServiceError,
 )
+from finance_app.application.reimbursements import (
+    InvalidReimbursementDateError,
+    ReimbursementAlreadyReceivedError,
+    ReimbursementNotFoundError,
+    ReimbursementService,
+    ReimbursementServiceError,
+)
 from finance_app.application.transactions import (
     InvalidTransactionDateError,
     TransactionAlreadyExistsError,
@@ -91,6 +98,7 @@ class CreateCardPurchaseRequest(BaseModel):
     category_id: str = Field(min_length=1)
     card_id: str = Field(min_length=1)
     description: str | None = None
+    person_id: str | None = None
 
 
 class CreateInvoicePaymentRequest(BaseModel):
@@ -126,6 +134,11 @@ class VoidTransactionRequest(BaseModel):
     reason: str | None = None
 
 
+class MarkReimbursementReceivedRequest(BaseModel):
+    received_at: str
+    account_id: str | None = Field(default=None, min_length=1)
+
+
 class CreateTransferRequest(BaseModel):
     id: str = Field(min_length=1)
     occurred_at: str
@@ -140,6 +153,7 @@ def build_router(
     card_service: CardService,
     card_purchase_service: CardPurchaseService,
     invoice_payment_service: InvoicePaymentService,
+    reimbursement_service: ReimbursementService,
     transaction_service: TransactionService,
     transfer_service: TransferService,
     event_store: EventStore,
@@ -279,6 +293,7 @@ def build_router(
                 category_id=payload.category_id,
                 card_id=payload.card_id,
                 description=payload.description,
+                person_id=payload.person_id,
             )
         except (AccountNotFoundError, CardNotFoundError) as exc:
             raise HTTPException(
@@ -504,6 +519,46 @@ def build_router(
         except TransactionNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
+    @router.post(
+        "/api/reimbursements/{transaction_id}/mark-received",
+        status_code=status.HTTP_201_CREATED,
+    )
+    def mark_reimbursement_received(
+        transaction_id: str,
+        payload: MarkReimbursementReceivedRequest,
+    ) -> dict[str, str | int | None]:
+        try:
+            return reimbursement_service.mark_received(
+                transaction_id,
+                received_at=payload.received_at,
+                account_id=payload.account_id,
+            )
+        except ReimbursementNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except AccountNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except ReimbursementAlreadyReceivedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+        except InvalidReimbursementDateError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+        except ReimbursementServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
     @router.post("/api/transfers", status_code=status.HTTP_201_CREATED)
     def create_transfer(
         payload: CreateTransferRequest,
@@ -570,6 +625,11 @@ def create_app(
         projector=projector,
         account_reader=account_service,
     )
+    reimbursement_service = ReimbursementService(
+        event_store=event_store,
+        projector=projector,
+        account_reader=account_service,
+    )
     transaction_service = TransactionService(
         event_store=event_store,
         projector=projector,
@@ -599,6 +659,7 @@ def create_app(
             card_service,
             card_purchase_service,
             invoice_payment_service,
+            reimbursement_service,
             transaction_service,
             transfer_service,
             event_store,

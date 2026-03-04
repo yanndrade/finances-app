@@ -26,6 +26,7 @@ from finance_app.domain.projections import (
     CardPurchaseProjection,
     InvoiceItemProjection,
     InvoiceProjection,
+    ReimbursementProjection,
     TransactionProjection,
 )
 from finance_app.infrastructure.db import get_engine
@@ -135,6 +136,19 @@ class TransactionProjectionRecord(ProjectionBase):
     status: Mapped[str] = mapped_column(String, nullable=False, index=True)
     transfer_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     direction: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class ReimbursementProjectionRecord(ProjectionBase):
+    __tablename__ = "reimbursements"
+
+    transaction_id: Mapped[str] = mapped_column(String, primary_key=True)
+    person_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, index=True, default="pending")
+    account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    occurred_at: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    received_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    receipt_transaction_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
 
 class Projector:
@@ -449,6 +463,43 @@ class Projector:
             for row in rows
         ]
 
+    def list_reimbursements(
+        self,
+        *,
+        status: str | None = None,
+        person_id: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                query = session.query(ReimbursementProjectionRecord)
+                if status is not None:
+                    query = query.filter(ReimbursementProjectionRecord.status == status)
+                if person_id is not None:
+                    query = query.filter(ReimbursementProjectionRecord.person_id == person_id)
+
+                rows = (
+                    query.order_by(
+                        ReimbursementProjectionRecord.occurred_at.desc(),
+                        ReimbursementProjectionRecord.transaction_id.desc(),
+                    )
+                    .all()
+                )
+
+        return [
+            ReimbursementProjection(
+                transaction_id=row.transaction_id,
+                person_id=row.person_id,
+                amount=row.amount,
+                status=row.status,
+                account_id=row.account_id,
+                occurred_at=row.occurred_at,
+                received_at=row.received_at,
+                receipt_transaction_id=row.receipt_transaction_id,
+            ).to_dict()
+            for row in rows
+        ]
+
     def get_dashboard_summary(self, *, month: str) -> dict[str, object]:
         with self._lock:
             self.bootstrap()
@@ -499,6 +550,12 @@ class Projector:
                     .order_by(
                         CardPurchaseInstallmentRecord.installment_id.asc(),
                     )
+                    .all()
+                )
+                pending_reimbursement_rows: Sequence[ReimbursementProjectionRecord] = (
+                    session.query(ReimbursementProjectionRecord)
+                    .filter(ReimbursementProjectionRecord.status == "pending")
+                    .order_by(ReimbursementProjectionRecord.occurred_at.desc())
                     .all()
                 )
 
@@ -578,6 +635,19 @@ class Projector:
             ).to_dict()
             for row in review_rows
         ]
+        pending_reimbursements = [
+            ReimbursementProjection(
+                transaction_id=row.transaction_id,
+                person_id=row.person_id,
+                amount=row.amount,
+                status=row.status,
+                account_id=row.account_id,
+                occurred_at=row.occurred_at,
+                received_at=row.received_at,
+                receipt_transaction_id=row.receipt_transaction_id,
+            ).to_dict()
+            for row in pending_reimbursement_rows
+        ]
 
         return {
             "month": month,
@@ -585,6 +655,10 @@ class Projector:
             "total_expense": total_expense,
             "net_flow": total_income - total_expense,
             "current_balance": int(balance_total or 0),
+            "pending_reimbursements_total": sum(
+                reimbursement["amount"] for reimbursement in pending_reimbursements
+            ),
+            "pending_reimbursements": pending_reimbursements,
             "recent_transactions": recent_transactions,
             "spending_by_category": spending_by_category,
             "previous_month": {
@@ -638,6 +712,10 @@ class Projector:
 
         if event.type == "TransactionVoided":
             self._apply_transaction_voided(session, event.payload)
+            return
+
+        if event.type == "ReimbursementReceived":
+            self._apply_reimbursement_received(session, event.payload)
             return
 
         if event.type == "TransferCreated":
@@ -782,6 +860,14 @@ class Projector:
                 due_date=first_allocation.due_date,
             )
         )
+        self._sync_reimbursement_from_card_purchase(
+            session,
+            purchase_id=purchase_id,
+            person_id=_optional_string(payload.get("person_id")),
+            amount=int(payload["amount"]),
+            account_id=card.payment_account_id,
+            purchase_date=str(payload["purchase_date"]),
+        )
 
         for allocation in visible_allocations:
             installment_id = f"{purchase_id}:{allocation.installment_number}"
@@ -920,6 +1006,16 @@ class Projector:
                 status=str(payload.get("status", "active")),
             ),
         )
+        self._sync_reimbursement_from_transaction(
+            session,
+            transaction_id=transaction_id,
+            transaction_type=str(payload["type"]),
+            person_id=_optional_string(payload.get("person_id")),
+            amount=int(payload["amount"]),
+            status=str(payload.get("status", "active")),
+            account_id=str(payload["account_id"]),
+            occurred_at=str(payload["occurred_at"]),
+        )
 
     def _apply_transaction_updated(
         self,
@@ -975,6 +1071,16 @@ class Projector:
         existing.status = new_status
         existing.transfer_id = _optional_string(payload.get("transfer_id"))
         existing.direction = _optional_string(payload.get("direction"))
+        self._sync_reimbursement_from_transaction(
+            session,
+            transaction_id=transaction_id,
+            transaction_type=new_type,
+            person_id=existing.person_id,
+            amount=existing.amount,
+            status=existing.status,
+            account_id=existing.account_id,
+            occurred_at=existing.occurred_at,
+        )
 
     def _apply_transaction_voided(
         self,
@@ -993,6 +1099,33 @@ class Projector:
             delta=-self._transaction_balance_impact(existing),
         )
         existing.status = "voided"
+        self._sync_reimbursement_from_transaction(
+            session,
+            transaction_id=transaction_id,
+            transaction_type=existing.type,
+            person_id=existing.person_id,
+            amount=existing.amount,
+            status=existing.status,
+            account_id=existing.account_id,
+            occurred_at=existing.occurred_at,
+        )
+
+    def _apply_reimbursement_received(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        transaction_id = str(payload["transaction_id"])
+        receivable = session.get(ReimbursementProjectionRecord, transaction_id)
+        if receivable is None:
+            return
+
+        receivable.status = "received"
+        receivable.account_id = str(payload.get("account_id", receivable.account_id))
+        receivable.received_at = str(payload["received_at"])
+        receivable.receipt_transaction_id = _optional_string(
+            payload.get("receipt_transaction_id")
+        )
 
     def _apply_transfer_created(
         self,
@@ -1051,6 +1184,91 @@ class Projector:
                 account_id=str(payload["to_account_id"]),
                 delta=amount,
             )
+
+    def _sync_reimbursement_from_transaction(
+        self,
+        session: Session,
+        *,
+        transaction_id: str,
+        transaction_type: str,
+        person_id: str | None,
+        amount: int,
+        status: str,
+        account_id: str,
+        occurred_at: str,
+    ) -> None:
+        existing = session.get(ReimbursementProjectionRecord, transaction_id)
+        should_track = (
+            transaction_type == "expense"
+            and person_id is not None
+            and person_id.strip() != ""
+            and status == "active"
+        )
+
+        if not should_track:
+            if existing is not None and existing.status != "received":
+                session.delete(existing)
+            return
+
+        if existing is None:
+            session.add(
+                ReimbursementProjectionRecord(
+                    transaction_id=transaction_id,
+                    person_id=person_id,
+                    amount=amount,
+                    status="pending",
+                    account_id=account_id,
+                    occurred_at=occurred_at,
+                    received_at=None,
+                    receipt_transaction_id=None,
+                )
+            )
+            return
+
+        if existing.status == "received":
+            return
+
+        existing.person_id = person_id
+        existing.amount = amount
+        existing.account_id = account_id
+        existing.occurred_at = occurred_at
+
+    def _sync_reimbursement_from_card_purchase(
+        self,
+        session: Session,
+        *,
+        purchase_id: str,
+        person_id: str | None,
+        amount: int,
+        account_id: str,
+        purchase_date: str,
+    ) -> None:
+        if person_id is None or person_id.strip() == "":
+            return
+
+        existing = session.get(ReimbursementProjectionRecord, purchase_id)
+        if existing is None:
+            session.add(
+                ReimbursementProjectionRecord(
+                    transaction_id=purchase_id,
+                    person_id=person_id,
+                    amount=amount,
+                    status="pending",
+                    account_id=account_id,
+                    occurred_at=purchase_date,
+                    received_at=None,
+                    receipt_transaction_id=None,
+                )
+            )
+            return
+
+        if existing.status == "received":
+            return
+
+        existing.person_id = person_id
+        existing.amount = amount
+        existing.account_id = account_id
+        existing.occurred_at = purchase_date
 
     def _projection_schema_requires_rebuild(self) -> bool:
         inspector = inspect(self._engine)
@@ -1173,6 +1391,25 @@ class Projector:
             "direction",
         }
         if transaction_columns != expected_transaction_columns:
+            return True
+
+        if "reimbursements" not in table_names:
+            return True
+
+        reimbursement_columns = self._safe_column_names(inspector, "reimbursements")
+        if reimbursement_columns is None:
+            return True
+        expected_reimbursement_columns = {
+            "transaction_id",
+            "person_id",
+            "amount",
+            "status",
+            "account_id",
+            "occurred_at",
+            "received_at",
+            "receipt_transaction_id",
+        }
+        if reimbursement_columns != expected_reimbursement_columns:
             return True
 
         return False

@@ -16,6 +16,7 @@ import {
   fetchDashboardSummary,
   fetchInvoices,
   fetchTransactions,
+  markReimbursementReceived,
   payInvoice,
   resetApplicationData,
   updateAccount,
@@ -312,6 +313,18 @@ export function App() {
     );
   }
 
+  async function handleMarkReimbursementReceived(
+    transactionId: string,
+  ): Promise<void> {
+    await runMutation(
+      () =>
+        markReimbursementReceived(transactionId, {
+          receivedAt: new Date().toISOString(),
+        }),
+      "Reembolso confirmado com sucesso.",
+    );
+  }
+
   async function handleResetAllData(): Promise<void> {
     if (!globalThis.confirm("Isso vai apagar todos os dados da aplicacao. Deseja continuar?")) {
       return;
@@ -342,8 +355,10 @@ export function App() {
           <DashboardView
             accounts={accounts}
             dashboard={dashboard}
+            isSubmitting={isSubmitting}
             loading={loading}
             month={selectedMonth}
+            onMarkReimbursementReceived={handleMarkReimbursementReceived}
             onMonthChange={setSelectedMonth}
             onNavigate={setActiveView}
             onOpenQuickAdd={() => setIsQuickAddOpen(true)}

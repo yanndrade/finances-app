@@ -62,6 +62,7 @@ export function QuickAddComposer({
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
+  const [personId, setPersonId] = useState("");
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [keepOpen, setKeepOpen] = useState(false);
@@ -138,6 +139,7 @@ export function QuickAddComposer({
     setTransferMode("internal");
     setAmount("");
     setDescription("");
+    setPersonId("");
     setCategoryId("");
     setKeepOpen(false);
     setToAccountId("");
@@ -199,16 +201,22 @@ export function QuickAddComposer({
           });
         }
       } else if (entryType === "expense" && expensePaymentMode === "CARD") {
-        await onSubmitCardPurchase({
+        const cardPurchasePayload: CardPurchasePayload = {
           description,
           amountInCents,
           cardId,
           categoryId: categoryId || "other",
           purchaseDate: `${date}T12:00:00Z`,
           installmentsCount: parseInt(installments, 10) || 1,
-        });
+        };
+        const trimmedPersonId = personId.trim();
+        if (trimmedPersonId.length > 0) {
+          cardPurchasePayload.personId = trimmedPersonId;
+        }
+
+        await onSubmitCardPurchase(cardPurchasePayload);
       } else {
-        await onSubmitTransaction({
+        const transactionPayload: CashTransactionPayload & { forceKeepContext?: boolean } = {
           type: entryType,
           description,
           amountInCents,
@@ -220,7 +228,13 @@ export function QuickAddComposer({
           categoryId: categoryId || "other",
           occurredAt: `${date}T12:00:00Z`,
           forceKeepContext: keepOpen,
-        });
+        };
+        const trimmedPersonId = personId.trim();
+        if (trimmedPersonId.length > 0) {
+          transactionPayload.personId = trimmedPersonId;
+        }
+
+        await onSubmitTransaction(transactionPayload);
       }
 
       if (keepOpen && entryType !== "transfer" && expensePaymentMode !== "CARD") {
@@ -294,6 +308,19 @@ export function QuickAddComposer({
                 onChange={(event) => setDescription(event.target.value)}
               />
             </div>
+
+            {entryType === "expense" ? (
+              <div className="col-span-2 space-y-2 md:col-span-1">
+                <Label htmlFor="quick-add-person">Pessoa relacionada</Label>
+                <Input
+                  id="quick-add-person"
+                  className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
+                  placeholder="Opcional"
+                  value={personId}
+                  onChange={(event) => setPersonId(event.target.value)}
+                />
+              </div>
+            ) : null}
 
             {entryType === "expense" ? (
               <div className="col-span-2 space-y-2 md:col-span-1">

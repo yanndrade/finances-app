@@ -73,6 +73,7 @@ class CardPurchaseService:
         category_id: str,
         card_id: str,
         description: str | None = None,
+        person_id: str | None = None,
     ) -> dict[str, str | int | None]:
         self._sync_projections()
         if self._find_card_purchase(purchase_id) is not None:
@@ -97,6 +98,7 @@ class CardPurchaseService:
             "category_id": category_id,
             "card_id": card_id,
             "description": description,
+            "person_id": person_id,
         }
 
         self._append_event("CardPurchaseCreated", payload)
