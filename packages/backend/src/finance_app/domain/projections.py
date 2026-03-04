@@ -196,3 +196,61 @@ class ReimbursementProjection:
             "received_at": self.received_at,
             "receipt_transaction_id": self.receipt_transaction_id,
         }
+
+
+@dataclass(frozen=True)
+class RecurringRuleProjection:
+    rule_id: str
+    name: str
+    amount: int
+    due_day: int
+    account_id: str
+    payment_method: str
+    category_id: str
+    description: str | None
+    is_active: bool
+
+    def to_dict(self) -> dict[str, str | int | bool | None]:
+        return {
+            "rule_id": self.rule_id,
+            "name": self.name,
+            "amount": self.amount,
+            "due_day": self.due_day,
+            "account_id": self.account_id,
+            "payment_method": self.payment_method,
+            "category_id": self.category_id,
+            "description": self.description,
+            "is_active": self.is_active,
+        }
+
+
+@dataclass(frozen=True)
+class PendingProjection:
+    pending_id: str
+    rule_id: str
+    month: str
+    name: str
+    amount: int
+    due_date: str
+    account_id: str
+    payment_method: str
+    category_id: str
+    description: str | None
+    status: str
+    transaction_id: str | None
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        return {
+            "pending_id": self.pending_id,
+            "rule_id": self.rule_id,
+            "month": self.month,
+            "name": self.name,
+            "amount": self.amount,
+            "due_date": self.due_date,
+            "account_id": self.account_id,
+            "payment_method": self.payment_method,
+            "category_id": self.category_id,
+            "description": self.description,
+            "status": self.status,
+            "transaction_id": self.transaction_id,
+        }

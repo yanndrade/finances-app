@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import date
+from datetime import datetime
 from threading import RLock
 
 from sqlalchemy import Boolean
@@ -26,6 +28,8 @@ from finance_app.domain.projections import (
     CardPurchaseProjection,
     InvoiceItemProjection,
     InvoiceProjection,
+    PendingProjection,
+    RecurringRuleProjection,
     ReimbursementProjection,
     TransactionProjection,
 )
@@ -149,6 +153,38 @@ class ReimbursementProjectionRecord(ProjectionBase):
     occurred_at: Mapped[str] = mapped_column(String, nullable=False, index=True)
     received_at: Mapped[str | None] = mapped_column(String, nullable=True)
     receipt_transaction_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+
+
+class RecurringRuleProjectionRecord(ProjectionBase):
+    __tablename__ = "recurring_rules"
+
+    rule_id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    due_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    payment_method: Mapped[str] = mapped_column(String, nullable=False)
+    category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class PendingProjectionRecord(ProjectionBase):
+    __tablename__ = "pendings"
+
+    pending_id: Mapped[str] = mapped_column(String, primary_key=True)
+    rule_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    month: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    due_date: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    payment_method: Mapped[str] = mapped_column(String, nullable=False)
+    category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, index=True, default="pending")
+    transaction_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    confirmed_at: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Projector:
@@ -500,6 +536,72 @@ class Projector:
             for row in rows
         ]
 
+    def list_recurring_rules(
+        self,
+        *,
+        is_active: bool | None = None,
+    ) -> list[dict[str, str | int | bool | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                query = session.query(RecurringRuleProjectionRecord)
+                if is_active is not None:
+                    query = query.filter(RecurringRuleProjectionRecord.is_active == is_active)
+
+                rows = query.order_by(RecurringRuleProjectionRecord.rule_id.asc()).all()
+
+        return [
+            RecurringRuleProjection(
+                rule_id=row.rule_id,
+                name=row.name,
+                amount=row.amount,
+                due_day=row.due_day,
+                account_id=row.account_id,
+                payment_method=row.payment_method,
+                category_id=row.category_id,
+                description=row.description,
+                is_active=row.is_active,
+            ).to_dict()
+            for row in rows
+        ]
+
+    def list_pendings(
+        self,
+        *,
+        month: str,
+    ) -> list[dict[str, str | int | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory.begin() as session:
+                self._ensure_month_pendings(session, month=month)
+                session.flush()
+                rows = (
+                    session.query(PendingProjectionRecord)
+                    .filter(PendingProjectionRecord.month == month)
+                    .order_by(
+                        PendingProjectionRecord.due_date.asc(),
+                        PendingProjectionRecord.pending_id.asc(),
+                    )
+                    .all()
+                )
+                pendings = [self._pending_to_dict(row) for row in rows]
+
+        return pendings
+
+    def get_pending(self, pending_id: str) -> dict[str, str | int | None] | None:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory.begin() as session:
+                month = self._pending_month_from_id(pending_id)
+                if month is not None:
+                    self._ensure_month_pendings(session, month=month)
+                    session.flush()
+                row = session.get(PendingProjectionRecord, pending_id)
+                if row is None:
+                    return None
+
+                return self._pending_to_dict(row)
+
     def get_dashboard_summary(self, *, month: str) -> dict[str, object]:
         with self._lock:
             self.bootstrap()
@@ -698,6 +800,10 @@ class Projector:
             self._apply_card_purchase_created(session, event.payload)
             return
 
+        if event.type == "RecurringRuleCreated":
+            self._apply_recurring_rule_created(session, event.payload)
+            return
+
         if event.type == "InvoicePaid":
             self._apply_invoice_paid(session, event.payload)
             return
@@ -716,6 +822,10 @@ class Projector:
 
         if event.type == "ReimbursementReceived":
             self._apply_reimbursement_received(session, event.payload)
+            return
+
+        if event.type == "PendingConfirmed":
+            self._apply_pending_confirmed(session, event.payload)
             return
 
         if event.type == "TransferCreated":
@@ -892,6 +1002,30 @@ class Projector:
                 card_id=card_id,
                 allocation=allocation,
             )
+
+    def _apply_recurring_rule_created(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        rule_id = str(payload["id"])
+        existing = session.get(RecurringRuleProjectionRecord, rule_id)
+        if existing is not None:
+            return
+
+        session.add(
+            RecurringRuleProjectionRecord(
+                rule_id=rule_id,
+                name=str(payload["name"]),
+                amount=int(payload["amount"]),
+                due_day=int(payload["due_day"]),
+                account_id=str(payload["account_id"]),
+                payment_method=str(payload["payment_method"]),
+                category_id=str(payload["category_id"]),
+                description=_optional_string(payload.get("description")),
+                is_active=bool(payload.get("is_active", True)),
+            )
+        )
 
     def _apply_invoice_item(
         self,
@@ -1127,6 +1261,27 @@ class Projector:
             payload.get("receipt_transaction_id")
         )
 
+    def _apply_pending_confirmed(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        pending_id = str(payload["pending_id"])
+        pending = session.get(PendingProjectionRecord, pending_id)
+
+        if pending is None:
+            month = self._pending_month_from_id(pending_id)
+            if month is not None:
+                self._ensure_month_pendings(session, month=month)
+                pending = session.get(PendingProjectionRecord, pending_id)
+
+        if pending is None or pending.status == "confirmed":
+            return
+
+        pending.status = "confirmed"
+        pending.transaction_id = _optional_string(payload.get("transaction_id"))
+        pending.confirmed_at = _optional_string(payload.get("confirmed_at"))
+
     def _apply_transfer_created(
         self,
         session: Session,
@@ -1270,6 +1425,73 @@ class Projector:
         existing.account_id = account_id
         existing.occurred_at = purchase_date
 
+    def _ensure_month_pendings(self, session: Session, *, month: str) -> None:
+        rows: Sequence[RecurringRuleProjectionRecord] = (
+            session.query(RecurringRuleProjectionRecord)
+            .filter(RecurringRuleProjectionRecord.is_active.is_(True))
+            .order_by(RecurringRuleProjectionRecord.rule_id.asc())
+            .all()
+        )
+
+        for row in rows:
+            pending_id = f"{row.rule_id}:{month}"
+            if session.get(PendingProjectionRecord, pending_id) is not None:
+                continue
+
+            session.add(
+                PendingProjectionRecord(
+                    pending_id=pending_id,
+                    rule_id=row.rule_id,
+                    month=month,
+                    name=row.name,
+                    amount=row.amount,
+                    due_date=self._due_date_for_month(month, row.due_day),
+                    account_id=row.account_id,
+                    payment_method=row.payment_method,
+                    category_id=row.category_id,
+                    description=row.description,
+                    status="pending",
+                    transaction_id=None,
+                    confirmed_at=None,
+                )
+            )
+
+    def _pending_to_dict(
+        self,
+        row: PendingProjectionRecord,
+    ) -> dict[str, str | int | None]:
+        return PendingProjection(
+            pending_id=row.pending_id,
+            rule_id=row.rule_id,
+            month=row.month,
+            name=row.name,
+            amount=row.amount,
+            due_date=row.due_date,
+            account_id=row.account_id,
+            payment_method=row.payment_method,
+            category_id=row.category_id,
+            description=row.description,
+            status=row.status,
+            transaction_id=row.transaction_id,
+        ).to_dict()
+
+    def _pending_month_from_id(self, pending_id: str) -> str | None:
+        parts = pending_id.rsplit(":", 1)
+        if len(parts) != 2:
+            return None
+
+        month = parts[1]
+        try:
+            datetime.strptime(month, "%Y-%m")
+        except ValueError:
+            return None
+
+        return month
+
+    def _due_date_for_month(self, month: str, due_day: int) -> str:
+        parsed_month = datetime.strptime(month, "%Y-%m")
+        return date(parsed_month.year, parsed_month.month, due_day).isoformat()
+
     def _projection_schema_requires_rebuild(self) -> bool:
         inspector = inspect(self._engine)
         table_names = set(inspector.get_table_names())
@@ -1410,6 +1632,50 @@ class Projector:
             "receipt_transaction_id",
         }
         if reimbursement_columns != expected_reimbursement_columns:
+            return True
+
+        if "recurring_rules" not in table_names:
+            return True
+
+        recurring_rule_columns = self._safe_column_names(inspector, "recurring_rules")
+        if recurring_rule_columns is None:
+            return True
+        expected_recurring_rule_columns = {
+            "rule_id",
+            "name",
+            "amount",
+            "due_day",
+            "account_id",
+            "payment_method",
+            "category_id",
+            "description",
+            "is_active",
+        }
+        if recurring_rule_columns != expected_recurring_rule_columns:
+            return True
+
+        if "pendings" not in table_names:
+            return True
+
+        pending_columns = self._safe_column_names(inspector, "pendings")
+        if pending_columns is None:
+            return True
+        expected_pending_columns = {
+            "pending_id",
+            "rule_id",
+            "month",
+            "name",
+            "amount",
+            "due_date",
+            "account_id",
+            "payment_method",
+            "category_id",
+            "description",
+            "status",
+            "transaction_id",
+            "confirmed_at",
+        }
+        if pending_columns != expected_pending_columns:
             return True
 
         return False

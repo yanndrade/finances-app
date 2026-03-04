@@ -1593,6 +1593,141 @@ def test_projector_summarizes_dashboard_month_from_projections(tmp_path: Path) -
     }
 
 
+def test_projector_generates_monthly_pendings_and_confirms_them_from_events(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="RecurringRuleCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "rule-rent",
+                "name": "Rent",
+                "amount": 25_00,
+                "due_day": 5,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "rent",
+                "description": "Apartment rent",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied_before_confirmation = projector.run()
+    march_pendings = projector.list_pendings(month="2026-03")
+    march_pendings_second_read = projector.list_pendings(month="2026-03")
+
+    assert applied_before_confirmation == 2
+    assert march_pendings == [
+        {
+            "pending_id": "rule-rent:2026-03",
+            "rule_id": "rule-rent",
+            "month": "2026-03",
+            "name": "Rent",
+            "amount": 25_00,
+            "due_date": "2026-03-05",
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+            "status": "pending",
+            "transaction_id": None,
+        }
+    ]
+    assert march_pendings_second_read == march_pendings
+
+    append_event.execute(
+        NewEvent(
+            type="PendingConfirmed",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "pending_id": "rule-rent:2026-03",
+                "transaction_id": "rule-rent:2026-03:expense",
+                "confirmed_at": "2026-03-02T12:02:00Z",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "rule-rent:2026-03:expense",
+                "occurred_at": "2026-03-05T00:00:00Z",
+                "type": "expense",
+                "amount": 25_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "rent",
+                "description": "Apartment rent",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+
+    applied_after_confirmation = projector.run()
+
+    assert applied_after_confirmation == 2
+    assert projector.list_pendings(month="2026-03") == [
+        {
+            "pending_id": "rule-rent:2026-03",
+            "rule_id": "rule-rent",
+            "month": "2026-03",
+            "name": "Rent",
+            "amount": 25_00,
+            "due_date": "2026-03-05",
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+            "status": "confirmed",
+            "transaction_id": "rule-rent:2026-03:expense",
+        }
+    ]
+    assert projector.list_transactions(account_id="acc-1") == [
+        {
+            "transaction_id": "rule-rent:2026-03:expense",
+            "occurred_at": "2026-03-05T00:00:00Z",
+            "type": "expense",
+            "amount": 25_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+            "person_id": None,
+            "status": "active",
+        }
+    ]
+
+
 def test_projector_keeps_dashboard_totals_unbounded_when_preview_is_limited(
     tmp_path: Path,
 ) -> None:
