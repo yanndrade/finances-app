@@ -19,6 +19,7 @@ import {
   markReimbursementReceived,
   payInvoice,
   resetApplicationData,
+  upsertCategoryBudget,
   updateAccount,
   updateCard,
   updateTransaction,
@@ -325,6 +326,26 @@ export function App() {
     );
   }
 
+  async function handleUpsertCategoryBudget(
+    month: string,
+    categoryId: string,
+    limitInCents: number,
+  ): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () =>
+        upsertCategoryBudget({
+          categoryId,
+          month,
+          limitInCents,
+        }),
+      "Orcamento mensal salvo com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel salvar o orcamento.");
+    }
+  }
+
   async function handleResetAllData(): Promise<void> {
     if (!globalThis.confirm("Isso vai apagar todos os dados da aplicacao. Deseja continuar?")) {
       return;
@@ -362,6 +383,7 @@ export function App() {
             onMonthChange={setSelectedMonth}
             onNavigate={setActiveView}
             onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+            onUpsertBudget={handleUpsertCategoryBudget}
             onUpdateTransaction={(transactionId, updates) => {
               if (updates.description !== undefined) {
                 void runMutation(

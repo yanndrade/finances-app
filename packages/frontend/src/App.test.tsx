@@ -76,6 +76,8 @@ function buildDashboard(
     current_balance: 132_500,
     recent_transactions: [buildTransaction()],
     spending_by_category: [{ category_id: "mercado", total: 2_500 }],
+    category_budgets: [],
+    budget_alerts: [],
     previous_month: { total_income: 200_000, total_expense: 100_000, net_flow: 100_000 },
     daily_balance_series: [
       { date: "2026-03-01", balance: 250_000 },
@@ -283,6 +285,8 @@ function installAppFetchMock(initialState?: {
         pending_reimbursements: [],
         recent_transactions: [],
         spending_by_category: [],
+        category_budgets: [],
+        budget_alerts: [],
         previous_month: { total_income: 0, total_expense: 0, net_flow: 0 },
         daily_balance_series: [],
         review_queue: [],
@@ -310,6 +314,56 @@ function installAppFetchMock(initialState?: {
       state.accounts = [...state.accounts, nextAccount];
 
       return new Response(JSON.stringify(nextAccount), { status: 201 });
+    }
+
+    if (url.endsWith("/api/budgets") && method === "POST") {
+      const payload = JSON.parse(String(init?.body)) as {
+        category_id: string;
+        month: string;
+        limit: number;
+      };
+      const existingBudgets = state.dashboard.category_budgets ?? [];
+      const spendingByCategory = state.dashboard.spending_by_category.find(
+        (item) => item.category_id === payload.category_id,
+      )?.total ?? 0;
+      const spent = existingBudgets.find(
+        (budget) =>
+          budget.category_id === payload.category_id &&
+          budget.month === payload.month,
+      )?.spent ?? spendingByCategory;
+      const usagePercent = payload.limit > 0
+        ? Math.round((spent * 100) / payload.limit)
+        : 0;
+      const status = spent > payload.limit
+        ? "exceeded"
+        : usagePercent >= 80
+          ? "warning"
+          : "ok";
+      const budgetSummary = {
+        category_id: payload.category_id,
+        month: payload.month,
+        limit: payload.limit,
+        spent,
+        usage_percent: usagePercent,
+        status,
+      };
+      const hasExisting = existingBudgets.some(
+        (budget) =>
+          budget.category_id === payload.category_id &&
+          budget.month === payload.month,
+      );
+      state.dashboard.category_budgets = hasExisting
+        ? existingBudgets.map((budget) =>
+            budget.category_id === payload.category_id && budget.month === payload.month
+              ? budgetSummary
+              : budget,
+          )
+        : [...existingBudgets, budgetSummary];
+      state.dashboard.budget_alerts = (state.dashboard.category_budgets ?? []).filter(
+        (budget) => budget.status !== "ok",
+      );
+
+      return new Response(JSON.stringify(budgetSummary), { status: hasExisting ? 200 : 201 });
     }
 
     if (url.endsWith("/api/cards") && method === "POST") {
@@ -593,6 +647,56 @@ describe("App", () => {
             init?.method === "POST";
         }),
       ).toBe(true);
+    });
+  });
+
+  it("shows category budget alerts and updates monthly limits from dashboard", async () => {
+    const fetchMock = installAppFetchMock({
+      dashboard: buildDashboard({
+        spending_by_category: [{ category_id: "food", total: 8_500 }],
+        category_budgets: [
+          {
+            category_id: "food",
+            month: "2026-03",
+            limit: 10_000,
+            spent: 8_500,
+            usage_percent: 85,
+            status: "warning",
+          },
+        ],
+        budget_alerts: [
+          {
+            category_id: "food",
+            month: "2026-03",
+            limit: 10_000,
+            spent: 8_500,
+            usage_percent: 85,
+            status: "warning",
+          },
+        ],
+      }),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    expect(await screen.findByText(/orcamentos por categoria/i)).toBeInTheDocument();
+    expect(screen.getByText(/em alerta/i)).toBeInTheDocument();
+    expect(screen.getByText(/r\$\s*85,00 de r\$\s*100,00/i)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/limite mensal/i), "15000");
+    await userEvent.click(screen.getByRole("button", { name: /salvar limite/i }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return String(url).endsWith("/api/budgets") && init?.method === "POST";
+        }),
+      ).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/saudavel/i)).toBeInTheDocument();
+      expect(screen.getByText(/sem alertas/i)).toBeInTheDocument();
     });
   });
 

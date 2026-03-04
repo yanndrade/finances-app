@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   AlertCircle,
   ArrowDownRight,
@@ -13,6 +14,7 @@ import { Cell, Pie, PieChart } from "recharts";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Progress } from "../../components/ui/progress";
+import { CATEGORY_OPTIONS } from "../../lib/categories";
 import type { AccountSummary, DashboardSummary } from "../../lib/api";
 import { formatCategoryName, formatCurrency } from "../../lib/format";
 
@@ -23,6 +25,11 @@ type DashboardBentoProps = {
   onMarkReimbursementReceived: (transactionId: string) => Promise<void>;
   onNavigate: (view: "transactions") => void;
   onOpenQuickAdd: () => void;
+  onUpsertBudget: (
+    month: string,
+    categoryId: string,
+    limitInCents: number,
+  ) => Promise<void>;
 };
 
 export function DashboardBento({
@@ -32,6 +39,7 @@ export function DashboardBento({
   onMarkReimbursementReceived,
   onNavigate,
   onOpenQuickAdd,
+  onUpsertBudget,
 }: DashboardBentoProps) {
   const categoryComposition = dashboard.spending_by_category.slice(0, 5);
   const investmentMeta = dashboard.total_income * 0.1;
@@ -55,6 +63,28 @@ export function DashboardBento({
   ];
   const pendingReimbursements = dashboard.pending_reimbursements ?? [];
   const pendingReimbursementsTotal = dashboard.pending_reimbursements_total ?? 0;
+  const categoryBudgets = dashboard.category_budgets ?? [];
+  const budgetAlerts = dashboard.budget_alerts ?? [];
+  const defaultBudgetCategory = useMemo(() => {
+    if (categoryBudgets.length > 0) {
+      return categoryBudgets[0].category_id;
+    }
+    return CATEGORY_OPTIONS[0]?.value ?? "";
+  }, [categoryBudgets]);
+  const [budgetCategoryId, setBudgetCategoryId] = useState(defaultBudgetCategory);
+  const [budgetLimitRaw, setBudgetLimitRaw] = useState("");
+
+  async function handleBudgetSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedCategory = budgetCategoryId.trim();
+    const limitInCents = parseBudgetLimitToCents(budgetLimitRaw);
+    if (!normalizedCategory || limitInCents <= 0) {
+      return;
+    }
+
+    await onUpsertBudget(dashboard.month, normalizedCategory, limitInCents);
+    setBudgetLimitRaw("");
+  }
 
   return (
     <div className="space-y-6">
@@ -126,6 +156,114 @@ export function DashboardBento({
                 </Button>
               </div>
             ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-[2rem] border-none bg-white shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-rose-100 p-2">
+                <AlertCircle className="h-5 w-5 text-rose-600" />
+              </div>
+              <CardTitle className="text-lg font-semibold">Orcamentos por categoria</CardTitle>
+            </div>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                budgetAlerts.length > 0
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-emerald-100 text-emerald-700"
+              }`}
+            >
+              {budgetAlerts.length > 0
+                ? `${budgetAlerts.length} alerta(s)`
+                : "Sem alertas"}
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <form
+            className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,10rem)_auto]"
+            onSubmit={(event) => {
+              void handleBudgetSubmit(event);
+            }}
+          >
+            <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+              Categoria
+              <select
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                value={budgetCategoryId}
+                onChange={(event) => setBudgetCategoryId(event.target.value)}
+              >
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+              Limite mensal
+              <input
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                inputMode="numeric"
+                onChange={(event) => setBudgetLimitRaw(event.target.value)}
+                placeholder="Ex: 12000"
+                value={budgetLimitRaw}
+              />
+            </label>
+
+            <Button
+              className="h-10 self-end rounded-xl bg-primary px-5 text-primary-foreground hover:bg-primary/90"
+              disabled={isSubmitting}
+              type="submit"
+            >
+              Salvar limite
+            </Button>
+          </form>
+
+          {categoryBudgets.length > 0 ? (
+            <div className="space-y-3">
+              {categoryBudgets.map((budget) => {
+                const progress = Math.min(budget.usage_percent, 100);
+                const statusCopy = budget.status === "exceeded"
+                  ? "Excedido"
+                  : budget.status === "warning"
+                    ? "Em alerta"
+                    : "Saudavel";
+                const statusClass = budget.status === "exceeded"
+                  ? "bg-rose-100 text-rose-700"
+                  : budget.status === "warning"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-emerald-100 text-emerald-700";
+
+                return (
+                  <div key={`${budget.month}:${budget.category_id}`} className="space-y-2 rounded-2xl border border-slate-100 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {formatCategoryName(budget.category_id)}
+                      </p>
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass}`}>
+                        {statusCopy}
+                      </span>
+                    </div>
+                    <Progress
+                      className="h-2 bg-slate-100"
+                      value={progress}
+                    />
+                    <p className="text-xs text-slate-600">
+                      {formatCurrency(budget.spent)} de {formatCurrency(budget.limit)} ({budget.usage_percent}%)
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm italic text-muted-foreground">
+              Nenhum limite cadastrado para {dashboard.month}.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -406,4 +544,12 @@ function KpiCard({
       </CardContent>
     </Card>
   );
+}
+
+function parseBudgetLimitToCents(rawValue: string): number {
+  const digitsOnly = rawValue.replace(/\D/g, "");
+  if (!digitsOnly) {
+    return 0;
+  }
+  return parseInt(digitsOnly, 10);
 }

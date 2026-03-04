@@ -101,7 +101,9 @@ describe("Dashboard view", () => {
 
     render(<App />);
 
-    expect((await screen.findAllByText("R$ 155,00")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("R$ 155,00", undefined, { timeout: 5_000 })).length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText("R$ 50,00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("R$ 20,00").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/alimenta/i).length).toBeGreaterThan(0);

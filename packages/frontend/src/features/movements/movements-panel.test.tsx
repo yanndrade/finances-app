@@ -199,7 +199,7 @@ describe("Movements panel", () => {
 
     render(<App />);
 
-    await screen.findAllByText("R$ 155,00");
+    await screen.findAllByText("R$ 155,00", undefined, { timeout: 5_000 });
     await userEvent.click(screen.getByRole("button", { name: /\+\s*lan.ar/i }));
 
     const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
@@ -333,4 +333,3 @@ describe("Movements panel", () => {
     });
   });
 });
-

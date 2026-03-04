@@ -10,6 +10,11 @@ type DashboardViewProps = {
   isSubmitting: boolean;
   month: string;
   onMarkReimbursementReceived: (transactionId: string) => Promise<void>;
+  onUpsertBudget: (
+    month: string,
+    categoryId: string,
+    limitInCents: number,
+  ) => Promise<void>;
   onMonthChange: (month: string) => void;
   onNavigate: (view: AppView) => void;
   onOpenQuickAdd: () => void;
@@ -26,6 +31,7 @@ export function DashboardView({
   isSubmitting,
   month,
   onMarkReimbursementReceived,
+  onUpsertBudget,
   onMonthChange,
   onNavigate,
   onOpenQuickAdd,
@@ -65,6 +71,7 @@ export function DashboardView({
           onMarkReimbursementReceived={onMarkReimbursementReceived}
           onNavigate={onNavigate}
           onOpenQuickAdd={onOpenQuickAdd}
+          onUpsertBudget={onUpsertBudget}
         />
       ) : null}
     </div>

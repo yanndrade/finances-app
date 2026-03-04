@@ -24,6 +24,7 @@ from finance_app.domain.events import StoredEvent
 from finance_app.domain.projections import (
     AccountProjection,
     BalanceStateProjection,
+    BudgetProjection,
     CardProjection,
     CardPurchaseProjection,
     InvoiceItemProjection,
@@ -185,6 +186,14 @@ class PendingProjectionRecord(ProjectionBase):
     status: Mapped[str] = mapped_column(String, nullable=False, index=True, default="pending")
     transaction_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     confirmed_at: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class BudgetLimitRecord(ProjectionBase):
+    __tablename__ = "budgets"
+
+    category_id: Mapped[str] = mapped_column(String, primary_key=True)
+    month: Mapped[str] = mapped_column(String, primary_key=True)
+    limit: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class Projector:
@@ -588,6 +597,16 @@ class Projector:
 
         return pendings
 
+    def list_category_budgets(
+        self,
+        *,
+        month: str,
+    ) -> list[dict[str, str | int]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                return self._list_category_budgets_for_month(session, month)
+
     def get_pending(self, pending_id: str) -> dict[str, str | int | None] | None:
         with self._lock:
             self.bootstrap()
@@ -660,6 +679,7 @@ class Projector:
                     .order_by(ReimbursementProjectionRecord.occurred_at.desc())
                     .all()
                 )
+                category_budgets = self._list_category_budgets_for_month(session, month)
 
         recent_transactions = [
             TransactionProjection(
@@ -750,6 +770,9 @@ class Projector:
             ).to_dict()
             for row in pending_reimbursement_rows
         ]
+        budget_alerts = [
+            budget for budget in category_budgets if str(budget["status"]) != "ok"
+        ]
 
         return {
             "month": month,
@@ -770,7 +793,113 @@ class Projector:
             },
             "daily_balance_series": daily_balance_series,
             "review_queue": review_queue,
+            "category_budgets": category_budgets,
+            "budget_alerts": budget_alerts,
         }
+
+    def _list_category_budgets_for_month(
+        self,
+        session: Session,
+        month: str,
+    ) -> list[dict[str, str | int]]:
+        rows: Sequence[BudgetLimitRecord] = (
+            session.query(BudgetLimitRecord)
+            .filter(BudgetLimitRecord.month == month)
+            .order_by(BudgetLimitRecord.category_id.asc())
+            .all()
+        )
+        if not rows:
+            return []
+
+        categories = {row.category_id for row in rows}
+        spending_by_category = self._budget_spending_by_category(
+            session=session,
+            month=month,
+            categories=categories,
+        )
+
+        return [
+            BudgetProjection(
+                category_id=row.category_id,
+                month=row.month,
+                limit=row.limit,
+                spent=spending_by_category.get(row.category_id, 0),
+                usage_percent=self._budget_usage_percent(
+                    spent=spending_by_category.get(row.category_id, 0),
+                    limit=row.limit,
+                ),
+                status=self._budget_status(
+                    spent=spending_by_category.get(row.category_id, 0),
+                    limit=row.limit,
+                ),
+            ).to_dict()
+            for row in rows
+        ]
+
+    def _budget_spending_by_category(
+        self,
+        *,
+        session: Session,
+        month: str,
+        categories: set[str],
+    ) -> dict[str, int]:
+        totals = {category: 0 for category in categories}
+
+        expense_rows: Sequence[TransactionProjectionRecord] = (
+            session.query(TransactionProjectionRecord)
+            .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
+            .filter(TransactionProjectionRecord.status == "active")
+            .filter(TransactionProjectionRecord.type == "expense")
+            .filter(TransactionProjectionRecord.category_id != "invoice_payment")
+            .filter(TransactionProjectionRecord.category_id.in_(categories))
+            .all()
+        )
+        for row in expense_rows:
+            totals[row.category_id] = totals.get(row.category_id, 0) + row.amount
+
+        installment_rows: Sequence[CardPurchaseInstallmentRecord] = (
+            session.query(CardPurchaseInstallmentRecord)
+            .filter(CardPurchaseInstallmentRecord.category_id.in_(categories))
+            .all()
+        )
+        for row in installment_rows:
+            installment_month = self._budget_month_for_installment(
+                purchase_date=row.purchase_date,
+                installment_number=row.installment_number,
+            )
+            if installment_month != month:
+                continue
+            totals[row.category_id] = totals.get(row.category_id, 0) + row.amount
+
+        return totals
+
+    def _budget_month_for_installment(
+        self,
+        *,
+        purchase_date: str,
+        installment_number: int,
+    ) -> str:
+        purchase = datetime.fromisoformat(purchase_date.replace("Z", "+00:00"))
+        month_index = (
+            purchase.year * 12
+            + (purchase.month - 1)
+            + max(installment_number - 1, 0)
+        )
+        year = month_index // 12
+        month = (month_index % 12) + 1
+        return f"{year:04d}-{month:02d}"
+
+    def _budget_usage_percent(self, *, spent: int, limit: int) -> int:
+        if limit <= 0:
+            return 0
+        return int(round((spent * 100) / limit))
+
+    def _budget_status(self, *, spent: int, limit: int) -> str:
+        if spent > limit:
+            return "exceeded"
+        if spent * 100 >= limit * 80:
+            return "warning"
+        return "ok"
 
     @staticmethod
     def _previous_month_key(month: str) -> str:
@@ -802,6 +931,10 @@ class Projector:
 
         if event.type == "RecurringRuleCreated":
             self._apply_recurring_rule_created(session, event.payload)
+            return
+
+        if event.type == "BudgetUpdated":
+            self._apply_budget_updated(session, event.payload)
             return
 
         if event.type == "InvoicePaid":
@@ -1026,6 +1159,32 @@ class Projector:
                 is_active=bool(payload.get("is_active", True)),
             )
         )
+
+    def _apply_budget_updated(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        category_id = str(payload["category_id"])
+        month = str(payload["month"])
+        existing = session.get(
+            BudgetLimitRecord,
+            {
+                "category_id": category_id,
+                "month": month,
+            },
+        )
+        if existing is None:
+            session.add(
+                BudgetLimitRecord(
+                    category_id=category_id,
+                    month=month,
+                    limit=int(payload["limit"]),
+                )
+            )
+            return
+
+        existing.limit = int(payload["limit"])
 
     def _apply_invoice_item(
         self,
@@ -1676,6 +1835,20 @@ class Projector:
             "confirmed_at",
         }
         if pending_columns != expected_pending_columns:
+            return True
+
+        if "budgets" not in table_names:
+            return True
+
+        budget_columns = self._safe_column_names(inspector, "budgets")
+        if budget_columns is None:
+            return True
+        expected_budget_columns = {
+            "category_id",
+            "month",
+            "limit",
+        }
+        if budget_columns != expected_budget_columns:
             return True
 
         return False
