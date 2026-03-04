@@ -733,14 +733,16 @@ def test_dashboard_endpoint_returns_monthly_summary_from_projections(tmp_path) -
             "total_expense": 0,
             "net_flow": 0,
         },
-        "daily_balance_series": [
-            {
-                "date": "2026-03-02",
-                "balance": 30_00,
-            }
-        ],
-        "review_queue": [],
-    }
+            "daily_balance_series": [
+                {
+                    "date": "2026-03-02",
+                    "balance": 30_00,
+                }
+            ],
+            "review_queue": [],
+            "category_budgets": [],
+            "budget_alerts": [],
+        }
 
 
 def test_reimbursements_are_pending_until_marked_received(tmp_path) -> None:
@@ -1185,14 +1187,16 @@ def test_dev_reset_endpoint_clears_projection_and_event_data(tmp_path) -> None:
         "pending_reimbursements": [],
         "recent_transactions": [],
         "spending_by_category": [],
-        "previous_month": {
-            "total_income": 0,
-            "total_expense": 0,
-            "net_flow": 0,
-        },
-        "daily_balance_series": [],
-        "review_queue": [],
-    }
+            "previous_month": {
+                "total_income": 0,
+                "total_expense": 0,
+                "net_flow": 0,
+            },
+            "daily_balance_series": [],
+            "review_queue": [],
+            "category_budgets": [],
+            "budget_alerts": [],
+        }
 
 
 def test_cards_endpoints_support_create_list_and_update(tmp_path) -> None:
@@ -1580,6 +1584,214 @@ def test_card_purchase_endpoint_supports_installments_and_monthly_budget_project
             "total": 33_33,
         }
     ]
+
+
+def test_budget_endpoints_support_create_update_and_alert_states(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Reserve", "savings", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+
+    create_budget_response = client.post(
+        "/api/budgets",
+        json={
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 100_00,
+        },
+    )
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-05T12:00:00Z",
+            "amount": 45_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Groceries",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 60_00,
+            "installments_count": 2,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Market",
+        },
+    )
+    baseline_dashboard = client.get("/api/dashboard", params={"month": "2026-03"})
+
+    _create_expense(
+        client,
+        {
+            "id": "tx-2",
+            "occurred_at": "2026-03-07T12:00:00Z",
+            "amount": 5_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Snack",
+        },
+    )
+    warning_dashboard = client.get("/api/dashboard", params={"month": "2026-03"})
+
+    transfer_response = client.post(
+        "/api/transfers",
+        json={
+            "id": "trf-1",
+            "occurred_at": "2026-03-08T12:00:00Z",
+            "from_account_id": "acc-1",
+            "to_account_id": "acc-2",
+            "amount": 50_00,
+            "description": "Internal move",
+        },
+    )
+    transfer_dashboard = client.get("/api/dashboard", params={"month": "2026-03"})
+
+    _create_expense(
+        client,
+        {
+            "id": "tx-3",
+            "occurred_at": "2026-03-09T12:00:00Z",
+            "amount": 30_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Dinner",
+        },
+    )
+    exceeded_dashboard = client.get("/api/dashboard", params={"month": "2026-03"})
+    update_budget_response = client.post(
+        "/api/budgets",
+        json={
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 150_00,
+        },
+    )
+    updated_budget_response = client.get("/api/budgets", params={"month": "2026-03"})
+    updated_dashboard = client.get("/api/dashboard", params={"month": "2026-03"})
+
+    assert create_budget_response.status_code == 201
+    assert create_budget_response.json() == {
+        "category_id": "food",
+        "month": "2026-03",
+        "limit": 100_00,
+        "spent": 0,
+        "usage_percent": 0,
+        "status": "ok",
+    }
+    assert baseline_dashboard.status_code == 200
+    assert baseline_dashboard.json()["category_budgets"] == [
+        {
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 100_00,
+            "spent": 75_00,
+            "usage_percent": 75,
+            "status": "ok",
+        }
+    ]
+    assert baseline_dashboard.json()["budget_alerts"] == []
+
+    assert warning_dashboard.status_code == 200
+    assert warning_dashboard.json()["category_budgets"] == [
+        {
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 100_00,
+            "spent": 80_00,
+            "usage_percent": 80,
+            "status": "warning",
+        }
+    ]
+    assert warning_dashboard.json()["budget_alerts"] == [
+        {
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 100_00,
+            "spent": 80_00,
+            "usage_percent": 80,
+            "status": "warning",
+        }
+    ]
+
+    assert transfer_response.status_code == 201
+    assert transfer_dashboard.status_code == 200
+    assert transfer_dashboard.json()["category_budgets"] == [
+        {
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 100_00,
+            "spent": 80_00,
+            "usage_percent": 80,
+            "status": "warning",
+        }
+    ]
+
+    assert exceeded_dashboard.status_code == 200
+    assert exceeded_dashboard.json()["category_budgets"] == [
+        {
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 100_00,
+            "spent": 110_00,
+            "usage_percent": 110,
+            "status": "exceeded",
+        }
+    ]
+    assert exceeded_dashboard.json()["budget_alerts"] == [
+        {
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 100_00,
+            "spent": 110_00,
+            "usage_percent": 110,
+            "status": "exceeded",
+        }
+    ]
+
+    assert update_budget_response.status_code == 200
+    assert update_budget_response.json() == {
+        "category_id": "food",
+        "month": "2026-03",
+        "limit": 150_00,
+        "spent": 110_00,
+        "usage_percent": 73,
+        "status": "ok",
+    }
+    assert updated_budget_response.status_code == 200
+    assert updated_budget_response.json() == [
+        {
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 150_00,
+            "spent": 110_00,
+            "usage_percent": 73,
+            "status": "ok",
+        }
+    ]
+    assert updated_dashboard.status_code == 200
+    assert updated_dashboard.json()["budget_alerts"] == []
 
 
 def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -> None:

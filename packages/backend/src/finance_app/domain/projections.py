@@ -254,3 +254,23 @@ class PendingProjection:
             "status": self.status,
             "transaction_id": self.transaction_id,
         }
+
+
+@dataclass(frozen=True)
+class BudgetProjection:
+    category_id: str
+    month: str
+    limit: int
+    spent: int
+    usage_percent: int
+    status: str
+
+    def to_dict(self) -> dict[str, str | int]:
+        return {
+            "category_id": self.category_id,
+            "month": self.month,
+            "limit": self.limit,
+            "spent": self.spent,
+            "usage_percent": self.usage_percent,
+            "status": self.status,
+        }

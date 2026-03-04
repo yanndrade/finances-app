@@ -1,7 +1,7 @@
 import re
 from typing import Literal
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, status
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,11 @@ from finance_app.application.cards import (
     CardNotFoundError,
     CardServiceError,
     CardService,
+)
+from finance_app.application.budgets import (
+    BudgetService,
+    BudgetServiceError,
+    InvalidBudgetMonthError,
 )
 from finance_app.application.health import HealthCheckUseCase
 from finance_app.application.invoice_payments import (
@@ -167,6 +172,12 @@ class CreateTransferRequest(BaseModel):
     description: str | None = None
 
 
+class CreateBudgetRequest(BaseModel):
+    category_id: str = Field(min_length=1)
+    month: str
+    limit: int = Field(gt=0)
+
+
 def build_router(
     account_service: AccountService,
     card_service: CardService,
@@ -174,6 +185,7 @@ def build_router(
     invoice_payment_service: InvoicePaymentService,
     reimbursement_service: ReimbursementService,
     recurring_service: RecurringService,
+    budget_service: BudgetService,
     transaction_service: TransactionService,
     transfer_service: TransferService,
     event_store: EventStore,
@@ -654,6 +666,47 @@ def build_router(
                 detail=str(exc),
             ) from exc
 
+    @router.post("/api/budgets")
+    def upsert_budget(
+        payload: CreateBudgetRequest,
+        response: Response,
+    ) -> dict[str, str | int]:
+        try:
+            budget, created = budget_service.upsert_budget(
+                category_id=payload.category_id,
+                month=payload.month,
+                limit=payload.limit,
+            )
+            response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+            return budget
+        except InvalidBudgetMonthError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+        except BudgetServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.get("/api/budgets")
+    def list_budgets(
+        month: str = Query(...),
+    ) -> list[dict[str, str | int]]:
+        try:
+            return budget_service.list_budgets(month=month)
+        except InvalidBudgetMonthError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+        except BudgetServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
     @router.post("/api/transfers", status_code=status.HTTP_201_CREATED)
     def create_transfer(
         payload: CreateTransferRequest,
@@ -730,6 +783,10 @@ def create_app(
         projector=projector,
         account_reader=account_service,
     )
+    budget_service = BudgetService(
+        event_store=event_store,
+        projector=projector,
+    )
     transaction_service = TransactionService(
         event_store=event_store,
         projector=projector,
@@ -761,6 +818,7 @@ def create_app(
             invoice_payment_service,
             reimbursement_service,
             recurring_service,
+            budget_service,
             transaction_service,
             transfer_service,
             event_store,

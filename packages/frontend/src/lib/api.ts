@@ -3,6 +3,15 @@ export type CategorySpending = {
   total: number;
 };
 
+export type CategoryBudgetSummary = {
+  category_id: string;
+  month: string;
+  limit: number;
+  spent: number;
+  usage_percent: number;
+  status: "ok" | "warning" | "exceeded" | string;
+};
+
 export type PreviousMonthSummary = {
   total_income: number;
   total_expense: number;
@@ -35,6 +44,8 @@ export type DashboardSummary = {
   pending_reimbursements?: PendingReimbursementSummary[];
   recent_transactions: TransactionSummary[];
   spending_by_category: CategorySpending[];
+  category_budgets?: CategoryBudgetSummary[];
+  budget_alerts?: CategoryBudgetSummary[];
   previous_month: PreviousMonthSummary;
   daily_balance_series: DailyBalancePoint[];
   review_queue: TransactionSummary[];
@@ -178,6 +189,12 @@ export type InvoicePaymentPayload = {
 export type MarkReimbursementReceivedPayload = {
   receivedAt: string;
   accountId?: string;
+};
+
+export type CategoryBudgetPayload = {
+  categoryId: string;
+  month: string;
+  limitInCents: number;
 };
 
 export type TransactionFilters = {
@@ -433,6 +450,19 @@ export async function markReimbursementReceived(
       }),
     },
   );
+}
+
+export async function upsertCategoryBudget(
+  payload: CategoryBudgetPayload,
+): Promise<CategoryBudgetSummary> {
+  return requestJson<CategoryBudgetSummary>("/api/budgets", {
+    method: "POST",
+    body: JSON.stringify({
+      category_id: payload.categoryId,
+      month: payload.month,
+      limit: payload.limitInCents,
+    }),
+  });
 }
 
 export async function resetApplicationData(): Promise<{ status: string; message: string }> {

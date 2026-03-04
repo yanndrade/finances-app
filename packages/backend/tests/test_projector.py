@@ -1590,6 +1590,8 @@ def test_projector_summarizes_dashboard_month_from_projections(tmp_path: Path) -
             }
         ],
         "review_queue": [],
+        "category_budgets": [],
+        "budget_alerts": [],
     }
 
 
