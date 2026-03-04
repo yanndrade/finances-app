@@ -168,6 +168,33 @@ function installFetchMock(initialState?: {
   return fetchMock;
 }
 
+function installDialogEnvironment() {
+  vi.stubGlobal(
+    "ResizeObserver",
+    vi.fn(() => ({
+      observe: vi.fn(),
+      unobserve: vi.fn(),
+      disconnect: vi.fn(),
+    })),
+  );
+  Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+    configurable: true,
+    value: vi.fn(() => false),
+  });
+  Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: vi.fn(),
+  });
+}
+
 describe("UI consistency and cards overview", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -175,13 +202,14 @@ describe("UI consistency and cards overview", () => {
 
   it("uses tighter shell copy and removes duplicate local headers", async () => {
     installFetchMock();
+    installDialogEnvironment();
 
     render(<App />);
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: /vis.o geral do caixa/i }),
+      await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/resumo do m.s e alertas/i)).toBeInTheDocument();
+    expect(screen.getByText(/resumo mensal e pontos de atencao/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
     expect(await screen.findByRole("button", { name: /\+ adicionar conta/i })).toBeInTheDocument();
@@ -190,12 +218,11 @@ describe("UI consistency and cards overview", () => {
     await userEvent.click(screen.getByRole("button", { name: /^transa/i }));
     expect(await screen.findByRole("button", { name: /aplicar filtros/i })).toBeInTheDocument();
     expect(screen.queryByText(/hist.rico e filtros/i)).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /movimentar/i }));
-    expect(await screen.findByRole("tablist", { name: /modo de lan.amento/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /\+\s*lan.ar/i }));
     expect(
-      screen.queryByRole("heading", { level: 2, name: /entrada r.pida de caixa/i }),
-    ).not.toBeInTheDocument();
+      await screen.findByRole("dialog", undefined, { timeout: 5_000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   });
 
   it("opens cards in aggregate mode before drilling down to a specific card", async () => {
@@ -229,3 +256,4 @@ describe("UI consistency and cards overview", () => {
     expect(screen.getByRole("button", { name: /pagar agora/i })).toBeInTheDocument();
   });
 });
+
