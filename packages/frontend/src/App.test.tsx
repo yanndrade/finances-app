@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+﻿import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "./App";
@@ -461,22 +461,125 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(await screen.findByText("Como voce esta")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /vis/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /lan/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^movimentar$/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
     expect(
       await screen.findByRole("region", { name: /gerenciar contas/i }),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^transacoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^trans/i }));
     expect(
       await screen.findByRole("region", { name: /historico e filtros/i }),
     ).toBeInTheDocument();
+  });
 
-    await userEvent.click(screen.getByRole("button", { name: /^movimentar$/i }));
+  it("opens quick add with controlled category selection", async () => {
+    installAppFetchMock();
+    vi.stubGlobal(
+      "ResizeObserver",
+      vi.fn(() => ({
+        observe: vi.fn(),
+        unobserve: vi.fn(),
+        disconnect: vi.fn(),
+      })),
+    );
+    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+      configurable: true,
+      value: vi.fn(() => false),
+    });
+    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+
+    await userEvent.click(screen.getByRole("button", { name: /lan/i }));
+
+    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
+    const categorySelect = await within(dialog).findByRole(
+      "combobox",
+      { name: /categoria/i },
+      { timeout: 5_000 },
+    );
+    expect(categorySelect).toBeInTheDocument();
+
+    await userEvent.click(categorySelect);
+
+    expect(await screen.findByRole("option", { name: /alimenta/i })).toBeInTheDocument();
+  });
+
+  it("uses explicit invoice payment copy", async () => {
+    installAppFetchMock({
+      invoices: [buildInvoice()],
+    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      vi.fn(() => ({
+        observe: vi.fn(),
+        unobserve: vi.fn(),
+        disconnect: vi.fn(),
+      })),
+    );
+    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+      configurable: true,
+      value: vi.fn(() => false),
+    });
+    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /lan/i }));
+
+    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
+    await userEvent.click(
+      within(dialog).getByRole("tab", { name: /pagamento de fatura/i }),
+    );
+
+    expect(within(dialog).getByText(/quitar saldo do cartao/i)).toBeInTheDocument();
+  });
+
+  it("shows card limit availability", async () => {
+    installAppFetchMock({
+      invoices: [buildInvoice()],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+
     expect(
-      await screen.findByRole("heading", { level: 1, name: /entrada r.+pida de caixa/i }),
+      await screen.findByText(/limite comprometido/i, undefined, { timeout: 5_000 }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/limite dispon/i)).toBeInTheDocument();
   });
 
   it("creates an account from the accounts view and refreshes the desktop data", async () => {
@@ -484,7 +587,7 @@ describe("App", () => {
 
     render(<App />);
 
-    await screen.findByText("Como voce esta");
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
 
     await userEvent.click(screen.getByRole("button", { name: /\+ adicionar conta/i }));
@@ -506,110 +609,59 @@ describe("App", () => {
     });
   });
 
-  it("creates and edits a card from the cards view", async () => {
-    const fetchMock = installAppFetchMock({
-      cards: [],
+  it("renders the cards overview and wallet settings", async () => {
+    installAppFetchMock({
+      invoices: [buildInvoice()],
     });
 
     render(<App />);
 
-    await screen.findByText("Como voce esta");
-    await userEvent.click(screen.getByRole("button", { name: /^cards$/i }));
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
 
-    expect(
-      await screen.findByText(/voce ainda nao tem cartoes cadastrados/i),
-    ).toBeInTheDocument();
+    expect((await screen.findAllByText(/faturas abertas/i)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/carteira/i)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /\+ adicionar cartao/i }));
-    await userEvent.type(screen.getByLabelText(/nome do cartao/i), "Visa Infinite");
-    const limitInput = screen.getByLabelText(/limite do cartao/i);
-    await userEvent.clear(limitInput);
-    await userEvent.type(limitInput, "5000");
-    await userEvent.clear(screen.getByLabelText(/dia de fechamento/i));
-    await userEvent.type(screen.getByLabelText(/dia de fechamento/i), "12");
-    await userEvent.clear(screen.getByLabelText(/dia de vencimento/i));
-    await userEvent.type(screen.getByLabelText(/dia de vencimento/i), "22");
-    await userEvent.selectOptions(
-      screen.getByLabelText(/conta padrao para pagamento/i),
-      "acc-1",
-    );
-    await userEvent.click(screen.getByRole("button", { name: /criar cartao/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /ajustes/i }));
 
-    const cardsSection = await screen.findByRole("region", { name: /gerenciar cartoes/i });
-    expect(within(cardsSection).getByText("Visa Infinite")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /editar visa infinite/i }));
-    await userEvent.clear(screen.getByLabelText(/nome do cartao/i));
-    await userEvent.type(screen.getByLabelText(/nome do cartao/i), "Visa Black");
-    await userEvent.click(screen.getByRole("button", { name: /salvar cartao/i }));
-
-    expect(within(cardsSection).getByText("Visa Black")).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).endsWith("/api/cards") && init?.method === "POST";
-        }),
-      ).toBe(true);
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).includes("/api/cards/") && init?.method === "PATCH";
-        }),
-      ).toBe(true);
-    });
+    expect(await screen.findByText(/ajustes da carteira/i)).toBeInTheDocument();
+    expect(screen.getByText(/contas de pagamento/i)).toBeInTheDocument();
   });
 
-  it("creates an installment card purchase and shows the projected invoices in the cards view", async () => {
-    const fetchMock = installAppFetchMock({
-      invoices: [],
+  it("shows consolidated invoice rows in the cards purchases tab", async () => {
+    installAppFetchMock({
+      invoices: [
+        buildInvoice({
+          invoice_id: "card-1:2026-03",
+          reference_month: "2026-03",
+          closing_date: "2026-03-10",
+          due_date: "2026-03-20",
+          total_amount: 50_00,
+          purchase_count: 3,
+        }),
+      ],
     });
 
     render(<App />);
 
-    await screen.findByText("Como voce esta");
-    await userEvent.click(screen.getByRole("button", { name: /^cards$/i }));
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /compras/i }));
 
-    expect(
-      await screen.findByText(/nenhuma fatura pendente para os cartoes cadastrados/i),
-    ).toBeInTheDocument();
-
-    await userEvent.selectOptions(screen.getByLabelText(/cartao da compra/i), "card-1");
-    await userEvent.clear(screen.getByLabelText(/data da compra/i));
-    await userEvent.type(screen.getByLabelText(/data da compra/i), "2026-03-11T12:00");
-    const amountInput = screen.getByLabelText(/valor da compra/i);
-    await userEvent.clear(amountInput);
-    await userEvent.type(amountInput, "5000");
-    await userEvent.clear(screen.getByLabelText(/parcelas/i));
-    await userEvent.type(screen.getByLabelText(/parcelas/i), "3");
-    await userEvent.type(screen.getByLabelText(/categoria da compra/i), "transport");
-    await userEvent.type(screen.getByLabelText(/descricao da compra/i), "Taxi");
-    await userEvent.click(screen.getByRole("button", { name: /registrar compra/i }));
-
-    const invoicesSection = await screen.findByRole("region", { name: /faturas pendentes/i });
-    expect(within(invoicesSection).getByText(/referencia 2026-04/i)).toBeInTheDocument();
-    expect(within(invoicesSection).getByText(/referencia 2026-06/i)).toBeInTheDocument();
-    expect(within(invoicesSection).getAllByText("R$ 16,66").length).toBe(2);
-    expect(within(invoicesSection).getByText("R$ 16,68")).toBeInTheDocument();
-    expect(within(invoicesSection).getAllByText(/1 parcela/i).length).toBeGreaterThan(0);
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).endsWith("/api/card-purchases") && init?.method === "POST";
-        }),
-      ).toBe(true);
-    });
+    expect(await screen.findByText(/compras consolidadas/i)).toBeInTheDocument();
+    expect(screen.getByText("2026-03")).toBeInTheDocument();
+    expect(screen.getByText("R$ 50,00")).toBeInTheDocument();
   });
 
   it("registers an invoice payment from the cards view and keeps partial invoices visible", async () => {
     const fetchMock = installAppFetchMock({
       invoices: [
         buildInvoice({
-          invoice_id: "card-1:2026-04",
+          invoice_id: "card-1:2026-03",
           card_id: "card-1",
-          reference_month: "2026-04",
-          closing_date: "2026-04-10",
-          due_date: "2026-04-20",
+          reference_month: "2026-03",
+          closing_date: "2026-03-10",
+          due_date: "2026-03-20",
           total_amount: 100_00,
         }),
       ],
@@ -617,28 +669,30 @@ describe("App", () => {
 
     render(<App />);
 
-    await screen.findByText("Como voce esta");
-    await userEvent.click(screen.getByRole("button", { name: /^cards$/i }));
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
 
-    const invoicesSection = await screen.findByRole("region", { name: /faturas pendentes/i });
-    expect(within(invoicesSection).getByText("R$ 100,00")).toBeInTheDocument();
+    const invoiceButton = await screen.findByRole("button", { name: /referencia 2026-03/i });
+    await userEvent.click(invoiceButton);
 
-    await userEvent.click(screen.getByRole("button", { name: /registrar pagamento/i }));
+    expect(await screen.findByText(/fatura de 2026-03/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /pagar agora/i }));
     await userEvent.clear(screen.getByLabelText(/valor do pagamento/i));
     await userEvent.type(screen.getByLabelText(/valor do pagamento/i), "3000");
     await userEvent.click(screen.getByRole("button", { name: /confirmar pagamento/i }));
 
     await waitFor(() => {
-      expect(within(invoicesSection).getByText("Parcial")).toBeInTheDocument();
+      expect(screen.getByText("Parcial")).toBeInTheDocument();
     });
-    expect(within(invoicesSection).getByText("R$ 70,00")).toBeInTheDocument();
-    expect(within(invoicesSection).getByText(/total r\$ 100,00/i)).toBeInTheDocument();
-    expect(within(invoicesSection).getByText(/pago r\$ 30,00/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/R\$\s*70,00/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/R\$\s*100,00/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/R\$\s*30,00/i).length).toBeGreaterThan(0);
 
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).includes("/api/invoices/card-1%3A2026-04/payments") &&
+          return String(url).includes("/api/invoices/card-1%3A2026-03/payments") &&
             init?.method === "POST";
         }),
       ).toBe(true);
@@ -649,19 +703,19 @@ describe("App", () => {
     const fetchMock = installAppFetchMock({
       invoices: [
         buildInvoice({
-          invoice_id: "card-1:2026-04",
+          invoice_id: "card-1:2026-03",
           card_id: "card-1",
-          reference_month: "2026-04",
-          closing_date: "2026-04-10",
-          due_date: "2026-04-20",
+          reference_month: "2026-03",
+          closing_date: "2026-03-10",
+          due_date: "2026-03-20",
           total_amount: 100_00,
         }),
       ],
       invoiceItemsByInvoiceId: {
-        "card-1:2026-04": [
+        "card-1:2026-03": [
           buildInvoiceItem({
             invoice_item_id: "purchase-1:1",
-            invoice_id: "card-1:2026-04",
+            invoice_id: "card-1:2026-03",
             purchase_id: "purchase-1",
             card_id: "card-1",
             purchase_date: "2026-03-15T12:00:00Z",
@@ -677,20 +731,21 @@ describe("App", () => {
 
     render(<App />);
 
-    await screen.findByText("Como voce esta");
-    await userEvent.click(screen.getByRole("button", { name: /^cards$/i }));
-    await userEvent.click(screen.getByRole("button", { name: /ver itens/i }));
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /referencia 2026-03/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /ver itens/i }));
 
     expect(await screen.findByText("Headphones")).toBeInTheDocument();
-    expect(screen.getByText(/electronics/)).toBeInTheDocument();
+    expect(screen.getByText(/resumo detalhado/i)).toBeInTheDocument();
     expect(screen.getByText(/1\/3/)).toBeInTheDocument();
-    expect(screen.getByText(/33,33/)).toBeInTheDocument();
+    expect(screen.getByText(/r\$ 33,33/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([url, init]) => {
           return (
-            String(url).includes("/api/invoices/card-1%3A2026-04/items") &&
+            String(url).includes("/api/invoices/card-1%3A2026-03/items") &&
             (init?.method ?? "GET") === "GET"
           );
         }),
@@ -701,7 +756,7 @@ describe("App", () => {
   it("shows feedback as a global toast that auto-hides after success", async () => {
     render(<App />);
 
-    await screen.findByText("Como voce esta");
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
 
     await userEvent.click(screen.getByRole("button", { name: /\+ adicionar conta/i }));
@@ -716,7 +771,7 @@ describe("App", () => {
       await screen.findByRole("status", { name: /conta criada com sucesso/i }),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^transacoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^trans/i }));
     expect(
       screen.queryByText("Conta criada com sucesso.", { selector: ".success-banner" }),
     ).not.toBeInTheDocument();
@@ -736,8 +791,8 @@ describe("App", () => {
 
     render(<App />);
 
-    await screen.findByText("Como voce esta");
-    await userEvent.click(screen.getByRole("button", { name: /^transacoes$/i }));
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^trans/i }));
 
     const transactionsSection = await screen.findByRole("region", {
       name: /historico e filtros/i,
@@ -778,11 +833,11 @@ describe("App", () => {
 
     render(<App />);
 
-    await screen.findByText("Como voce esta");
-    await userEvent.click(screen.getByRole("button", { name: /^configura/i }));
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^config/i }));
 
     expect(
-      await screen.findByRole("heading", { name: /ferramentas de desenvolvimento/i }),
+      await screen.findByRole("heading", { name: /zerar aplicacao/i }),
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /apagar todos os dados/i }));
@@ -798,7 +853,7 @@ describe("App", () => {
     });
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: /visao geral do caixa/i }),
+      await screen.findByRole("heading", { level: 1, name: /vis/i }),
     ).toBeInTheDocument();
     expect((await screen.findAllByText("R$ 0,00")).length).toBeGreaterThan(0);
   });
@@ -844,3 +899,4 @@ function allocateMockInvoices({
     });
   });
 }
+

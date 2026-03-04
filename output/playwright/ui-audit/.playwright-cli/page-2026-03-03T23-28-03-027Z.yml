@@ -1,0 +1,106 @@
+- generic [ref=e3]:
+  - navigation "Main navigation" [ref=e4]:
+    - generic [ref=e5]:
+      - paragraph [ref=e6]: Finances
+      - strong [ref=e7]: Controle pessoal
+      - paragraph [ref=e8]: Desktop focado em caixa, contas e movimentacoes.
+    - list [ref=e9]:
+      - listitem [ref=e10]:
+        - button "Dashboard" [ref=e11] [cursor=pointer]:
+          - generic [ref=e12]: Dashboard
+          - generic [ref=e13]: Visao mensal do caixa
+      - listitem [ref=e14]:
+        - button "Transacoes" [active] [pressed] [ref=e15] [cursor=pointer]:
+          - generic [ref=e16]: Transacoes
+          - generic [ref=e17]: Filtros, edicao e estorno
+      - listitem [ref=e18]:
+        - button "Contas" [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: Contas
+          - generic [ref=e21]: Saldo, criacao e ajustes
+      - listitem [ref=e22]:
+        - button "Cards" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Cards
+          - generic [ref=e25]: Cadastro e ciclo de pagamento
+      - listitem [ref=e26]:
+        - button "Movimentar" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: Movimentar
+          - generic [ref=e29]: Entradas, saidas e transferencias
+    - button "Configurações" [ref=e31] [cursor=pointer]:
+      - generic [ref=e32]: Configurações
+      - generic [ref=e33]: Desenvolvimento e preferências
+  - main [ref=e34]:
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - paragraph [ref=e37]: Release 0.6
+        - heading "Transacoes e historico" [level=1] [ref=e163]
+        - paragraph [ref=e39]: Filtre o fluxo, ajuste dados pontuais e estorne lancamentos sem perder rastreabilidade.
+      - button "Lançamento ⌘ N" [ref=e41] [cursor=pointer]:
+        - img
+        - text: Lançamento
+        - generic [ref=e42]:
+          - generic [ref=e43]: ⌘
+          - text: "N"
+    - region "Historico e filtros" [ref=e164]:
+      - generic [ref=e166]:
+        - paragraph [ref=e167]: Transacoes
+        - heading "Historico e filtros" [level=2] [ref=e168]
+        - paragraph [ref=e169]: Filtre o fluxo do caixa, ajuste lancamentos e estorne quando necessario.
+      - generic [ref=e170]:
+        - generic [ref=e171]:
+          - text: Buscar
+          - textbox "Buscar" [ref=e172]
+        - generic [ref=e173]:
+          - text: De
+          - textbox "De" [ref=e174]
+        - generic [ref=e175]:
+          - text: Ate
+          - textbox "Ate" [ref=e176]
+        - generic [ref=e177]:
+          - text: Conta do filtro
+          - combobox "Conta do filtro" [ref=e178]:
+            - option "Todas" [selected]
+            - option "Itaú"
+            - option "Bradesco"
+            - option "Nubank"
+            - option "Bee Vale"
+        - generic [ref=e179]:
+          - text: Metodo do filtro
+          - combobox "Metodo do filtro" [ref=e180]:
+            - option "Todos" [selected]
+            - option "PIX"
+            - option "CASH"
+            - option "OTHER"
+        - generic [ref=e181]:
+          - text: Categoria do filtro
+          - textbox "Categoria do filtro" [ref=e182]
+        - generic [ref=e183]:
+          - text: Pessoa do filtro
+          - textbox "Pessoa do filtro" [ref=e184]
+        - button "Aplicar filtros" [ref=e186] [cursor=pointer]
+      - table [ref=e188]:
+        - rowgroup [ref=e189]:
+          - row "Data Descricao Categoria Conta Metodo Tipo Status Valor Acoes" [ref=e190]:
+            - columnheader "Data" [ref=e191]
+            - columnheader "Descricao" [ref=e192]
+            - columnheader "Categoria" [ref=e193]
+            - columnheader "Conta" [ref=e194]
+            - columnheader "Metodo" [ref=e195]
+            - columnheader "Tipo" [ref=e196]
+            - columnheader "Status" [ref=e197]
+            - columnheader "Valor" [ref=e198]
+            - columnheader "Acoes" [ref=e199]
+        - rowgroup [ref=e200]:
+          - row "03/03, 12:00 Presente Vó da Duda other Nubank PIX Entrada Ativa R$ 111,00 Editar Estornar" [ref=e201]:
+            - cell "03/03, 12:00" [ref=e202]
+            - cell "Presente Vó da Duda" [ref=e203]
+            - cell "other" [ref=e204]
+            - cell "Nubank" [ref=e205]
+            - cell "PIX" [ref=e206]
+            - cell "Entrada" [ref=e207]
+            - cell "Ativa" [ref=e208]:
+              - generic [ref=e209]: Ativa
+            - cell "R$ 111,00" [ref=e210]
+            - cell "Editar Estornar" [ref=e211]:
+              - generic [ref=e212]:
+                - button "Editar" [ref=e213] [cursor=pointer]
+                - button "Estornar" [ref=e214] [cursor=pointer]

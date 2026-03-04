@@ -1,0 +1,184 @@
+- generic:
+  - generic:
+    - generic:
+      - navigation:
+        - generic:
+          - paragraph: Finances
+          - strong: Controle pessoal
+          - paragraph: Desktop focado em caixa, contas e movimentacoes.
+        - list:
+          - listitem:
+            - button:
+              - generic: Dashboard
+              - generic: Visao mensal do caixa
+          - listitem:
+            - button:
+              - generic: Transacoes
+              - generic: Filtros, edicao e estorno
+          - listitem:
+            - button:
+              - generic: Contas
+              - generic: Saldo, criacao e ajustes
+          - listitem:
+            - button [pressed]:
+              - generic: Cards
+              - generic: Cadastro e ciclo de pagamento
+          - listitem:
+            - button:
+              - generic: Movimentar
+              - generic: Entradas, saidas e transferencias
+        - generic:
+          - button:
+            - generic: Configurações
+            - generic: Desenvolvimento e preferências
+      - main:
+        - generic:
+          - generic:
+            - paragraph: Release 0.6
+            - heading [level=1]: Cartoes e ciclo
+            - paragraph: Cadastre cartoes, lance compras e acompanhe a distribuicao das faturas por ciclo.
+          - generic:
+            - button:
+              - img
+              - text: Lançamento
+              - generic:
+                - generic: ⌘
+                - text: "N"
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - heading [level=1]: Cartões e Ciclos
+                - paragraph: Acompanhe suas faturas com a Regra do Agora.
+              - generic:
+                - combobox:
+                  - generic: Bradesco Platinum
+                  - img
+                - button:
+                  - img
+                  - text: Novo
+            - generic:
+              - tablist:
+                - tab [selected]: Faturas
+                - tab: Compras
+                - tab: Ajustes
+              - tabpanel:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic: Referência
+                    - generic: março 2026
+                  - button:
+                    - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic: Fatura de 2026-03
+                        - generic:
+                          - generic: Aberta
+                          - generic: "ID: 026-03"
+                      - generic:
+                        - button: Ver itens
+                        - button: Pagar Agora
+                    - generic:
+                      - generic:
+                        - generic:
+                          - paragraph: Valor Total
+                          - paragraph: R$ 43,33
+                        - generic:
+                          - paragraph: Total Pago
+                          - paragraph: R$ 0,00
+                        - generic:
+                          - paragraph: Em Aberto
+                          - paragraph: R$ 43,33
+                        - generic:
+                          - paragraph: Lançamentos
+                          - paragraph: "2"
+                      - generic:
+                        - generic:
+                          - generic: Progresso de Pagamento
+                          - generic: 0%
+                        - progressbar
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - paragraph: Fechamento
+                            - paragraph: 2026-03-24
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - paragraph: Vencimento
+                            - paragraph: 2026-04-05
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic: Regra do Agora
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                          - paragraph: A fatura fecha no dia 24. Lançamentos feitos antes do fechamento aparecem nesta tela automaticamente.
+                    - generic:
+                      - generic:
+                        - generic: Ciclos Anteriores
+                      - generic:
+                        - generic:
+                          - button:
+                            - generic:
+                              - generic:
+                                - img
+                              - generic:
+                                - paragraph: 2026-05
+                                - paragraph: R$ 33,34
+                            - img
+                          - button:
+                            - generic:
+                              - generic:
+                                - img
+                              - generic:
+                                - paragraph: 2026-04
+                                - paragraph: R$ 33,33
+                            - img
+  - dialog "Lançamento" [ref=e371]:
+    - heading "Lançamento" [level=2] [ref=e374]
+    - generic [ref=e375]:
+      - tablist [ref=e377]:
+        - tab "Despesa" [selected] [ref=e378] [cursor=pointer]
+        - tab "Receita" [ref=e379] [cursor=pointer]
+        - tab "Transferência" [ref=e380] [cursor=pointer]
+        - tab "Cartão" [ref=e381] [cursor=pointer]
+        - tab "Fatura" [ref=e382] [cursor=pointer]
+      - generic [ref=e383]:
+        - generic [ref=e384]:
+          - generic [ref=e385]: R$
+          - textbox "0,00" [active] [ref=e386]
+        - generic [ref=e387]:
+          - generic [ref=e388]:
+            - text: Descrição
+            - textbox "No que você gastou?" [ref=e389]
+          - generic [ref=e390]:
+            - text: Categoria
+            - textbox "Alimentação, etc" [ref=e391]
+          - generic [ref=e392]:
+            - text: Data
+            - textbox [ref=e393]: 2026-03-03
+          - generic [ref=e394]:
+            - text: Conta
+            - combobox [ref=e395] [cursor=pointer]:
+              - generic: Itaú
+              - img [ref=e396]
+            - combobox [ref=e398]
+        - generic [ref=e399]:
+          - generic [ref=e400]:
+            - checkbox "Salvar e adicionar outra" [ref=e401] [cursor=pointer]
+            - checkbox
+            - generic [ref=e402]: Salvar e adicionar outra
+          - button "Lançar" [disabled]
+    - button "Close" [ref=e403] [cursor=pointer]:
+      - img [ref=e404]
+      - generic [ref=e407]: Close

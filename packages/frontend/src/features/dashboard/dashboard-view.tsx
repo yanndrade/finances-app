@@ -1,9 +1,6 @@
 import type { AccountSummary, DashboardSummary, TransactionSummary } from "../../lib/api";
 import type { AppView } from "../../components/sidebar";
-
-import { DashboardHealth } from "./dashboard-health";
-import { DashboardControl } from "./dashboard-control";
-import { DashboardAction } from "./dashboard-action";
+import { DashboardBento } from "./dashboard-bento";
 
 type DashboardViewProps = {
   dashboard: DashboardSummary | null;
@@ -13,6 +10,7 @@ type DashboardViewProps = {
   month: string;
   onMonthChange: (month: string) => void;
   onNavigate: (view: AppView) => void;
+  onOpenQuickAdd: () => void;
   onUpdateTransaction: (
     transactionId: string,
     updates: { categoryId?: string; description?: string },
@@ -22,74 +20,46 @@ type DashboardViewProps = {
 export function DashboardView({
   dashboard,
   accounts,
-  transactions,
   loading,
   month,
   onMonthChange,
   onNavigate,
-  onUpdateTransaction,
+  onOpenQuickAdd,
 }: DashboardViewProps) {
-  const recentTransactions =
-    dashboard?.recent_transactions.length
-      ? dashboard.recent_transactions
-      : transactions.slice(0, 8);
-
   return (
-    <div className="screen-stack">
-      <div className="dashboard-topbar">
-        <label className="inline-field" aria-label="Mes do dashboard">
-          Mes
+    <div className="space-y-8">
+      <div className="flex justify-end">
+        <div className="bg-white p-2 rounded-2xl shadow-sm border-none">
           <input
             onChange={(event) => onMonthChange(event.target.value)}
             type="month"
+            className="bg-transparent border-none focus:ring-0 font-semibold text-slate-700 cursor-pointer outline-none"
             value={month}
           />
-        </label>
+        </div>
       </div>
 
       {loading && dashboard === null ? (
-        <div className="loading-panel">
-          <div className="skeleton-grid">
-            <div className="skeleton skeleton--lg" />
-            <div className="skeleton skeleton--lg" />
-            <div className="skeleton skeleton--md" />
-            <div className="skeleton skeleton--md" />
-            <div className="skeleton skeleton--md" />
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="h-32 bg-slate-200 animate-pulse rounded-[2rem]" />
+          <div className="h-32 bg-slate-200 animate-pulse rounded-[2rem]" />
+          <div className="h-32 bg-slate-200 animate-pulse rounded-[2rem]" />
         </div>
       ) : null}
 
       {!loading && dashboard === null ? (
-        <div className="empty-state empty-state--guided">
-          <p>Nao foi possivel carregar o dashboard.</p>
-          <p className="empty-state__hint">
-            Verifique a conexao com o servidor e tente novamente.
-          </p>
+        <div className="p-12 text-center bg-white rounded-[2rem] border-none shadow-sm">
+          <p className="text-slate-500 font-medium">Nao foi possivel carregar o dashboard.</p>
         </div>
       ) : null}
 
       {dashboard !== null ? (
-        <>
-          <DashboardHealth
-            dashboard={dashboard}
-            onNavigateToTransactions={() => onNavigate("transactions")}
-          />
-
-          <DashboardControl
-            accounts={accounts}
-            spendingByCategory={dashboard.spending_by_category}
-          />
-
-          <DashboardAction
-            accounts={accounts}
-            onNavigate={onNavigate}
-            onUpdateTransaction={(id, updates) => {
-              onUpdateTransaction(id, updates);
-            }}
-            recentTransactions={recentTransactions}
-            reviewQueue={dashboard.review_queue}
-          />
-        </>
+        <DashboardBento
+          dashboard={dashboard}
+          accounts={accounts}
+          onNavigate={onNavigate}
+          onOpenQuickAdd={onOpenQuickAdd}
+        />
       ) : null}
     </div>
   );
