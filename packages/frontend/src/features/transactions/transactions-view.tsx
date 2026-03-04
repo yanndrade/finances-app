@@ -52,6 +52,7 @@ export function TransactionsView({
   onVoidTransaction,
 }: TransactionsViewProps) {
   const [filterForm, setFilterForm] = useState<TransactionFilters>(filters);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<TransactionEditForm | null>(null);
 
@@ -148,47 +149,60 @@ export function TransactionsView({
             ))}
           </select>
         </label>
-        <label>
-          {"M\u00E9todo do filtro"}
-          <select
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                method: event.target.value as TransactionFilters["method"],
-              }))
-            }
-            value={filterForm.method}
+        <div className="inline-actions">
+          <button
+            className="secondary-button"
+            onClick={() => setShowAdvancedFilters((current) => !current)}
+            type="button"
           >
-            <option value="">Todos</option>
-            <option value="PIX">PIX</option>
-            <option value="CASH">Dinheiro</option>
-            <option value="OTHER">Outro</option>
-          </select>
-        </label>
-        <label>
-          Categoria do filtro
-          <input
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                category: event.target.value,
-              }))
-            }
-            value={filterForm.category}
-          />
-        </label>
-        <label>
-          Pessoa do filtro
-          <input
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                person: event.target.value,
-              }))
-            }
-            value={filterForm.person}
-          />
-        </label>
+            Filtros avancados
+          </button>
+        </div>
+        {showAdvancedFilters ? (
+          <>
+            <label>
+              {"M\u00E9todo do filtro"}
+              <select
+                onChange={(event) =>
+                  setFilterForm((current) => ({
+                    ...current,
+                    method: event.target.value as TransactionFilters["method"],
+                  }))
+                }
+                value={filterForm.method}
+              >
+                <option value="">Todos</option>
+                <option value="PIX">PIX</option>
+                <option value="CASH">Dinheiro</option>
+                <option value="OTHER">Outro</option>
+              </select>
+            </label>
+            <label>
+              Categoria do filtro
+              <input
+                onChange={(event) =>
+                  setFilterForm((current) => ({
+                    ...current,
+                    category: event.target.value,
+                  }))
+                }
+                value={filterForm.category}
+              />
+            </label>
+            <label>
+              Pessoa do filtro
+              <input
+                onChange={(event) =>
+                  setFilterForm((current) => ({
+                    ...current,
+                    person: event.target.value,
+                  }))
+                }
+                value={filterForm.person}
+              />
+            </label>
+          </>
+        ) : null}
         <div className="inline-actions">
           <button className="primary-button" disabled={isSubmitting} type="submit">
             Aplicar filtros

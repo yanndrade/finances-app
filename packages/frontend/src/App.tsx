@@ -87,8 +87,8 @@ const VIEW_META: Record<
   }
 > = {
   dashboard: {
-    title: "Vis\u00E3o geral do caixa",
-    description: "Resumo do m\u00EAs e alertas.",
+    title: "Vis\u00E3o geral",
+    description: "Resumo mensal e pontos de atencao.",
   },
   transactions: {
     title: "Transa\u00E7\u00F5es",

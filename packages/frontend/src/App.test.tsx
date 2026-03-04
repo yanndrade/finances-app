@@ -462,9 +462,10 @@ describe("App", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: /vis/i }),
+      await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /lan/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /\+\s*lan.ar/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /lan.amento/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^movimentar$/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
@@ -507,16 +508,38 @@ describe("App", () => {
 
     render(<App />);
 
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
 
-    await userEvent.click(screen.getByRole("button", { name: /lan/i }));
+    await userEvent.click(screen.getByRole("button", { name: /\+\s*lan.ar/i }));
 
     const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
-    const categorySelect = await within(dialog).findByRole(
-      "combobox",
-      { name: /categoria/i },
-      { timeout: 5_000 },
+    expect(within(dialog).getByRole("button", { name: /^lan.ar$/i })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("tab", { name: /cart.o/i })).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("tab", { name: /pagamento de fatura/i }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(within(dialog).getByLabelText(/tipo/i), "expense");
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText(/modo de pagamento/i),
+      "CARD",
     );
+
+    expect(within(dialog).getByLabelText(/cart.o/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/parcelas/i)).toBeInTheDocument();
+
+    await userEvent.selectOptions(within(dialog).getByLabelText(/tipo/i), "transfer");
+    expect(within(dialog).getByLabelText(/conta destino/i)).toBeInTheDocument();
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText(/modo da transfer.ncia/i),
+      "invoice_payment",
+    );
+    expect(within(dialog).getByLabelText(/fatura/i)).toBeInTheDocument();
+
+    await userEvent.selectOptions(within(dialog).getByLabelText(/tipo/i), "expense");
+    const categorySelect = await within(dialog).findByRole("combobox", { name: /categoria/i }, {
+      timeout: 5_000,
+    });
     expect(categorySelect).toBeInTheDocument();
 
     await userEvent.click(categorySelect);
@@ -555,12 +578,17 @@ describe("App", () => {
 
     render(<App />);
 
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /lan/i }));
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await userEvent.click(screen.getByRole("button", { name: /\+\s*lan.ar/i }));
 
     const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
-    await userEvent.click(
-      within(dialog).getByRole("tab", { name: /pagamento de fatura/i }),
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText(/tipo/i),
+      "transfer",
+    );
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText(/modo da transfer.ncia/i),
+      "invoice_payment",
     );
 
     expect(within(dialog).getByText(/quitar saldo do cartao/i)).toBeInTheDocument();
@@ -798,6 +826,12 @@ describe("App", () => {
       name: /historico e filtros/i,
     });
     expect(within(transactionsSection).getByText("Supermercado")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/m.todo do filtro/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /filtros avan.ados/i }));
+    expect(screen.getByLabelText(/m.todo do filtro/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/categoria do filtro/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/pessoa do filtro/i)).toBeInTheDocument();
 
     await userEvent.click(within(transactionsSection).getByRole("button", { name: /editar/i }));
     await userEvent.clear(screen.getByLabelText(/descricao da transacao/i));

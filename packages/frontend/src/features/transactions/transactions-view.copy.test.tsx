@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { TransactionsView } from "./transactions-view";
 
 describe("TransactionsView copy", () => {
-  it("shows localized payment and category labels instead of raw backend codes", () => {
+  it("shows localized payment and category labels instead of raw backend codes", async () => {
     render(
       <TransactionsView
         accounts={[
@@ -46,6 +46,8 @@ describe("TransactionsView copy", () => {
         ]}
       />,
     );
+
+    await userEvent.click(screen.getByRole("button", { name: /filtros avancados/i }));
 
     expect(screen.getByRole("option", { name: "Dinheiro" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Outro" })).toBeInTheDocument();
