@@ -871,6 +871,95 @@ def test_card_purchases_can_generate_pending_reimbursements(tmp_path) -> None:
     assert accounts_response.json()[0]["current_balance"] == 120_00
 
 
+def test_mark_reimbursement_received_returns_404_when_destination_account_is_missing(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+
+    response = client.post(
+        "/api/reimbursements/tx-1/mark-received",
+        json={
+            "received_at": "2026-03-05T10:00:00Z",
+            "account_id": "missing-account",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_mark_reimbursement_received_updates_projection_account_when_custom_account_is_used(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Savings", "savings", 50_00)
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+
+    response = client.post(
+        "/api/reimbursements/tx-1/mark-received",
+        json={
+            "received_at": "2026-03-05T10:00:00Z",
+            "account_id": "acc-2",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["account_id"] == "acc-2"
+
+    accounts_response = client.get("/api/accounts")
+    assert accounts_response.status_code == 200
+    balances = {
+        account["account_id"]: account["current_balance"]
+        for account in accounts_response.json()
+    }
+    assert balances["acc-1"] == 80_00
+    assert balances["acc-2"] == 70_00
+
+    receipt_transactions_response = client.get(
+        "/api/transactions",
+        params={"account": "acc-2"},
+    )
+    assert receipt_transactions_response.status_code == 200
+    assert any(
+        transaction["transaction_id"] == "tx-1:reimbursement-receipt"
+        for transaction in receipt_transactions_response.json()
+    )
+
+
 def test_dashboard_endpoint_rejects_invalid_month_format(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",

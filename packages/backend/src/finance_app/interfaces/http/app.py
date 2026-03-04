@@ -538,6 +538,11 @@ def build_router(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(exc),
             ) from exc
+        except AccountNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
         except ReimbursementAlreadyReceivedError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

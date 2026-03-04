@@ -1121,6 +1121,7 @@ class Projector:
             return
 
         receivable.status = "received"
+        receivable.account_id = str(payload.get("account_id", receivable.account_id))
         receivable.received_at = str(payload["received_at"])
         receivable.receipt_transaction_id = _optional_string(
             payload.get("receipt_transaction_id")
