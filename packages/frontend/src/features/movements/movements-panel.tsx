@@ -13,6 +13,7 @@ import type {
   TransferPayload,
 } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
+import { useQuickEntryDefaults, type PersistedDefaults } from "./use-quick-entry-defaults";
 
 type PaymentMethod = "PIX" | "CASH" | "OTHER";
 type QuickEntryMode = "income" | "expense" | "transfer";
@@ -36,13 +37,6 @@ type TransferFormValues = {
   toAccountId: string;
 };
 
-type PersistedDefaults = {
-  accountId?: string;
-  paymentMethod?: PaymentMethod;
-  keepContext?: boolean;
-  recentCategories?: string[];
-};
-
 type MovementsPanelProps = {
   accounts: AccountSummary[];
   isSubmitting: boolean;
@@ -50,7 +44,6 @@ type MovementsPanelProps = {
   onSubmitTransfer: (payload: TransferPayload) => Promise<void>;
 };
 
-const STORAGE_KEY = "quick-entry-defaults";
 const PAYMENT_METHOD_OPTIONS: Array<{ label: string; value: PaymentMethod }> = [
   { label: "Dinheiro", value: "CASH" },
   { label: "PIX", value: "PIX" },
@@ -63,13 +56,16 @@ export function MovementsPanel({
   onSubmitTransaction,
   onSubmitTransfer,
 }: MovementsPanelProps) {
-  const persistedDefaults = readPersistedDefaults();
+  const {
+    defaults: persistedDefaults,
+    saveDefaults: persistDefaults,
+  } = useQuickEntryDefaults();
   const categoryListId = useId();
   const amountInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<QuickEntryMode>("expense");
   const [isDetailsOpen, setIsDetailsOpen] = useState(true);
   const [recentCategories, setRecentCategories] = useState<string[]>(
-    persistedDefaults.recentCategories ?? [],
+    () => persistedDefaults.recentCategories ?? [],
   );
   const [transactionForm, setTransactionForm] = useState<TransactionFormValues>(() =>
     createTransactionForm(accounts, persistedDefaults),
@@ -169,13 +165,12 @@ export function MovementsPanel({
 
   function resetTransactionForm(keepContextOverride?: boolean) {
     const keepContext = keepContextOverride ?? transactionForm.keepContext;
-    const nextDefaults = readPersistedDefaults();
     const stickyAccountId = resolveAccountId(
-      transactionForm.accountId || nextDefaults.accountId || "",
+      transactionForm.accountId || persistedDefaults.accountId || "",
       accounts,
     );
     const stickyPaymentMethod = resolvePaymentMethod(
-      transactionForm.paymentMethod ?? nextDefaults.paymentMethod,
+      transactionForm.paymentMethod ?? persistedDefaults.paymentMethod,
     );
     const stickyDate = keepContext ? transactionForm.date : todayDate();
 
@@ -749,32 +744,6 @@ function reconcileTransferForm(
     fromAccountId,
     toAccountId,
   };
-}
-
-function readPersistedDefaults(): PersistedDefaults {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(STORAGE_KEY);
-
-    if (!rawValue) {
-      return {};
-    }
-
-    return JSON.parse(rawValue) as PersistedDefaults;
-  } catch {
-    return {};
-  }
-}
-
-function persistDefaults(nextDefaults: PersistedDefaults) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextDefaults));
 }
 
 function mergeRecentCategories(current: string[], nextCategory: string): string[] {

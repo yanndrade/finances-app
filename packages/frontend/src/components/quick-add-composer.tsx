@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { format } from "date-fns";
 import { z } from "zod";
 
@@ -32,18 +32,17 @@ import type {
   TransferPayload,
 } from "../lib/api";
 import { getCategoryOptions } from "../lib/categories";
+import {
+  createInitialQuickAddState,
+  quickAddReducer,
+  type EntryType,
+  type ExpensePaymentMode,
+  type InvestmentMode,
+  type TransferMode,
+  type QuickAddValidationErrors,
+} from "./quick-add/use-quick-add-reducer";
 
 type PaymentMethod = "PIX" | "CASH" | "OTHER";
-type EntryType = "expense" | "income" | "transfer" | "investment";
-type ExpensePaymentMode = PaymentMethod | "CARD";
-type TransferMode = "internal" | "invoice_payment";
-type InvestmentMode = "contribution" | "withdrawal";
-type QuickAddValidationErrors = Partial<
-  Record<
-    "amount" | "date" | "accountId" | "toAccountId" | "invoiceId" | "cardId" | "installments",
-    string
-  >
->;
 
 const MOBILE_QUERY = "(max-width: 900px)";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -88,24 +87,33 @@ export function QuickAddComposer({
 }: QuickAddComposerProps) {
   const isMobile = useMediaQuery(MOBILE_QUERY);
   const amountInputRef = useRef<HTMLInputElement>(null);
-  const [entryType, setEntryType] = useState<EntryType>("expense");
-  const [expensePaymentMode, setExpensePaymentMode] = useState<ExpensePaymentMode>("PIX");
-  const [transferMode, setTransferMode] = useState<TransferMode>("internal");
-  const [investmentMode, setInvestmentMode] = useState<InvestmentMode>("contribution");
-  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [quickAddState, dispatchQuickAdd] = useReducer(
+    quickAddReducer,
+    createInitialQuickAddState({
+      defaultAccountId: "",
+      today: format(new Date(), "yyyy-MM-dd"),
+    }),
+  );
+  const {
+    entryType,
+    expensePaymentMode,
+    transferMode,
+    investmentMode,
+    date,
+    accountId,
+    keepOpen,
+    toAccountId,
+    installments,
+    invoiceId,
+    dividendAmount,
+    investedReductionAmount,
+    validationErrors,
+  } = quickAddState;
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [personId, setPersonId] = useState("");
-  const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [keepOpen, setKeepOpen] = useState(false);
-  const [toAccountId, setToAccountId] = useState("");
   const [cardId, setCardId] = useState("");
-  const [installments, setInstallments] = useState("1");
-  const [invoiceId, setInvoiceId] = useState("");
-  const [dividendAmount, setDividendAmount] = useState("");
-  const [investedReductionAmount, setInvestedReductionAmount] = useState("");
-  const [validationErrors, setValidationErrors] = useState<QuickAddValidationErrors>({});
 
   const categoryOptions = getCategoryOptions(categoryId);
   const openInvoices = useMemo(
@@ -115,7 +123,10 @@ export function QuickAddComposer({
 
   useEffect(() => {
     if (isOpen && accounts.length > 0 && !accountId) {
-      setAccountId(accounts[0].account_id);
+      dispatchQuickAdd({
+        type: "accountChanged",
+        accountId: accounts[0].account_id,
+      });
     }
   }, [isOpen, accounts, accountId]);
 
@@ -134,38 +145,6 @@ export function QuickAddComposer({
   }, [isOpen, isMobile, entryType, expensePaymentMode, transferMode, investmentMode]);
 
   useEffect(() => {
-    setValidationErrors({});
-
-    if (entryType !== "transfer") {
-      setTransferMode("internal");
-      setToAccountId("");
-      setInvoiceId("");
-    }
-
-    if (entryType !== "expense") {
-      setExpensePaymentMode("PIX");
-      setInstallments("1");
-      setKeepOpen(false);
-    }
-    if (entryType !== "investment") {
-      setInvestmentMode("contribution");
-      setDividendAmount("");
-      setInvestedReductionAmount("");
-    }
-  }, [entryType]);
-
-  useEffect(() => {
-    if (expensePaymentMode !== "CARD") {
-      setInstallments("1");
-    }
-    setValidationErrors((current) => ({
-      ...current,
-      cardId: undefined,
-      installments: undefined,
-    }));
-  }, [expensePaymentMode]);
-
-  useEffect(() => {
     if (entryType !== "transfer") {
       return;
     }
@@ -177,34 +156,31 @@ export function QuickAddComposer({
 
       const fallbackAccount = accounts.find((account) => account.account_id !== accountId);
       if (fallbackAccount) {
-        setToAccountId(fallbackAccount.account_id);
+        dispatchQuickAdd({
+          type: "toAccountChanged",
+          accountId: fallbackAccount.account_id,
+        });
       }
       return;
     }
 
-    setToAccountId("");
+    dispatchQuickAdd({ type: "toAccountChanged", accountId: "" });
 
     if (!invoiceId && openInvoices.length > 0) {
-      setInvoiceId(openInvoices[0].invoice_id);
+      dispatchQuickAdd({ type: "invoiceChanged", invoiceId: openInvoices[0].invoice_id });
     }
   }, [accountId, accounts, entryType, invoiceId, openInvoices, toAccountId, transferMode]);
 
   function resetForm() {
-    setEntryType("expense");
-    setExpensePaymentMode("PIX");
-    setTransferMode("internal");
     setAmount("");
     setDescription("");
     setPersonId("");
     setCategoryId("");
-    setKeepOpen(false);
-    setToAccountId("");
-    setInstallments("1");
-    setInvoiceId("");
-    setDividendAmount("");
-    setInvestedReductionAmount("");
-    setInvestmentMode("contribution");
-    setValidationErrors({});
+    dispatchQuickAdd({
+      type: "reset",
+      defaultAccountId: accountId,
+      today: date,
+    });
   }
 
   function handleClose() {
@@ -290,7 +266,7 @@ export function QuickAddComposer({
       }
     }
 
-    setValidationErrors(nextErrors);
+    dispatchQuickAdd({ type: "validationErrorsSet", errors: nextErrors });
     return Object.keys(nextErrors).length === 0;
   }
 
@@ -426,7 +402,10 @@ export function QuickAddComposer({
           value={amount}
           onChange={(event) => {
             setAmount(formatAmountInput(event.target.value));
-            setValidationErrors((current) => ({ ...current, amount: undefined }));
+            dispatchQuickAdd({
+              type: "validationErrorsPatched",
+              errors: { amount: undefined },
+            });
           }}
         />
         <FieldError message={validationErrors.amount} />
@@ -439,7 +418,11 @@ export function QuickAddComposer({
             id="quick-add-type"
             aria-label="Tipo"
             className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
-            onChange={(event) => setEntryType(event.target.value as EntryType)}
+            onChange={(event) =>
+              dispatchQuickAdd({
+                type: "entryTypeChanged",
+                entryType: event.target.value as EntryType,
+              })}
             value={entryType}
           >
             <option value="expense">Despesa</option>
@@ -457,8 +440,11 @@ export function QuickAddComposer({
             className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
             value={date}
             onChange={(event) => {
-              setDate(event.target.value);
-              setValidationErrors((current) => ({ ...current, date: undefined }));
+              dispatchQuickAdd({ type: "dateChanged", date: event.target.value });
+              dispatchQuickAdd({
+                type: "validationErrorsPatched",
+                errors: { date: undefined },
+              });
             }}
           />
           <FieldError message={validationErrors.date} />
@@ -496,7 +482,10 @@ export function QuickAddComposer({
               aria-label="Modo de pagamento"
               className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
               onChange={(event) =>
-                setExpensePaymentMode(event.target.value as ExpensePaymentMode)
+                dispatchQuickAdd({
+                  type: "expensePaymentModeChanged",
+                  mode: event.target.value as ExpensePaymentMode,
+                })
               }
               value={expensePaymentMode}
             >
@@ -515,7 +504,11 @@ export function QuickAddComposer({
               id="quick-add-transfer-mode"
               aria-label="Modo da transferencia"
               className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
-              onChange={(event) => setTransferMode(event.target.value as TransferMode)}
+              onChange={(event) =>
+                dispatchQuickAdd({
+                  type: "transferModeChanged",
+                  mode: event.target.value as TransferMode,
+                })}
               value={transferMode}
             >
               <option value="internal">Entre contas</option>
@@ -531,7 +524,11 @@ export function QuickAddComposer({
               id="quick-add-investment-mode"
               aria-label="Tipo do movimento"
               className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
-              onChange={(event) => setInvestmentMode(event.target.value as InvestmentMode)}
+              onChange={(event) =>
+                dispatchQuickAdd({
+                  type: "investmentModeChanged",
+                  mode: event.target.value as InvestmentMode,
+                })}
               value={investmentMode}
             >
               <option value="contribution">Aporte</option>
@@ -568,7 +565,11 @@ export function QuickAddComposer({
               aria-label="Dividendos"
               className="h-11 border-transparent bg-muted/50"
               value={dividendAmount}
-              onChange={(event) => setDividendAmount(formatAmountInput(event.target.value))}
+              onChange={(event) =>
+                dispatchQuickAdd({
+                  type: "dividendAmountChanged",
+                  amount: formatAmountInput(event.target.value),
+                })}
               placeholder="0,00"
             />
           </div>
@@ -582,7 +583,11 @@ export function QuickAddComposer({
               aria-label="Reducao do investido"
               className="h-11 border-transparent bg-muted/50"
               value={investedReductionAmount}
-              onChange={(event) => setInvestedReductionAmount(formatAmountInput(event.target.value))}
+              onChange={(event) =>
+                dispatchQuickAdd({
+                  type: "investedReductionAmountChanged",
+                  amount: formatAmountInput(event.target.value),
+                })}
               placeholder="0,00"
             />
           </div>
@@ -597,8 +602,11 @@ export function QuickAddComposer({
             aria-label={entryType === "transfer" ? "Conta origem" : "Conta"}
             className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
             onChange={(event) => {
-              setAccountId(event.target.value);
-              setValidationErrors((current) => ({ ...current, accountId: undefined }));
+              dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
+              dispatchQuickAdd({
+                type: "validationErrorsPatched",
+                errors: { accountId: undefined },
+              });
             }}
             value={accountId}
           >
@@ -619,8 +627,11 @@ export function QuickAddComposer({
               aria-label="Conta destino"
               className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
               onChange={(event) => {
-                setToAccountId(event.target.value);
-                setValidationErrors((current) => ({ ...current, toAccountId: undefined }));
+                dispatchQuickAdd({ type: "toAccountChanged", accountId: event.target.value });
+                dispatchQuickAdd({
+                  type: "validationErrorsPatched",
+                  errors: { toAccountId: undefined },
+                });
               }}
               value={toAccountId}
             >
@@ -649,8 +660,11 @@ export function QuickAddComposer({
                 aria-label="Fatura"
                 className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
                 onChange={(event) => {
-                  setInvoiceId(event.target.value);
-                  setValidationErrors((current) => ({ ...current, invoiceId: undefined }));
+                  dispatchQuickAdd({ type: "invoiceChanged", invoiceId: event.target.value });
+                  dispatchQuickAdd({
+                    type: "validationErrorsPatched",
+                    errors: { invoiceId: undefined },
+                  });
                 }}
                 value={invoiceId}
               >
@@ -681,7 +695,10 @@ export function QuickAddComposer({
                 className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
                 onChange={(event) => {
                   setCardId(event.target.value);
-                  setValidationErrors((current) => ({ ...current, cardId: undefined }));
+                  dispatchQuickAdd({
+                    type: "validationErrorsPatched",
+                    errors: { cardId: undefined },
+                  });
                 }}
                 value={cardId}
               >
@@ -704,8 +721,14 @@ export function QuickAddComposer({
                 className="h-11 border-transparent bg-muted/50"
                 value={installments}
                 onChange={(event) => {
-                  setInstallments(event.target.value);
-                  setValidationErrors((current) => ({ ...current, installments: undefined }));
+                  dispatchQuickAdd({
+                    type: "installmentsChanged",
+                    installments: event.target.value,
+                  });
+                  dispatchQuickAdd({
+                    type: "validationErrorsPatched",
+                    errors: { installments: undefined },
+                  });
                 }}
               />
               <FieldError message={validationErrors.installments} />
@@ -722,7 +745,10 @@ export function QuickAddComposer({
                   id="keepOpen"
                   checked={keepOpen}
                   onCheckedChange={(checked: boolean | "indeterminate") =>
-                    setKeepOpen(checked === true)
+                    dispatchQuickAdd({
+                      type: "keepOpenChanged",
+                      keepOpen: checked === true,
+                    })
                   }
                 />
                 <label

@@ -274,4 +274,43 @@ describe("api timestamp normalization", () => {
       "/api/reports/summary?period=month&reference=2026-04-15&from=2026-04-01T00%3A00%3A00Z&to=2026-04-30T23%3A59%3A59Z&category=food&account=acc-1&method=CASH&person=alice&text=Dinner",
     );
   });
+
+  it("sends only changed fields in updateTransaction patch payload", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          transaction_id: "tx-1",
+          occurred_at: "2026-04-20T10:00:00Z",
+          type: "expense",
+          amount: 50_00,
+          account_id: "acc-1",
+          payment_method: "CASH",
+          category_id: "food",
+          description: "Mercado mensal",
+          person_id: null,
+          status: "active",
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.updateTransaction("tx-1", {
+      description: "Mercado mensal",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PATCH");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      description: "Mercado mensal",
+    });
+  });
+
+  it("returns undefined for 204 responses", async () => {
+    const fetchMock = vi
+      .fn<(typeof fetch)>()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.requestJson("/api/health")).resolves.toBeUndefined();
+  });
 });

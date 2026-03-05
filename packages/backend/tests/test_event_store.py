@@ -71,3 +71,29 @@ def test_append_event_is_atomic_when_payload_is_not_serializable(tmp_path: Path)
         )
 
     assert store.list_events() == []
+
+
+def test_append_batch_is_atomic_when_one_event_is_invalid(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{(tmp_path / 'events.db').as_posix()}"
+    store = EventStore(database_url=database_url)
+    store.create_schema()
+
+    with pytest.raises(EventStoreError):
+        store.append_batch(
+            [
+                NewEvent(
+                    type="AccountCreated",
+                    timestamp="2026-03-02T12:00:00Z",
+                    payload={"id": "acc-1", "name": "Wallet"},
+                    version=1,
+                ),
+                NewEvent(
+                    type="ExpenseCreated",
+                    timestamp="2026-03-02T12:01:00Z",
+                    payload={"invalid": {1, 2, 3}},
+                    version=1,
+                ),
+            ]
+        )
+
+    assert store.list_events() == []

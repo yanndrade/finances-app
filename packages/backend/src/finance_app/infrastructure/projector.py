@@ -23,6 +23,11 @@ from sqlalchemy.orm import sessionmaker
 from finance_app.domain.cards import PurchaseInstallmentAllocation
 from finance_app.domain.cards import allocate_purchase_installments
 from finance_app.domain.events import StoredEvent
+from finance_app.domain.policies import (
+    budget_status as domain_budget_status,
+    investment_goal_target,
+    requires_review,
+)
 from finance_app.domain.projections import (
     AccountProjection,
     BalanceStateProjection,
@@ -879,7 +884,7 @@ class Projector:
             occurred_from=occurred_from,
             occurred_to=occurred_to,
         )
-        target = int(round(monthly_income_total * 0.1))
+        target = investment_goal_target(monthly_income_total=monthly_income_total)
         realized = contribution_total + dividend_total
 
         return {
@@ -945,9 +950,7 @@ class Projector:
     ) -> list[dict[str, str | int | None]]:
         with self._lock:
             self.bootstrap()
-            with self._session_factory.begin() as session:
-                self._ensure_month_pendings(session, month=month)
-                session.flush()
+            with self._session_factory() as session:
                 rows = (
                     session.query(PendingProjectionRecord)
                     .filter(PendingProjectionRecord.month == month)
@@ -974,16 +977,19 @@ class Projector:
     def get_pending(self, pending_id: str) -> dict[str, str | int | None] | None:
         with self._lock:
             self.bootstrap()
-            with self._session_factory.begin() as session:
-                month = self._pending_month_from_id(pending_id)
-                if month is not None:
-                    self._ensure_month_pendings(session, month=month)
-                    session.flush()
+            with self._session_factory() as session:
                 row = session.get(PendingProjectionRecord, pending_id)
                 if row is None:
                     return None
 
                 return self._pending_to_dict(row)
+
+    def materialize_month_pendings(self, *, month: str) -> None:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory.begin() as session:
+                self._ensure_month_pendings(session, month=month)
+                session.flush()
 
     def get_dashboard_summary(self, *, month: str) -> dict[str, object]:
         with self._lock:
@@ -1020,12 +1026,6 @@ class Projector:
                     .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
                     .filter(TransactionProjectionRecord.status == "active")
                     .filter(TransactionProjectionRecord.type != "transfer")
-                    .filter(
-                        or_(
-                            TransactionProjectionRecord.description.is_(None),
-                            TransactionProjectionRecord.description == "",
-                        )
-                    )
                     .order_by(TransactionProjectionRecord.occurred_at.desc())
                     .all()
                 )
@@ -1120,6 +1120,7 @@ class Projector:
                 direction=row.direction,
             ).to_dict()
             for row in review_rows
+            if requires_review(description=row.description)
         ]
         pending_reimbursements = [
             ReimbursementProjection(
@@ -1259,11 +1260,7 @@ class Projector:
         return int(round((spent * 100) / limit))
 
     def _budget_status(self, *, spent: int, limit: int) -> str:
-        if spent > limit:
-            return "exceeded"
-        if spent * 100 >= limit * 80:
-            return "warning"
-        return "ok"
+        return domain_budget_status(spent=spent, limit=limit)
 
     @staticmethod
     def _previous_month_key(month: str) -> str:

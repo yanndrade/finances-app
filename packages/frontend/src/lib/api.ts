@@ -338,9 +338,23 @@ export type TransactionUpdatePayload = {
   personId?: string;
 };
 
+export type TransactionPatchPayload = Partial<TransactionUpdatePayload>;
+
 export const API_BASE_URL =
   (globalThis as { __FINANCES_API_BASE_URL__?: string }).__FINANCES_API_BASE_URL__ ??
   "http://127.0.0.1:8000";
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: string;
+
+  constructor(status: number, detail: string) {
+    super(detail || "Request failed.");
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
 
 export async function fetchDashboardSummary(month: string): Promise<DashboardSummary> {
   return requestJson<DashboardSummary>(`/api/dashboard?month=${month}`);
@@ -561,20 +575,22 @@ export async function createTransfer(payload: TransferPayload): Promise<Transact
 
 export async function updateTransaction(
   transactionId: string,
-  payload: TransactionUpdatePayload,
+  payload: TransactionPatchPayload,
 ): Promise<TransactionSummary> {
+  const body = {
+    ...(payload.occurredAt !== undefined ? { occurred_at: payload.occurredAt } : {}),
+    ...(payload.type !== undefined ? { type: payload.type } : {}),
+    ...(payload.amountInCents !== undefined ? { amount: payload.amountInCents } : {}),
+    ...(payload.accountId !== undefined ? { account_id: payload.accountId } : {}),
+    ...(payload.paymentMethod !== undefined ? { payment_method: payload.paymentMethod } : {}),
+    ...(payload.categoryId !== undefined ? { category_id: payload.categoryId } : {}),
+    ...(payload.description !== undefined ? { description: payload.description } : {}),
+    ...(payload.personId !== undefined ? { person_id: payload.personId || undefined } : {}),
+  };
+
   return requestJson<TransactionSummary>(`/api/transactions/${transactionId}`, {
     method: "PATCH",
-    body: JSON.stringify({
-      occurred_at: payload.occurredAt,
-      type: payload.type,
-      amount: payload.amountInCents,
-      account_id: payload.accountId,
-      payment_method: payload.paymentMethod,
-      category_id: payload.categoryId,
-      description: payload.description,
-      person_id: payload.personId || undefined,
-    }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -676,7 +692,7 @@ export async function resetApplicationData(): Promise<{ status: string; message:
   });
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -686,11 +702,35 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || "Request failed.");
+    const detailText = await response.text();
+    let detail = detailText;
+    if (detailText) {
+      try {
+        const parsed = JSON.parse(detailText) as { detail?: string };
+        if (typeof parsed.detail === "string") {
+          detail = parsed.detail;
+        }
+      } catch {
+        detail = detailText;
+      }
+    }
+    throw new ApiError(response.status, detail || "Request failed.");
   }
 
-  return (await response.json()) as T;
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  const bodyText = await response.text();
+  if (!bodyText.trim()) {
+    return undefined as T;
+  }
+
+  try {
+    return JSON.parse(bodyText) as T;
+  } catch {
+    return undefined as T;
+  }
 }
 
 export function normalizeTimestampForApi(

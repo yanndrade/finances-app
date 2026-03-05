@@ -26,6 +26,7 @@ class InvalidReimbursementDateError(ReimbursementServiceError):
 class ReimbursementEventStore(Protocol):
     def create_schema(self) -> None: ...
     def append(self, event: NewEvent) -> int: ...
+    def append_batch(self, events: list[NewEvent]) -> list[int]: ...
 
 
 class ReimbursementProjector(Protocol):
@@ -96,40 +97,41 @@ class ReimbursementService:
         amount = int(reimbursement["amount"])
         person_id = str(reimbursement["person_id"])
 
+        timestamp = self._utc_now()
         self._event_store.create_schema()
-        self._event_store.append(
-            NewEvent(
-                type="ReimbursementReceived",
-                timestamp=self._utc_now(),
-                payload={
-                    "transaction_id": transaction_id,
-                    "person_id": person_id,
-                    "amount": amount,
-                    "account_id": destination_account_id,
-                    "received_at": received_at,
-                    "receipt_transaction_id": receipt_transaction_id,
-                },
-                version=1,
-            )
-        )
-        self._event_store.append(
-            NewEvent(
-                type="IncomeCreated",
-                timestamp=self._utc_now(),
-                payload={
-                    "id": receipt_transaction_id,
-                    "occurred_at": received_at,
-                    "type": "income",
-                    "amount": amount,
-                    "account_id": destination_account_id,
-                    "payment_method": "PIX",
-                    "category_id": "reimbursement",
-                    "description": f"Reembolso recebido de {person_id}",
-                    "person_id": person_id,
-                    "status": "active",
-                },
-                version=1,
-            )
+        self._event_store.append_batch(
+            [
+                NewEvent(
+                    type="ReimbursementReceived",
+                    timestamp=timestamp,
+                    payload={
+                        "transaction_id": transaction_id,
+                        "person_id": person_id,
+                        "amount": amount,
+                        "account_id": destination_account_id,
+                        "received_at": received_at,
+                        "receipt_transaction_id": receipt_transaction_id,
+                    },
+                    version=1,
+                ),
+                NewEvent(
+                    type="IncomeCreated",
+                    timestamp=timestamp,
+                    payload={
+                        "id": receipt_transaction_id,
+                        "occurred_at": received_at,
+                        "type": "income",
+                        "amount": amount,
+                        "account_id": destination_account_id,
+                        "payment_method": "PIX",
+                        "category_id": "reimbursement",
+                        "description": f"Reembolso recebido de {person_id}",
+                        "person_id": person_id,
+                        "status": "active",
+                    },
+                    version=1,
+                ),
+            ]
         )
         self._projector.run()
 

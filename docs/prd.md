@@ -422,6 +422,24 @@ Aplicação pessoal para controle de finanças com foco em:
 
 > Importante: Rotas chamam use cases. Não existe regra de negócio dentro de endpoint.
 
+### 10.3 Contratos de fronteira (estado atual)
+- **Interfaces HTTP (backend)**:
+  - `finance_app/interfaces/http/app.py` atua como módulo fino de criação de app e inclusão de routers.
+  - `finance_app/interfaces/http/bootstrap.py` é o composition root (wiring de serviços e adapters).
+  - Routers foram separados por contexto (`accounts`, `cards`, `transactions`, `reports`, `recurring`, `budgets`, `investments`, `health`, `dev`).
+- **Application (backend)**:
+  - Casos de uso executam coordenação explícita entre `EventStore` e `Projector`.
+  - Fluxos multi-evento usam append transacional em lote (`append_batch`).
+- **Domain (backend)**:
+  - Regras puras de negócio (ex.: políticas de orçamento, meta de investimento, itens para revisão) ficam fora de adapters.
+- **Infrastructure (backend)**:
+  - `Projector` concentra projeções/read models, sem leitura com efeito colateral implícito.
+  - Materialização de pendências mensais é comando explícito, separado da consulta.
+- **Frontend**:
+  - `App.tsx` delega orquestração de dados para hook dedicado com proteção contra resposta stale/race.
+  - `lib/api.ts` separa contrato HTTP e parsing robusto (`204`, erros estruturados, payload patch parcial).
+  - Componentes pesados delegam estado específico para hooks/reducer (`use-invoice-items`, `use-quick-entry-defaults`, `use-quick-add-reducer`).
+
 ---
 
 ## 11. Event Store (fonte da verdade) + SQLite (projeção)

@@ -85,6 +85,30 @@ class EventStore:
             session.flush()
             return record.event_id
 
+    def append_batch(self, events: list[NewEvent]) -> list[int]:
+        serialized_events: list[tuple[NewEvent, str]] = []
+        for event in events:
+            try:
+                payload = json.dumps(event.payload, sort_keys=True, separators=(",", ":"))
+            except (TypeError, ValueError) as exc:
+                raise EventStoreError("Event payload must be JSON serializable.") from exc
+            serialized_events.append((event, payload))
+
+        with self._session_factory.begin() as session:
+            records: list[EventRecord] = []
+            for event, payload in serialized_events:
+                record = EventRecord(
+                    type=event.type,
+                    timestamp=event.timestamp,
+                    payload=payload,
+                    version=event.version,
+                )
+                session.add(record)
+                records.append(record)
+
+            session.flush()
+            return [record.event_id for record in records]
+
     def list_events(self) -> list[StoredEvent]:
         return self.list_events_after(0)
 

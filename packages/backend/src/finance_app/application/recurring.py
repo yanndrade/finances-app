@@ -31,10 +31,12 @@ class InvalidRecurringMonthError(RecurringServiceError):
 class RecurringEventStore(Protocol):
     def create_schema(self) -> None: ...
     def append(self, event: NewEvent) -> int: ...
+    def append_batch(self, events: list[NewEvent]) -> list[int]: ...
 
 
 class RecurringProjector(Protocol):
     def run(self) -> int: ...
+    def materialize_month_pendings(self, *, month: str) -> None: ...
     def list_recurring_rules(
         self,
         *,
@@ -117,10 +119,15 @@ class RecurringService:
     def list_pendings(self, *, month: str) -> list[dict[str, str | int | None]]:
         self._sync_projections()
         self._validate_month(month)
+        self._projector.materialize_month_pendings(month=month)
         return self._projector.list_pendings(month=month)
 
     def confirm_pending(self, pending_id: str) -> dict[str, str | int | None]:
         self._sync_projections()
+        pending_month = self._month_from_pending_id(pending_id)
+        if pending_month is not None:
+            self._validate_month(pending_month)
+            self._projector.materialize_month_pendings(month=pending_month)
         pending = self._projector.get_pending(pending_id)
 
         if pending is None:
@@ -137,29 +144,40 @@ class RecurringService:
         transaction_id = f"{pending_id}:expense"
         occurred_at = self._due_date_to_timestamp(str(pending["due_date"]))
 
-        self._append_event(
-            "PendingConfirmed",
-            {
-                "pending_id": pending_id,
-                "transaction_id": transaction_id,
-                "confirmed_at": self._utc_now(),
-            },
+        timestamp = self._utc_now()
+        self._event_store.create_schema()
+        self._event_store.append_batch(
+            [
+                NewEvent(
+                    type="PendingConfirmed",
+                    timestamp=timestamp,
+                    payload={
+                        "pending_id": pending_id,
+                        "transaction_id": transaction_id,
+                        "confirmed_at": timestamp,
+                    },
+                    version=1,
+                ),
+                NewEvent(
+                    type="ExpenseCreated",
+                    timestamp=timestamp,
+                    payload={
+                        "id": transaction_id,
+                        "occurred_at": occurred_at,
+                        "type": "expense",
+                        "amount": int(pending["amount"]),
+                        "account_id": account_id,
+                        "payment_method": str(pending["payment_method"]),
+                        "category_id": str(pending["category_id"]),
+                        "description": pending["description"],
+                        "person_id": None,
+                        "status": "active",
+                    },
+                    version=1,
+                ),
+            ]
         )
-        self._append_event(
-            "ExpenseCreated",
-            {
-                "id": transaction_id,
-                "occurred_at": occurred_at,
-                "type": "expense",
-                "amount": int(pending["amount"]),
-                "account_id": account_id,
-                "payment_method": str(pending["payment_method"]),
-                "category_id": str(pending["category_id"]),
-                "description": pending["description"],
-                "person_id": None,
-                "status": "active",
-            },
-        )
+        self._projector.run()
 
         confirmed = self._projector.get_pending(pending_id)
         assert confirmed is not None
@@ -227,6 +245,13 @@ class RecurringService:
             raise RecurringServiceError("Pending due_date must use YYYY-MM-DD format.") from exc
 
         return f"{due_date}T00:00:00Z"
+
+    @staticmethod
+    def _month_from_pending_id(pending_id: str) -> str | None:
+        parts = pending_id.split(":")
+        if len(parts) < 2:
+            return None
+        return parts[-1]
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

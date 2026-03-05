@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from finance_app.application.health import HealthCheckUseCase
 from finance_app.cli import main
+import finance_app.interfaces.http.app as http_app
 from finance_app.interfaces.http.app import create_app
 
 
@@ -34,6 +35,25 @@ def test_cli_entrypoint_lives_in_finance_app_package(capsys) -> None:
     captured = capsys.readouterr()
 
     assert "finance_app.interfaces.http.create_app()" in captured.out
+
+
+def test_http_app_module_does_not_import_infrastructure_directly() -> None:
+    source = open(http_app.__file__, encoding="utf-8").read()
+    assert "from finance_app.infrastructure" not in source
+
+
+def test_http_routes_are_built_from_bootstrap_services(tmp_path) -> None:
+    from finance_app.interfaces.http.app import build_router
+    from finance_app.interfaces.http.bootstrap import build_services
+
+    services = build_services(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    router = build_router(services)
+
+    assert router is not None
+    assert len(router.routes) > 0
 
 
 def test_accounts_endpoints_support_create_list_and_update(tmp_path) -> None:

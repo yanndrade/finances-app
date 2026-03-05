@@ -42,7 +42,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { formatCurrency } from "../../lib/format";
 import {
-  fetchInvoiceItems,
   type AccountSummary,
   type CardPayload,
   type CardPurchasePayload,
@@ -52,6 +51,7 @@ import {
   type InvoicePaymentPayload,
   type InvoiceSummary,
 } from "../../lib/api";
+import { useInvoiceItems } from "./use-invoice-items";
 
 type CardsViewProps = {
   accounts: AccountSummary[];
@@ -83,8 +83,13 @@ export function CardsView({
   const [selectedScope, setSelectedScope] = useState<string>(ALL_CARDS_SCOPE);
   const [referenceDate, setReferenceDate] = useState(new Date());
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
-  const [invoiceItems, setInvoiceItems] = useState<InvoiceItemSummary[]>([]);
-  const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const {
+    invoiceItems,
+    isLoadingItems,
+    loadError: invoiceItemsError,
+    loadInvoiceItems: fetchAndSetInvoiceItems,
+    clearInvoiceItemsState,
+  } = useInvoiceItems();
   const [isPayDialogOpen, setIsPayDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentAccountId, setPaymentAccountId] = useState("");
@@ -136,16 +141,7 @@ export function CardsView({
 
   async function loadInvoiceItems(invoiceId: string) {
     setSelectedInvoiceId(invoiceId);
-    setIsLoadingItems(true);
-
-    try {
-      const items = await fetchInvoiceItems(invoiceId);
-      setInvoiceItems(items);
-    } catch {
-      setInvoiceItems([]);
-    } finally {
-      setIsLoadingItems(false);
-    }
+    await fetchAndSetInvoiceItems(invoiceId);
   }
 
   function openPayment(invoice: InvoiceSummary) {
@@ -397,7 +393,14 @@ export function CardsView({
                   </TableBody>
                 </Table>
               ) : (
-                <InvoiceItemsTable invoiceItems={invoiceItems} />
+                <>
+                  {invoiceItemsError ? (
+                    <div className="px-8 py-10 text-center">
+                      <p className="text-sm font-bold text-rose-600">{invoiceItemsError}</p>
+                    </div>
+                  ) : null}
+                  <InvoiceItemsTable invoiceItems={invoiceItems} />
+                </>
               )}
             </CardContent>
           </Card>
@@ -446,6 +449,7 @@ export function CardsView({
         onOpenChange={(open) => {
           if (!open) {
             setSelectedInvoiceId(null);
+            clearInvoiceItemsState();
           }
         }}
       >
@@ -467,6 +471,10 @@ export function CardsView({
                     Sincronizando faturas...
                   </p>
                 </div>
+              ) : invoiceItemsError ? (
+                <div className="p-20 text-center">
+                  <p className="text-sm font-bold text-rose-600">{invoiceItemsError}</p>
+                </div>
               ) : (
                 <InvoiceItemsTable invoiceItems={invoiceItems} />
               )}
@@ -476,7 +484,10 @@ export function CardsView({
               <Button
                 variant="ghost"
                 className="w-full h-14 rounded-[1.5rem] font-black text-slate-400 hover:text-slate-600"
-                onClick={() => setSelectedInvoiceId(null)}
+                onClick={() => {
+                  setSelectedInvoiceId(null);
+                  clearInvoiceItemsState();
+                }}
                 type="button"
               >
                 Fechar

@@ -5,6 +5,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { AppShell } from "./components/app-shell";
 import type { AppView } from "./components/sidebar";
 import { ToastViewport, type AppToast } from "./components/toast-viewport";
+import { useAppDataOrchestrator } from "./features/app/use-app-data-orchestrator";
 import {
   createAccount,
   createCard,
@@ -12,14 +13,6 @@ import {
   createCashTransaction,
   createInvestmentMovement,
   createTransfer,
-  fetchAccounts,
-  fetchCards,
-  fetchDashboardSummary,
-  fetchReportSummary,
-  fetchInvestmentMovements,
-  fetchInvestmentOverview,
-  fetchInvoices,
-  fetchTransactions,
   markReimbursementReceived,
   payInvoice,
   resetApplicationData,
@@ -36,20 +29,20 @@ import {
   type CardUpdatePayload,
   type AccountUpdatePayload,
   type CashTransactionPayload,
-  type DashboardSummary,
   type InvoicePaymentPayload,
   type InvestmentMovementPayload,
-  type InvestmentMovementSummary,
-  type InvestmentOverview,
   type InvestmentView,
   type InvoiceSummary,
-  type ReportFilters,
-  type ReportSummary,
+  type TransactionPatchPayload,
   type TransactionFilters,
-  type TransactionSummary,
-  type TransactionUpdatePayload,
   type TransferPayload,
 } from "./lib/api";
+import {
+  currentDate,
+  currentMonth,
+  monthFirstDay,
+  monthLastDay,
+} from "./lib/date-filters";
 
 const QuickAddComposer = lazy(async () => {
   const module = await import("./components/quick-add-composer");
@@ -148,28 +141,36 @@ const TOAST_DURATION_MS = {
 export function App() {
   const [activeView, setActiveView] = useState<AppView>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
-  const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
-  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
-  const [cards, setCards] = useState<CardSummary[]>([]);
-  const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
-  const [transactions, setTransactions] = useState<TransactionSummary[]>([]);
-  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
-  const [investmentOverview, setInvestmentOverview] = useState<InvestmentOverview | null>(null);
-  const [investmentMovements, setInvestmentMovements] = useState<InvestmentMovementSummary[]>([]);
-  const [investmentView, setInvestmentView] = useState<InvestmentView>("monthly");
-  const [investmentFromDate, setInvestmentFromDate] = useState(() =>
-    monthFirstDay(currentMonth()),
-  );
-  const [investmentToDate, setInvestmentToDate] = useState(() =>
-    monthLastDay(currentMonth()),
-  );
-  const [transactionFilters, setTransactionFilters] = useState<TransactionFilters>(
-    EMPTY_TRANSACTION_FILTERS,
-  );
-  const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [toast, setToast] = useState<AppToast>(null);
+
+  const {
+    dashboard,
+    accounts,
+    cards,
+    invoices,
+    transactions,
+    reportSummary,
+    investmentOverview,
+    investmentMovements,
+    investmentView,
+    investmentFromDate,
+    investmentToDate,
+    transactionFilters,
+    loading: isDataLoading,
+    refreshData,
+  } = useAppDataOrchestrator({
+    activeView,
+    selectedMonth,
+    initialTransactionFilters: EMPTY_TRANSACTION_FILTERS,
+    initialInvestmentView: "monthly",
+    initialInvestmentFromDate: monthFirstDay(currentMonth()),
+    initialInvestmentToDate: monthLastDay(currentMonth()),
+    onError: (error) => {
+      showToast("error", getErrorMessage(error));
+    },
+  });
 
   useEffect(() => {
     void refreshData({ month: selectedMonth });
@@ -203,76 +204,6 @@ export function App() {
       tone,
       message,
     });
-  }
-
-  async function refreshData(options?: {
-    month?: string;
-    filters?: TransactionFilters;
-    investmentView?: InvestmentView;
-    investmentFromDate?: string;
-    investmentToDate?: string;
-    includeReport?: boolean;
-  }) {
-    const month = options?.month ?? selectedMonth;
-    const filters = options?.filters ?? transactionFilters;
-    const activeInvestmentView = options?.investmentView ?? investmentView;
-    const activeFromDate = options?.investmentFromDate ?? investmentFromDate;
-    const activeToDate = options?.investmentToDate ?? investmentToDate;
-    const shouldFetchReport = options?.includeReport ?? activeView === "reports";
-    const transactionApiFilters = toTransactionApiFilters(filters);
-    const reportApiFilters = toReportApiFilters(filters);
-
-    setLoading(true);
-
-    try {
-      const [
-        nextCards,
-        nextInvoices,
-        nextDashboard,
-        nextAccounts,
-        nextTransactions,
-        nextInvestmentOverview,
-        nextInvestmentMovements,
-      ] = await Promise.all([
-        fetchCards(),
-        fetchInvoices(),
-        fetchDashboardSummary(month),
-        fetchAccounts(),
-        fetchTransactions(transactionApiFilters),
-        fetchInvestmentOverview({
-          view: activeInvestmentView,
-          from: toIsoFromDate(activeFromDate, false),
-          to: toIsoFromDate(activeToDate, true),
-        }),
-        fetchInvestmentMovements({
-          from: toIsoFromDate(activeFromDate, false),
-          to: toIsoFromDate(activeToDate, true),
-        }),
-      ]);
-      let nextReportSummary: ReportSummary | undefined;
-      if (shouldFetchReport) {
-        nextReportSummary = await fetchReportSummary(reportApiFilters);
-      }
-
-      setCards(nextCards);
-      setInvoices(nextInvoices);
-      setDashboard(nextDashboard);
-      setAccounts(nextAccounts);
-      setTransactions(nextTransactions);
-      setInvestmentOverview(nextInvestmentOverview);
-      setInvestmentMovements(nextInvestmentMovements);
-      if (nextReportSummary !== undefined) {
-        setReportSummary(nextReportSummary);
-      }
-      setTransactionFilters(filters);
-      setInvestmentView(activeInvestmentView);
-      setInvestmentFromDate(activeFromDate);
-      setInvestmentToDate(activeToDate);
-    } catch (error) {
-      showToast("error", getErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
   }
 
   async function runMutation(
@@ -397,7 +328,7 @@ export function App() {
 
   async function handleUpdateTransaction(
     transactionId: string,
-    payload: TransactionUpdatePayload,
+    payload: TransactionPatchPayload,
   ): Promise<void> {
     await runMutation(
       () => updateTransaction(transactionId, payload),
@@ -525,7 +456,7 @@ export function App() {
             dashboard={dashboard}
             investmentOverview={investmentOverview}
             isSubmitting={isSubmitting}
-            loading={loading}
+            loading={isDataLoading}
             month={selectedMonth}
             onMarkReimbursementReceived={handleMarkReimbursementReceived}
             onMonthChange={setSelectedMonth}
@@ -538,7 +469,7 @@ export function App() {
                   () =>
                     updateTransaction(transactionId, {
                       description: updates.description ?? "",
-                    } as TransactionUpdatePayload),
+                    }),
                   "Descricao atualizada com sucesso.",
                 );
               }
@@ -552,7 +483,7 @@ export function App() {
             accounts={accounts}
             filters={transactionFilters}
             isSubmitting={isSubmitting}
-            loading={loading}
+            loading={isDataLoading}
             onApplyFilters={handleApplyReportFilters}
             summary={reportSummary}
           />
@@ -561,7 +492,7 @@ export function App() {
         {activeView === "investments" ? (
           <InvestmentsView
             accounts={accounts}
-            loading={loading}
+            loading={isDataLoading}
             isSubmitting={isSubmitting}
             overview={investmentOverview}
             movements={investmentMovements}
@@ -676,130 +607,6 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
       <div className="h-5 w-40 rounded-full bg-slate-200 animate-pulse" />
     </div>
   );
-}
-
-function currentMonth(): string {
-  return currentDate().slice(0, 7);
-}
-
-function currentDate(): string {
-  return formatLocalDate(new Date());
-}
-
-function monthFirstDay(month: string): string {
-  return `${month}-01`;
-}
-
-function monthLastDay(month: string): string {
-  const [yearText, monthText] = month.split("-");
-  const year = parseInt(yearText ?? "1970", 10);
-  const monthValue = parseInt(monthText ?? "1", 10);
-  const lastDay = new Date(year, monthValue, 0).getDate();
-  return `${month}-${String(lastDay).padStart(2, "0")}`;
-}
-
-function toTransactionApiFilters(filters: TransactionFilters): Partial<TransactionFilters> {
-  const normalized = normalizeReportFilters(filters);
-  const range = resolveFilterRange(normalized);
-
-  return {
-    from: range.from,
-    to: range.to,
-    category: normalized.category,
-    account: normalized.account,
-    method: normalized.method,
-    person: normalized.person,
-    text: normalized.text,
-  };
-}
-
-function toReportApiFilters(filters: TransactionFilters): ReportFilters {
-  const normalized = normalizeReportFilters(filters);
-  const range = resolveFilterRange(normalized);
-
-  return {
-    period: normalized.period,
-    reference: normalized.reference,
-    from: range.from,
-    to: range.to,
-    category: normalized.category,
-    account: normalized.account,
-    method: normalized.method,
-    person: normalized.person,
-    text: normalized.text,
-  };
-}
-
-function normalizeReportFilters(filters: TransactionFilters): ReportFilters {
-  return {
-    period: filters.period ?? "month",
-    reference: filters.reference ?? currentDate(),
-    from: filters.from,
-    to: filters.to,
-    category: filters.category,
-    account: filters.account,
-    method: filters.method,
-    person: filters.person,
-    text: filters.text,
-  };
-}
-
-function resolveFilterRange(filters: ReportFilters): { from: string; to: string } {
-  if (filters.period === "custom") {
-    if (!filters.from || !filters.to) {
-      return { from: "", to: "" };
-    }
-    return {
-      from: toIsoFromDate(filters.from, false),
-      to: toIsoFromDate(filters.to, true),
-    };
-  }
-
-  const safeReference = normalizeReferenceDate(filters.reference);
-  const [yearText, monthText, dayText] = safeReference.split("-");
-  const year = parseInt(yearText ?? "1970", 10);
-  const month = parseInt(monthText ?? "1", 10);
-  const day = parseInt(dayText ?? "1", 10);
-  const referenceDate = new Date(Date.UTC(year, month - 1, day));
-  let start = new Date(referenceDate);
-  let end = new Date(referenceDate);
-
-  if (filters.period === "week") {
-    const weekDay = referenceDate.getUTCDay();
-    const mondayOffset = (weekDay + 6) % 7;
-    start = new Date(referenceDate);
-    start.setUTCDate(referenceDate.getUTCDate() - mondayOffset);
-    end = new Date(start);
-    end.setUTCDate(start.getUTCDate() + 6);
-  } else if (filters.period === "month") {
-    start = new Date(Date.UTC(year, month - 1, 1));
-    end = new Date(Date.UTC(year, month, 0));
-  }
-
-  return {
-    from: `${start.toISOString().slice(0, 10)}T00:00:00Z`,
-    to: `${end.toISOString().slice(0, 10)}T23:59:59Z`,
-  };
-}
-
-function toIsoFromDate(value: string, endOfDay: boolean): string {
-  const suffix = endOfDay ? "T23:59:59Z" : "T00:00:00Z";
-  return `${value}${suffix}`;
-}
-
-function normalizeReferenceDate(value: string): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value;
-  }
-
-  return currentDate();
-}
-
-function formatLocalDate(value: Date): string {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function getErrorMessage(error: unknown): string {

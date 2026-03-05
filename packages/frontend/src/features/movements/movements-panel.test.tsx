@@ -363,4 +363,34 @@ describe("Movements panel", () => {
       occurredAt: expect.stringMatching(/^20\d{2}-\d{2}-\d{2}T/),
     });
   });
+
+  it("reads persisted quick-entry defaults once at startup", async () => {
+    const user = userEvent.setup();
+    const getItemSpy = vi.spyOn(Storage.prototype, "getItem");
+
+    localStorage.setItem(
+      "quick-entry-defaults",
+      JSON.stringify({
+        accountId: "acc-2",
+        paymentMethod: "PIX",
+        keepContext: true,
+      }),
+    );
+
+    render(
+      <MovementsPanel
+        accounts={ACCOUNTS}
+        isSubmitting={false}
+        onSubmitTransaction={vi.fn(() => Promise.resolve())}
+        onSubmitTransfer={vi.fn(() => Promise.resolve())}
+      />,
+    );
+
+    await user.type(screen.getByLabelText(/^Descri\u00e7\u00e3o$/i), "mercado");
+    const callsForDefaults = getItemSpy.mock.calls.filter(
+      ([key]) => key === "quick-entry-defaults",
+    );
+
+    expect(callsForDefaults).toHaveLength(1);
+  });
 });

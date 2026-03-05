@@ -1641,6 +1641,7 @@ def test_projector_generates_monthly_pendings_and_confirms_them_from_events(
     )
 
     applied_before_confirmation = projector.run()
+    projector.materialize_month_pendings(month="2026-03")
     march_pendings = projector.list_pendings(month="2026-03")
     march_pendings_second_read = projector.list_pendings(month="2026-03")
 
@@ -1728,6 +1729,116 @@ def test_projector_generates_monthly_pendings_and_confirms_them_from_events(
             "status": "active",
         }
     ]
+
+
+def test_projector_list_pendings_does_not_materialize_implicitly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="RecurringRuleCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "rule-rent",
+                "name": "Rent",
+                "amount": 25_00,
+                "due_day": 5,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "rent",
+                "description": "Apartment rent",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    projector.run()
+
+    def _should_not_be_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("read path must not materialize pendings")
+
+    monkeypatch.setattr(projector, "_ensure_month_pendings", _should_not_be_called)
+
+    assert projector.list_pendings(month="2026-03") == []
+
+
+def test_projector_get_pending_does_not_materialize_implicitly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="RecurringRuleCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "rule-rent",
+                "name": "Rent",
+                "amount": 25_00,
+                "due_day": 5,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "rent",
+                "description": "Apartment rent",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    projector.run()
+
+    def _should_not_be_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("read path must not materialize pendings")
+
+    monkeypatch.setattr(projector, "_ensure_month_pendings", _should_not_be_called)
+
+    assert projector.get_pending("rule-rent:2026-03") is None
 
 
 def test_projector_keeps_dashboard_totals_unbounded_when_preview_is_limited(
