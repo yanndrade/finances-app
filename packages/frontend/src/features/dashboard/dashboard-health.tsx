@@ -1,6 +1,7 @@
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 import type { DailyBalancePoint, DashboardSummary } from "../../lib/api";
+import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
 import { formatCurrency, formatDelta } from "../../lib/format";
 
 type DashboardHealthProps = {
@@ -37,7 +38,7 @@ export function DashboardHealth({
       <div className="health-grid">
         <article className="health-card health-card--balance">
           <p className="health-card__label">Saldo consolidado</p>
-          <strong className="health-card__value">
+          <strong className="health-card__value money-value">
             {formatCurrency(dashboard.current_balance)}
           </strong>
           {dashboard.daily_balance_series.length > 1 ? (
@@ -46,8 +47,8 @@ export function DashboardHealth({
                 <AreaChart data={dashboard.daily_balance_series}>
                   <defs>
                     <linearGradient id="sparkGradient" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="#8238B3" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#8238B3" stopOpacity={0.02} />
+                      <stop offset="0%" stopColor={CHART_THEME.primary} stopOpacity={0.4} />
+                      <stop offset="100%" stopColor={CHART_THEME.primary} stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="date" hide />
@@ -58,7 +59,7 @@ export function DashboardHealth({
                   <Area
                     dataKey="balance"
                     fill="url(#sparkGradient)"
-                    stroke="#8238B3"
+                    stroke={CHART_THEME.primary}
                     strokeWidth={2}
                     type="monotone"
                   />
@@ -79,7 +80,7 @@ export function DashboardHealth({
               type="button"
             >
               <span className="cashflow-item__label">Entradas</span>
-              <strong className="cashflow-item__value cashflow-item__value--positive">
+              <strong className="cashflow-item__value cashflow-item__value--positive money-value">
                 {formatCurrency(dashboard.total_income)}
               </strong>
               <DeltaBadge delta={incomeDelta} invertTone />
@@ -91,7 +92,7 @@ export function DashboardHealth({
               type="button"
             >
               <span className="cashflow-item__label">Saidas</span>
-              <strong className="cashflow-item__value cashflow-item__value--negative">
+              <strong className="cashflow-item__value cashflow-item__value--negative money-value">
                 {formatCurrency(dashboard.total_expense)}
               </strong>
               <DeltaBadge delta={expenseDelta} />
@@ -108,7 +109,7 @@ export function DashboardHealth({
                   dashboard.net_flow >= 0
                     ? "cashflow-item__value--positive"
                     : "cashflow-item__value--negative"
-                }`}
+                } money-value`}
               >
                 {formatCurrency(dashboard.net_flow)}
               </strong>
@@ -152,7 +153,7 @@ function SparklineTooltip({ active, payload }: {
   const point = payload[0].payload;
 
   return (
-    <div className="sparkline-tooltip">
+    <div className={`sparkline-tooltip ${chartClassNames.tooltip}`}>
       <span>{point.date}</span>
       <strong>{formatCurrency(point.balance)}</strong>
     </div>

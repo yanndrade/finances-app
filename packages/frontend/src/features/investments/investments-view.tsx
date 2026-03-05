@@ -10,6 +10,7 @@ import type {
   InvestmentOverview,
   InvestmentView,
 } from "../../lib/api";
+import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
 import { formatCurrency } from "../../lib/format";
 
 type InvestmentsViewProps = {
@@ -149,7 +150,7 @@ export function InvestmentsView({
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-[2rem] border-none bg-white shadow-sm">
+      <Card className={`rounded-[2rem] border-none bg-white shadow-sm ${chartClassNames.surface}`}>
         <CardHeader className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Investimentos</h2>
@@ -196,7 +197,7 @@ export function InvestmentsView({
         </CardContent>
       </Card>
 
-      <Card className="rounded-[2rem] border-none bg-white shadow-sm">
+      <Card className={`rounded-[2rem] border-none bg-white shadow-sm ${chartClassNames.surface}`}>
         <CardHeader>
           <h2 className="text-lg font-semibold">Evolução do patrimônio</h2>
         </CardHeader>
@@ -209,14 +210,14 @@ export function InvestmentsView({
                 <XAxis dataKey="bucket" />
                 <YAxis />
                 <Tooltip />
-                <Line type="monotone" dataKey="patrimonio" stroke="hsl(var(--primary))" strokeWidth={2} />
+                <Line type="monotone" dataKey="patrimonio" stroke={CHART_THEME.primary} strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           )}
         </CardContent>
       </Card>
 
-      <Card className="rounded-[2rem] border-none bg-white shadow-sm">
+      <Card className={`rounded-[2rem] border-none bg-white shadow-sm ${chartClassNames.surface}`}>
         <CardHeader className="space-y-4">
           <h2 className="text-lg font-semibold">Aporte e dividendos</h2>
           <div className="flex flex-wrap gap-4">
@@ -247,10 +248,10 @@ export function InvestmentsView({
               <YAxis />
               <Tooltip />
               {showContribution ? (
-                <Line type="monotone" dataKey="aporte" stroke="hsl(var(--primary))" strokeWidth={2} />
+                <Line type="monotone" dataKey="aporte" stroke={CHART_THEME.primary} strokeWidth={2} />
               ) : null}
               {showDividend ? (
-                <Line type="monotone" dataKey="dividendos" stroke="hsl(173 58% 39%)" strokeWidth={2} />
+                <Line type="monotone" dataKey="dividendos" stroke={CHART_THEME.income} strokeWidth={2} />
               ) : null}
             </LineChart>
           </ResponsiveContainer>
@@ -409,7 +410,7 @@ export function InvestmentsView({
         </Card>
       </div>
 
-      <Card className="rounded-[2rem] border-none bg-white shadow-sm">
+      <Card className={`rounded-[2rem] border-none bg-white shadow-sm ${chartClassNames.surface}`}>
         <CardHeader>
           <h2 className="text-lg font-semibold">Movimentos de investimento</h2>
         </CardHeader>
@@ -453,7 +454,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-2xl bg-slate-50 px-4 py-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-bold text-slate-900">{formatCurrency(value)}</p>
+      <p className="money-value mt-1 text-xl font-bold text-slate-900">{formatCurrency(value)}</p>
     </div>
   );
 }

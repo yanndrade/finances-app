@@ -4,48 +4,76 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%; /* #F8FAFC */
-    --foreground: 222.2 84% 4.9%; /* #111827 */
-    --card: 0 0% 100%; /* #FFFFFF */
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 263 70% 42%; /* #5B21B6 - Roxo premium */
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%; /* #6B7280 */
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 263 70% 42%;
+    --background: 0 0% 98%;
+    --foreground: 268 24% 18%;
+    --surface: 0 0% 100%;
+    --surface-elevated: 278 100% 98%;
+    --card: var(--surface);
+    --card-foreground: var(--foreground);
+    --popover: var(--surface);
+    --popover-foreground: var(--foreground);
+    --primary: 276 100% 20%;
+    --primary-accent: 280 52% 46%;
+    --primary-soft: 278 100% 87%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 276 50% 96%;
+    --secondary-foreground: 268 24% 18%;
+    --muted: 276 35% 95%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 278 70% 95%;
+    --accent-foreground: 268 24% 18%;
+    --success: 160 84% 39%;
+    --warning: 38 92% 50%;
+    --danger: 343 78% 50%;
+    --destructive: var(--danger);
+    --destructive-foreground: 0 0% 100%;
+    --finance-income: var(--success);
+    --finance-expense: var(--danger);
+    --finance-transfer: 220 9% 46%;
+    --border: 276 32% 90%;
+    --input: 276 32% 90%;
+    --ring: var(--primary-accent);
+    --chart-primary: var(--primary-accent);
+    --chart-income: var(--success);
+    --chart-expense: var(--danger);
+    --chart-transfer: var(--finance-transfer);
     --radius: 1rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 263 70% 42%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 263 70% 42%;
+    --background: 260 14% 4%;
+    --foreground: 270 28% 95%;
+    --surface: 270 19% 9%;
+    --surface-elevated: 270 22% 13%;
+    --card: var(--surface);
+    --card-foreground: var(--foreground);
+    --popover: var(--surface-elevated);
+    --popover-foreground: var(--foreground);
+    --primary: 278 100% 78%;
+    --primary-accent: 280 52% 58%;
+    --primary-soft: 278 80% 30%;
+    --primary-foreground: 260 14% 4%;
+    --secondary: 270 17% 18%;
+    --secondary-foreground: 270 28% 95%;
+    --muted: 270 15% 18%;
+    --muted-foreground: 266 11% 67%;
+    --accent: 270 18% 20%;
+    --accent-foreground: 270 28% 95%;
+    --success: 160 84% 39%;
+    --warning: 38 92% 50%;
+    --danger: 343 78% 50%;
+    --destructive: var(--danger);
+    --destructive-foreground: 270 28% 95%;
+    --finance-income: var(--success);
+    --finance-expense: var(--danger);
+    --finance-transfer: 220 9% 60%;
+    --border: 270 15% 20%;
+    --input: 270 15% 20%;
+    --ring: var(--primary-accent);
+    --chart-primary: var(--primary-accent);
+    --chart-income: var(--success);
+    --chart-expense: var(--danger);
+    --chart-transfer: var(--finance-transfer);
   }
 }
 
@@ -60,7 +88,7 @@
 
 :root {
   color-scheme: light;
-  font-family: Inter, "Segoe UI", "Helvetica Neue", sans-serif;
+  font-family: "Geist Sans", "Inter", "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
 }
@@ -478,6 +506,11 @@ button {
 .account-card__balance,
 .stat-card__value {
   font-variant-numeric: tabular-nums;
+}
+
+.money-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .dashboard-list__item p,
@@ -1105,6 +1138,17 @@ select:focus {
   border: 1px solid rgba(111, 71, 164, 0.12);
   box-shadow: 0 8px 20px rgba(35, 24, 60, 0.12);
   font-size: 0.82rem;
+}
+
+.chart-surface {
+  background: hsl(var(--surface-elevated));
+  border: 1px solid hsl(var(--border));
+}
+
+.chart-tooltip {
+  background: hsl(var(--surface));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
 }
 
 /* — Cashflow Grid — */
