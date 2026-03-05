@@ -3,6 +3,8 @@ export type CategorySpending = {
   total: number;
 };
 
+export type ReportPeriod = "day" | "week" | "month" | "custom";
+
 export type InvestmentView = "daily" | "weekly" | "monthly" | "bimonthly" | "quarterly" | "yearly";
 
 export type InvestmentMovementSummary = {
@@ -270,6 +272,8 @@ export type InvestmentOverviewParams = {
 };
 
 export type TransactionFilters = {
+  period?: ReportPeriod;
+  reference?: string;
   from: string;
   to: string;
   category: string;
@@ -277,6 +281,50 @@ export type TransactionFilters = {
   method: "" | "PIX" | "CASH" | "OTHER";
   person: string;
   text: string;
+};
+
+export type ReportFilters = {
+  period: ReportPeriod;
+  reference: string;
+  from: string;
+  to: string;
+  category: string;
+  account: string;
+  method: "" | "PIX" | "CASH" | "OTHER";
+  person: string;
+  text: string;
+};
+
+export type WeeklyTrendPoint = {
+  week: string;
+  income_total: number;
+  expense_total: number;
+  net_total: number;
+};
+
+export type FutureInstallmentMonth = {
+  month: string;
+  total: number;
+};
+
+export type ReportSummary = {
+  period: {
+    type: ReportPeriod;
+    from: string;
+    to: string;
+  };
+  totals: {
+    income_total: number;
+    expense_total: number;
+    net_total: number;
+  };
+  category_breakdown: CategorySpending[];
+  weekly_trend: WeeklyTrendPoint[];
+  future_commitments: {
+    period_installment_impact_total: number;
+    future_installment_total: number;
+    future_installment_months: FutureInstallmentMonth[];
+  };
 };
 
 export type TransactionUpdatePayload = {
@@ -350,6 +398,40 @@ export async function fetchTransactions(
   return requestJson<TransactionSummary[]>(
     query.length > 0 ? `/api/transactions?${query}` : "/api/transactions",
   );
+}
+
+export async function fetchReportSummary(
+  filters: ReportFilters,
+): Promise<ReportSummary> {
+  const searchParams = new URLSearchParams();
+  searchParams.set("period", filters.period);
+
+  if (filters.reference) {
+    searchParams.set("reference", filters.reference);
+  }
+  if (filters.from) {
+    searchParams.set("from", filters.from);
+  }
+  if (filters.to) {
+    searchParams.set("to", filters.to);
+  }
+  if (filters.category) {
+    searchParams.set("category", filters.category);
+  }
+  if (filters.account) {
+    searchParams.set("account", filters.account);
+  }
+  if (filters.method) {
+    searchParams.set("method", filters.method);
+  }
+  if (filters.person) {
+    searchParams.set("person", filters.person);
+  }
+  if (filters.text) {
+    searchParams.set("text", filters.text);
+  }
+
+  return requestJson<ReportSummary>(`/api/reports/summary?${searchParams.toString()}`);
 }
 
 export async function createAccount(payload: AccountPayload): Promise<AccountSummary> {

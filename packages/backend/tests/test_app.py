@@ -1794,6 +1794,272 @@ def test_budget_endpoints_support_create_update_and_alert_states(tmp_path) -> No
     assert updated_dashboard.json()["budget_alerts"] == []
 
 
+def test_reports_endpoint_supports_period_category_weekly_and_future_commitments(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 500_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 200_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+
+    income_response = client.post(
+        "/api/incomes",
+        json={
+            "id": "inc-1",
+            "occurred_at": "2026-04-01T09:00:00Z",
+            "amount": 100_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "salary",
+            "description": "Freelance",
+        },
+    )
+    food_response = client.post(
+        "/api/expenses",
+        json={
+            "id": "exp-1",
+            "occurred_at": "2026-04-02T10:00:00Z",
+            "amount": 25_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Dinner with Alice",
+            "person_id": "alice",
+        },
+    )
+    transport_response = client.post(
+        "/api/expenses",
+        json={
+            "id": "exp-2",
+            "occurred_at": "2026-04-10T10:00:00Z",
+            "amount": 15_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "transport",
+            "description": "Uber airport",
+            "person_id": "driver",
+        },
+    )
+    card_purchase_response = client.post(
+        "/api/card-purchases",
+        json={
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 120_00,
+            "installments_count": 3,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Headphones",
+            "person_id": "alice",
+        },
+    )
+    report_response = client.get(
+        "/api/reports/summary",
+        params={
+            "period": "month",
+            "reference": "2026-04-15",
+        },
+    )
+
+    assert income_response.status_code == 201
+    assert food_response.status_code == 201
+    assert transport_response.status_code == 201
+    assert card_purchase_response.status_code == 201
+    assert report_response.status_code == 200
+
+    payload = report_response.json()
+    assert payload["period"] == {
+        "type": "month",
+        "from": "2026-04-01T00:00:00Z",
+        "to": "2026-04-30T23:59:59Z",
+    }
+    assert payload["totals"] == {
+        "income_total": 100_00,
+        "expense_total": 80_00,
+        "net_total": 20_00,
+    }
+    assert payload["category_breakdown"] == [
+        {"category_id": "electronics", "total": 40_00},
+        {"category_id": "food", "total": 25_00},
+        {"category_id": "transport", "total": 15_00},
+    ]
+    assert sum(point["income_total"] for point in payload["weekly_trend"]) == 100_00
+    assert sum(point["expense_total"] for point in payload["weekly_trend"]) == 80_00
+    assert payload["future_commitments"] == {
+        "period_installment_impact_total": 40_00,
+        "future_installment_total": 80_00,
+        "future_installment_months": [
+            {"month": "2026-05", "total": 40_00},
+            {"month": "2026-06", "total": 40_00},
+        ],
+    }
+
+
+def test_reports_endpoint_applies_same_filter_dimensions_as_transactions(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 200_00)
+    _create_account(client, "acc-2", "Savings", "savings", 100_00)
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-04-03T10:00:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Dinner with Alice",
+            "person_id": "alice",
+        },
+    )
+    _create_expense(
+        client,
+        {
+            "id": "tx-2",
+            "occurred_at": "2026-04-03T11:00:00Z",
+            "amount": 50_00,
+            "account_id": "acc-2",
+            "payment_method": "PIX",
+            "category_id": "food",
+            "description": "Dinner with Bob",
+            "person_id": "bob",
+        },
+    )
+
+    response = client.get(
+        "/api/reports/summary",
+        params={
+            "period": "custom",
+            "from": "2026-04-01T00:00:00Z",
+            "to": "2026-04-30T23:59:59Z",
+            "category": "food",
+            "account": "acc-1",
+            "method": "CASH",
+            "person": "alice",
+            "text": "Dinner",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["totals"] == {
+        "income_total": 0,
+        "expense_total": 20_00,
+        "net_total": -20_00,
+    }
+    assert response.json()["category_breakdown"] == [{"category_id": "food", "total": 20_00}]
+
+
+def test_reports_endpoint_rejects_custom_period_without_range(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/reports/summary",
+        params={
+            "period": "custom",
+            "reference": "2026-04-15",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "custom period requires from and to in UTC ISO 8601 format.",
+    }
+
+
+def test_reports_endpoint_accepts_custom_range_with_millisecond_precision(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/reports/summary",
+        params={
+            "period": "custom",
+            "from": "2026-04-01T00:00:00Z",
+            "to": "2026-04-01T00:00:00.500Z",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["period"] == {
+        "type": "custom",
+        "from": "2026-04-01T00:00:00Z",
+        "to": "2026-04-01T00:00:00.500Z",
+    }
+
+
+def test_reports_endpoint_respects_custom_subday_range_for_installments(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 90_00,
+            "installments_count": 1,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Headphones",
+        },
+    )
+
+    response = client.get(
+        "/api/reports/summary",
+        params={
+            "period": "custom",
+            "from": "2026-04-20T00:00:00Z",
+            "to": "2026-04-20T00:00:00.500Z",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["future_commitments"] == {
+        "period_installment_impact_total": 0,
+        "future_installment_total": 90_00,
+        "future_installment_months": [{"month": "2026-04", "total": 90_00}],
+    }
+
+
 def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
     tmp_path,
 ) -> None:

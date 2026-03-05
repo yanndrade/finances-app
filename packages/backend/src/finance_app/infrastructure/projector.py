@@ -9,6 +9,7 @@ from threading import RLock
 from sqlalchemy import Boolean
 from sqlalchemy import Integer
 from sqlalchemy import String
+from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy import inspect
@@ -481,24 +482,14 @@ class Projector:
                     query = query.filter(TransactionProjectionRecord.occurred_at >= occurred_from)
                 if occurred_to is not None:
                     query = query.filter(TransactionProjectionRecord.occurred_at <= occurred_to)
-                if category_id is not None:
-                    query = query.filter(TransactionProjectionRecord.category_id == category_id)
-                if account_id is not None:
-                    query = query.filter(TransactionProjectionRecord.account_id == account_id)
-                if payment_method is not None:
-                    query = query.filter(
-                        TransactionProjectionRecord.payment_method == payment_method
-                    )
-                if person_id is not None:
-                    query = query.filter(TransactionProjectionRecord.person_id == person_id)
-                if text is not None:
-                    search = f"%{text}%"
-                    query = query.filter(
-                        or_(
-                            TransactionProjectionRecord.description.ilike(search),
-                            TransactionProjectionRecord.category_id.ilike(search),
-                        )
-                    )
+                query = self._apply_transaction_filters(
+                    query,
+                    category_id=category_id,
+                    account_id=account_id,
+                    payment_method=payment_method,
+                    person_id=person_id,
+                    text=text,
+                )
 
                 rows = (
                     query.order_by(
@@ -525,6 +516,132 @@ class Projector:
             ).to_dict()
             for row in rows
         ]
+
+    def get_report_summary(
+        self,
+        *,
+        occurred_from: str,
+        occurred_to: str,
+        category_id: str | None = None,
+        account_id: str | None = None,
+        payment_method: str | None = None,
+        person_id: str | None = None,
+        text: str | None = None,
+    ) -> dict[str, object]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                transaction_query = (
+                    session.query(TransactionProjectionRecord)
+                    .filter(TransactionProjectionRecord.status == "active")
+                    .filter(TransactionProjectionRecord.occurred_at >= occurred_from)
+                    .filter(TransactionProjectionRecord.occurred_at <= occurred_to)
+                )
+                transaction_query = self._apply_transaction_filters(
+                    transaction_query,
+                    category_id=category_id,
+                    account_id=account_id,
+                    payment_method=payment_method,
+                    person_id=person_id,
+                    text=text,
+                )
+                transaction_rows: Sequence[TransactionProjectionRecord] = (
+                    transaction_query.order_by(
+                        TransactionProjectionRecord.occurred_at.asc(),
+                        TransactionProjectionRecord.transaction_id.asc(),
+                    )
+                    .all()
+                )
+                period_installment_rows = self._list_installments_for_report(
+                    session,
+                    due_from_timestamp=occurred_from,
+                    due_to_timestamp=occurred_to,
+                    category_id=category_id,
+                    account_id=account_id,
+                    payment_method=payment_method,
+                    person_id=person_id,
+                    text=text,
+                )
+                future_installment_rows = self._list_installments_for_report(
+                    session,
+                    due_after_timestamp=occurred_to,
+                    category_id=category_id,
+                    account_id=account_id,
+                    payment_method=payment_method,
+                    person_id=person_id,
+                    text=text,
+                )
+
+        income_total = sum(
+            row.amount for row in transaction_rows if row.type == "income"
+        )
+        expense_from_transactions = sum(
+            row.amount
+            for row in transaction_rows
+            if row.type == "expense" and row.category_id != "invoice_payment"
+        )
+        period_installment_impact_total = sum(
+            row.amount for row in period_installment_rows
+        )
+        expense_total = expense_from_transactions + period_installment_impact_total
+        net_total = income_total - expense_total
+
+        category_totals: dict[str, int] = {}
+        for row in transaction_rows:
+            if row.type != "expense" or row.category_id == "invoice_payment":
+                continue
+            category_totals[row.category_id] = (
+                category_totals.get(row.category_id, 0) + row.amount
+            )
+        for row in period_installment_rows:
+            category_totals[row.category_id] = (
+                category_totals.get(row.category_id, 0) + row.amount
+            )
+        category_breakdown = sorted(
+            [
+                {
+                    "category_id": category_name,
+                    "total": total,
+                }
+                for category_name, total in category_totals.items()
+            ],
+            key=lambda item: item["total"],
+            reverse=True,
+        )
+
+        weekly_trend = self._build_weekly_trend(
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+            transaction_rows=transaction_rows,
+            period_installment_rows=period_installment_rows,
+        )
+
+        future_by_month: dict[str, int] = {}
+        for row in future_installment_rows:
+            future_by_month[row.reference_month] = (
+                future_by_month.get(row.reference_month, 0) + row.amount
+            )
+        future_installment_months = [
+            {"month": month, "total": total}
+            for month, total in sorted(future_by_month.items(), key=lambda item: item[0])
+        ]
+
+        return {
+            "totals": {
+                "income_total": income_total,
+                "expense_total": expense_total,
+                "net_total": net_total,
+            },
+            "category_breakdown": category_breakdown,
+            "weekly_trend": weekly_trend,
+            "future_commitments": {
+                "period_installment_impact_total": period_installment_impact_total,
+                "future_installment_total": sum(
+                    row.amount for row in future_installment_rows
+                ),
+                "future_installment_months": future_installment_months,
+            },
+        }
 
     def list_reimbursements(
         self,
@@ -2042,6 +2159,161 @@ class Projector:
 
     def _parse_utc(self, value: str) -> datetime:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+    def _apply_transaction_filters(
+        self,
+        query: object,
+        *,
+        category_id: str | None = None,
+        account_id: str | None = None,
+        payment_method: str | None = None,
+        person_id: str | None = None,
+        text: str | None = None,
+    ) -> object:
+        if category_id is not None:
+            query = query.filter(TransactionProjectionRecord.category_id == category_id)
+        if account_id is not None:
+            query = query.filter(TransactionProjectionRecord.account_id == account_id)
+        if payment_method is not None:
+            query = query.filter(
+                TransactionProjectionRecord.payment_method == payment_method
+            )
+        if person_id is not None:
+            query = query.filter(TransactionProjectionRecord.person_id == person_id)
+        if text is not None:
+            search = f"%{text}%"
+            query = query.filter(
+                or_(
+                    TransactionProjectionRecord.description.ilike(search),
+                    TransactionProjectionRecord.category_id.ilike(search),
+                )
+            )
+        return query
+
+    def _list_installments_for_report(
+        self,
+        session: Session,
+        *,
+        due_from_timestamp: str | None = None,
+        due_to_timestamp: str | None = None,
+        due_after_timestamp: str | None = None,
+        category_id: str | None = None,
+        account_id: str | None = None,
+        payment_method: str | None = None,
+        person_id: str | None = None,
+        text: str | None = None,
+    ) -> list[CardPurchaseInstallmentRecord]:
+        if payment_method is not None:
+            return []
+
+        query = session.query(CardPurchaseInstallmentRecord)
+        due_timestamp = func.printf(
+            "%sT23:59:59Z",
+            CardPurchaseInstallmentRecord.due_date,
+        )
+        if due_from_timestamp is not None:
+            query = query.filter(due_timestamp >= due_from_timestamp)
+        if due_to_timestamp is not None:
+            query = query.filter(due_timestamp <= due_to_timestamp)
+        if due_after_timestamp is not None:
+            query = query.filter(due_timestamp > due_after_timestamp)
+        if category_id is not None:
+            query = query.filter(CardPurchaseInstallmentRecord.category_id == category_id)
+
+        if account_id is not None:
+            query = query.join(
+                CardProjectionRecord,
+                CardProjectionRecord.card_id == CardPurchaseInstallmentRecord.card_id,
+            ).filter(
+                CardProjectionRecord.payment_account_id == account_id
+            )
+
+        if person_id is not None:
+            query = query.join(
+                ReimbursementProjectionRecord,
+                and_(
+                    ReimbursementProjectionRecord.transaction_id
+                    == CardPurchaseInstallmentRecord.purchase_id,
+                    ReimbursementProjectionRecord.person_id == person_id,
+                ),
+            )
+
+        if text is not None:
+            search = f"%{text}%"
+            query = query.join(
+                CardPurchaseProjectionRecord,
+                CardPurchaseProjectionRecord.purchase_id
+                == CardPurchaseInstallmentRecord.purchase_id,
+            ).filter(
+                or_(
+                    CardPurchaseProjectionRecord.description.ilike(search),
+                    CardPurchaseInstallmentRecord.category_id.ilike(search),
+                )
+            )
+
+        return (
+            query.order_by(
+                CardPurchaseInstallmentRecord.due_date.asc(),
+                CardPurchaseInstallmentRecord.installment_id.asc(),
+            )
+            .all()
+        )
+
+    def _build_weekly_trend(
+        self,
+        *,
+        occurred_from: str,
+        occurred_to: str,
+        transaction_rows: Sequence[TransactionProjectionRecord],
+        period_installment_rows: Sequence[CardPurchaseInstallmentRecord],
+    ) -> list[dict[str, str | int]]:
+        weekly_keys = self._bucket_keys_for_range(
+            view="weekly",
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+        )
+        trend_map: dict[str, dict[str, str | int]] = {
+            key: {
+                "week": key,
+                "income_total": 0,
+                "expense_total": 0,
+                "net_total": 0,
+            }
+            for key in weekly_keys
+        }
+
+        for row in transaction_rows:
+            if row.type not in {"income", "expense"}:
+                continue
+            if row.type == "expense" and row.category_id == "invoice_payment":
+                continue
+            bucket = self._bucket_key(view="weekly", occurred_at=row.occurred_at)
+            if bucket not in trend_map:
+                continue
+            if row.type == "income":
+                trend_map[bucket]["income_total"] = int(trend_map[bucket]["income_total"]) + row.amount
+            else:
+                trend_map[bucket]["expense_total"] = int(trend_map[bucket]["expense_total"]) + row.amount
+
+        for row in period_installment_rows:
+            installment_bucket = self._bucket_key_for_date(
+                view="weekly",
+                value=date.fromisoformat(row.due_date),
+            )
+            if installment_bucket not in trend_map:
+                continue
+            trend_map[installment_bucket]["expense_total"] = (
+                int(trend_map[installment_bucket]["expense_total"]) + row.amount
+            )
+
+        result: list[dict[str, str | int]] = []
+        for key in weekly_keys:
+            current = trend_map[key]
+            current["net_total"] = (
+                int(current["income_total"]) - int(current["expense_total"])
+            )
+            result.append(current)
+        return result
 
     def _projection_schema_requires_rebuild(self) -> bool:
         inspector = inspect(self._engine)

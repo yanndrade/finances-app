@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Protocol
 
 from finance_app.domain.events import NewEvent
@@ -8,6 +8,7 @@ from finance_app.domain.events import NewEvent
 PAYMENT_METHODS = ("PIX", "CASH", "OTHER")
 TRANSACTION_TYPES = ("income", "expense")
 TRANSACTION_STATUSES = ("active", "voided")
+REPORT_PERIODS = ("day", "week", "month", "custom")
 UNSET = object()
 
 
@@ -43,6 +44,14 @@ class InvalidTransactionAmountError(TransactionServiceError):
     pass
 
 
+class InvalidReportPeriodError(TransactionServiceError):
+    pass
+
+
+class InvalidReportRangeError(TransactionServiceError):
+    pass
+
+
 class TransactionEventStore(Protocol):
     def create_schema(self) -> None: ...
     def append(self, event: NewEvent) -> int: ...
@@ -51,6 +60,17 @@ class TransactionEventStore(Protocol):
 class TransactionProjector(Protocol):
     def run(self) -> int: ...
     def get_dashboard_summary(self, *, month: str) -> dict[str, object]: ...
+    def get_report_summary(
+        self,
+        *,
+        occurred_from: str,
+        occurred_to: str,
+        category_id: str | None = None,
+        account_id: str | None = None,
+        payment_method: str | None = None,
+        person_id: str | None = None,
+        text: str | None = None,
+    ) -> dict[str, object]: ...
     def list_transactions(
         self,
         *,
@@ -112,6 +132,63 @@ class TransactionService:
     def get_dashboard_summary(self, *, month: str) -> dict[str, object]:
         self._sync_projections()
         return self._projector.get_dashboard_summary(month=month)
+
+    def get_report_summary(
+        self,
+        *,
+        period: str,
+        reference_date: str | None = None,
+        occurred_from: str | None = None,
+        occurred_to: str | None = None,
+        category_id: str | None = None,
+        account_id: str | None = None,
+        payment_method: str | None = None,
+        person_id: str | None = None,
+        text: str | None = None,
+    ) -> dict[str, object]:
+        self._sync_projections()
+        self._validate_report_period(period)
+        if payment_method is not None:
+            self._validate_payment_method(payment_method)
+
+        resolved_from: str
+        resolved_to: str
+        if period == "custom":
+            if occurred_from is None or occurred_to is None:
+                raise InvalidReportRangeError(
+                    "custom period requires from and to in UTC ISO 8601 format."
+                )
+            self._validate_utc_timestamp(occurred_from)
+            self._validate_utc_timestamp(occurred_to)
+            if self._parse_utc_timestamp(occurred_from) > self._parse_utc_timestamp(occurred_to):
+                raise InvalidReportRangeError(
+                    "from must be less than or equal to to."
+                )
+            resolved_from = occurred_from
+            resolved_to = occurred_to
+        else:
+            target_date = reference_date or self._utc_now()[:10]
+            self._validate_reference_date(target_date)
+            resolved_from, resolved_to = self._resolve_period_range(
+                period=period,
+                reference_date=target_date,
+            )
+
+        summary = self._projector.get_report_summary(
+            occurred_from=resolved_from,
+            occurred_to=resolved_to,
+            category_id=category_id,
+            account_id=account_id,
+            payment_method=payment_method,
+            person_id=person_id,
+            text=text,
+        )
+        summary["period"] = {
+            "type": period,
+            "from": resolved_from,
+            "to": resolved_to,
+        }
+        return summary
 
     def create_income(
         self,
@@ -362,7 +439,7 @@ class TransactionService:
             )
 
         try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            parsed = self._parse_utc_timestamp(value)
         except ValueError as exc:
             raise InvalidTransactionDateError(
                 "occurred_at must be a UTC ISO 8601 timestamp."
@@ -372,6 +449,9 @@ class TransactionService:
             raise InvalidTransactionDateError(
                 "occurred_at must be a UTC ISO 8601 timestamp."
             )
+
+    def _parse_utc_timestamp(self, value: str) -> datetime:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
     def _validate_transaction_type(self, value: str) -> None:
         if value not in TRANSACTION_TYPES:
@@ -392,6 +472,44 @@ class TransactionService:
     def _validate_transaction_status(self, value: str) -> None:
         if value not in TRANSACTION_STATUSES:
             raise InvalidTransactionStatusError(f"Unsupported transaction status '{value}'.")
+
+    def _validate_report_period(self, value: str) -> None:
+        if value not in REPORT_PERIODS:
+            raise InvalidReportPeriodError(f"Unsupported report period '{value}'.")
+
+    def _validate_reference_date(self, value: str) -> None:
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise InvalidReportRangeError(
+                "reference must use YYYY-MM-DD format."
+            ) from exc
+
+    def _resolve_period_range(
+        self,
+        *,
+        period: str,
+        reference_date: str,
+    ) -> tuple[str, str]:
+        ref = date.fromisoformat(reference_date)
+        if period == "day":
+            start = ref
+            end = ref
+        elif period == "week":
+            start = ref - timedelta(days=ref.weekday())
+            end = start + timedelta(days=6)
+        else:
+            start = ref.replace(day=1)
+            if ref.month == 12:
+                next_month = date(ref.year + 1, 1, 1)
+            else:
+                next_month = date(ref.year, ref.month + 1, 1)
+            end = next_month - timedelta(days=1)
+
+        return (
+            f"{start.isoformat()}T00:00:00Z",
+            f"{end.isoformat()}T23:59:59Z",
+        )
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

@@ -230,4 +230,48 @@ describe("api timestamp normalization", () => {
       "/api/investments/overview?view=monthly&from=2026-03-01T00%3A00%3A00Z&to=2026-03-31T23%3A59%3A59Z",
     );
   });
+
+  it("requests report summary with period and shared filters", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          period: {
+            type: "month",
+            from: "2026-04-01T00:00:00Z",
+            to: "2026-04-30T23:59:59Z",
+          },
+          totals: {
+            income_total: 100_00,
+            expense_total: 80_00,
+            net_total: 20_00,
+          },
+          category_breakdown: [{ category_id: "food", total: 25_00 }],
+          weekly_trend: [],
+          future_commitments: {
+            period_installment_impact_total: 40_00,
+            future_installment_total: 80_00,
+            future_installment_months: [],
+          },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.fetchReportSummary({
+      period: "month",
+      reference: "2026-04-15",
+      from: "2026-04-01T00:00:00Z",
+      to: "2026-04-30T23:59:59Z",
+      category: "food",
+      account: "acc-1",
+      method: "CASH",
+      person: "alice",
+      text: "Dinner",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/reports/summary?period=month&reference=2026-04-15&from=2026-04-01T00%3A00%3A00Z&to=2026-04-30T23%3A59%3A59Z&category=food&account=acc-1&method=CASH&person=alice&text=Dinner",
+    );
+  });
 });
