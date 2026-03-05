@@ -15,7 +15,8 @@ export function SettingsView({
             <p className="eyebrow">Ambiente</p>
             <h3 className="section-title">Zerar aplicacao</h3>
             <p className="section-copy">
-              Apaga os dados locais e volta para o estado inicial de desenvolvimento.
+              Limpa compras, transferencias e contas para voltar ao estado de primeira abertura
+              da aplicacao.
             </p>
           </div>
 

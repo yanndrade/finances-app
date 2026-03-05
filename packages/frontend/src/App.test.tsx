@@ -1339,10 +1339,17 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { name: /zerar aplicacao/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/limpa compras, transferencias e contas/i),
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /apagar todos os dados/i }));
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
+    const confirmationMessage = String(confirmMock.mock.calls[0]?.[0] ?? "");
+    expect(confirmationMessage).toMatch(/compras/i);
+    expect(confirmationMessage).toMatch(/transferencias/i);
+    expect(confirmationMessage).toMatch(/contas/i);
 
     await waitFor(() => {
       expect(

@@ -405,7 +405,11 @@ export function App() {
   }
 
   async function handleResetAllData(): Promise<void> {
-    if (!globalThis.confirm("Isso vai apagar todos os dados da aplicacao. Deseja continuar?")) {
+    if (
+      !globalThis.confirm(
+        "Isso vai limpar compras, transferencias e contas da aplicacao. Deseja continuar?",
+      )
+    ) {
       return;
     }
 

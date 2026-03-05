@@ -1160,13 +1160,37 @@ def test_backend_allows_cors_for_local_frontend_origins(tmp_path) -> None:
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
 
 
-def test_dev_reset_endpoint_clears_projection_and_event_data(tmp_path) -> None:
+def test_dev_reset_endpoint_clears_accounts_transfers_and_card_purchases(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
     )
     client = TestClient(app)
     _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Savings", "savings", 50_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-10T12:00:00Z",
+            "amount": 40_00,
+            "installments_count": 1,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Almoco",
+        },
+    )
     _create_expense(
         client,
         {
@@ -1180,6 +1204,19 @@ def test_dev_reset_endpoint_clears_projection_and_event_data(tmp_path) -> None:
             "person_id": None,
         },
     )
+    transfer_response = client.post(
+        "/api/transfers",
+        json={
+            "id": "trf-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "from_account_id": "acc-1",
+            "to_account_id": "acc-2",
+            "amount": 25_00,
+            "description": "Transferencia teste",
+        },
+    )
+
+    assert transfer_response.status_code == 201
 
     reset_response = client.post("/api/dev/reset")
 
@@ -1187,11 +1224,17 @@ def test_dev_reset_endpoint_clears_projection_and_event_data(tmp_path) -> None:
     assert reset_response.json() == {"status": "ok", "message": "Application data reset."}
 
     accounts_response = client.get("/api/accounts")
+    cards_response = client.get("/api/cards")
+    invoices_response = client.get("/api/invoices")
     transactions_response = client.get("/api/transactions")
     dashboard_response = client.get("/api/dashboard", params={"month": "2026-03"})
 
     assert accounts_response.status_code == 200
     assert accounts_response.json() == []
+    assert cards_response.status_code == 200
+    assert cards_response.json() == []
+    assert invoices_response.status_code == 200
+    assert invoices_response.json() == []
 
     assert transactions_response.status_code == 200
     assert transactions_response.json() == []
