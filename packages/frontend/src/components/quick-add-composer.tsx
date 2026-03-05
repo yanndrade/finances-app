@@ -18,6 +18,7 @@ import type {
   CardPurchasePayload,
   CardSummary,
   CashTransactionPayload,
+  InvestmentMovementPayload,
   InvoicePaymentPayload,
   InvoiceSummary,
   TransferPayload,
@@ -25,9 +26,10 @@ import type {
 import { getCategoryOptions } from "../lib/categories";
 
 type PaymentMethod = "PIX" | "CASH" | "OTHER";
-type EntryType = "expense" | "income" | "transfer";
+type EntryType = "expense" | "income" | "transfer" | "investment";
 type ExpensePaymentMode = PaymentMethod | "CARD";
 type TransferMode = "internal" | "invoice_payment";
+type InvestmentMode = "contribution" | "withdrawal";
 
 type QuickAddComposerProps = {
   isOpen: boolean;
@@ -41,6 +43,7 @@ type QuickAddComposerProps = {
   onSubmitTransfer: (payload: TransferPayload) => Promise<void>;
   onSubmitCardPurchase: (payload: CardPurchasePayload) => Promise<void>;
   onSubmitInvoicePayment: (payload: InvoicePaymentPayload) => Promise<void>;
+  onSubmitInvestmentMovement: (payload: InvestmentMovementPayload) => Promise<void>;
   isSubmitting?: boolean;
 };
 
@@ -54,11 +57,13 @@ export function QuickAddComposer({
   onSubmitTransfer,
   onSubmitCardPurchase,
   onSubmitInvoicePayment,
+  onSubmitInvestmentMovement,
   isSubmitting,
 }: QuickAddComposerProps) {
   const [entryType, setEntryType] = useState<EntryType>("expense");
   const [expensePaymentMode, setExpensePaymentMode] = useState<ExpensePaymentMode>("PIX");
   const [transferMode, setTransferMode] = useState<TransferMode>("internal");
+  const [investmentMode, setInvestmentMode] = useState<InvestmentMode>("contribution");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -70,6 +75,8 @@ export function QuickAddComposer({
   const [cardId, setCardId] = useState("");
   const [installments, setInstallments] = useState("1");
   const [invoiceId, setInvoiceId] = useState("");
+  const [dividendAmount, setDividendAmount] = useState("");
+  const [investedReductionAmount, setInvestedReductionAmount] = useState("");
 
   const categoryOptions = getCategoryOptions(categoryId);
   const openInvoices = useMemo(
@@ -100,6 +107,11 @@ export function QuickAddComposer({
       setExpensePaymentMode("PIX");
       setInstallments("1");
       setKeepOpen(false);
+    }
+    if (entryType !== "investment") {
+      setInvestmentMode("contribution");
+      setDividendAmount("");
+      setInvestedReductionAmount("");
     }
   }, [entryType]);
 
@@ -145,6 +157,9 @@ export function QuickAddComposer({
     setToAccountId("");
     setInstallments("1");
     setInvoiceId("");
+    setDividendAmount("");
+    setInvestedReductionAmount("");
+    setInvestmentMode("contribution");
   }
 
   function handleClose() {
@@ -175,7 +190,28 @@ export function QuickAddComposer({
     }
 
     try {
-      if (entryType === "transfer") {
+      if (entryType === "investment") {
+        if (investmentMode === "contribution") {
+          await onSubmitInvestmentMovement({
+            type: "contribution",
+            accountId,
+            occurredAt: `${date}T12:00:00Z`,
+            contributionAmountInCents: amountInCents,
+            dividendAmountInCents: parseAmount(dividendAmount),
+            description,
+          });
+        } else {
+          const investedAmount = parseAmount(investedReductionAmount) || amountInCents;
+          await onSubmitInvestmentMovement({
+            type: "withdrawal",
+            accountId,
+            occurredAt: `${date}T12:00:00Z`,
+            cashAmountInCents: amountInCents,
+            investedAmountInCents: investedAmount,
+            description,
+          });
+        }
+      } else if (entryType === "transfer") {
         if (transferMode === "invoice_payment") {
           if (!invoiceId) {
             return;
@@ -284,6 +320,7 @@ export function QuickAddComposer({
                 <option value="expense">Despesa</option>
                 <option value="income">Receita</option>
                 <option value="transfer">Transferencia</option>
+                <option value="investment">Investimento</option>
               </select>
             </div>
 
@@ -358,6 +395,22 @@ export function QuickAddComposer({
               </div>
             ) : null}
 
+            {entryType === "investment" ? (
+              <div className="col-span-2 space-y-2 md:col-span-1">
+                <Label htmlFor="quick-add-investment-mode">Tipo do movimento</Label>
+                <select
+                  id="quick-add-investment-mode"
+                  aria-label="Tipo do movimento"
+                  className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
+                  onChange={(event) => setInvestmentMode(event.target.value as InvestmentMode)}
+                  value={investmentMode}
+                >
+                  <option value="contribution">Aporte</option>
+                  <option value="withdrawal">Resgate</option>
+                </select>
+              </div>
+            ) : null}
+
             {(entryType === "expense" || entryType === "income") ? (
               <div className="col-span-2 space-y-2 md:col-span-1">
                 <Label htmlFor="quick-add-category">Categoria</Label>
@@ -375,6 +428,34 @@ export function QuickAddComposer({
                     </option>
                   ))}
                 </select>
+              </div>
+            ) : null}
+
+            {entryType === "investment" && investmentMode === "contribution" ? (
+              <div className="col-span-2 space-y-2 md:col-span-1">
+                <Label htmlFor="quick-add-dividend-amount">Dividendos (opcional)</Label>
+                <Input
+                  id="quick-add-dividend-amount"
+                  aria-label="Dividendos"
+                  className="h-11 border-transparent bg-muted/50"
+                  value={dividendAmount}
+                  onChange={(event) => setDividendAmount(formatAmountInput(event.target.value))}
+                  placeholder="0,00"
+                />
+              </div>
+            ) : null}
+
+            {entryType === "investment" && investmentMode === "withdrawal" ? (
+              <div className="col-span-2 space-y-2 md:col-span-1">
+                <Label htmlFor="quick-add-invested-reduction">Reducao do investido</Label>
+                <Input
+                  id="quick-add-invested-reduction"
+                  aria-label="Reducao do investido"
+                  className="h-11 border-transparent bg-muted/50"
+                  value={investedReductionAmount}
+                  onChange={(event) => setInvestedReductionAmount(formatAmountInput(event.target.value))}
+                  placeholder="0,00"
+                />
               </div>
             ) : null}
 
@@ -485,7 +566,7 @@ export function QuickAddComposer({
           </div>
 
           <div className="flex items-center justify-between pt-4">
-            {entryType !== "transfer" && expensePaymentMode !== "CARD" ? (
+            {(entryType === "expense" || entryType === "income") && expensePaymentMode !== "CARD" ? (
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="keepOpen"

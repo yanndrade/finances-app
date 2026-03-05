@@ -124,4 +124,110 @@ describe("api timestamp normalization", () => {
       "/api/invoices/card-1%3A2026-04/items",
     );
   });
+
+  it("sends contribution and optional dividend values for investment movements", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          movement_id: "inv-1",
+          occurred_at: "2026-03-10T12:00:00Z",
+          type: "contribution",
+          account_id: "acc-1",
+          description: "Aporte mensal",
+          contribution_amount: 30_00,
+          dividend_amount: 5_00,
+          cash_amount: 30_00,
+          invested_amount: 35_00,
+          cash_delta: -30_00,
+          invested_delta: 35_00,
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const createInvestmentMovement = (
+      api as unknown as {
+        createInvestmentMovement?: (payload: {
+          type: "contribution";
+          accountId: string;
+          occurredAt: string;
+          contributionAmountInCents: number;
+          dividendAmountInCents?: number;
+          description?: string;
+        }) => Promise<unknown>;
+      }
+    ).createInvestmentMovement;
+
+    await createInvestmentMovement?.({
+      type: "contribution",
+      accountId: "acc-1",
+      occurredAt: "2026-03-10T12:00:00Z",
+      contributionAmountInCents: 30_00,
+      dividendAmountInCents: 5_00,
+      description: "Aporte mensal",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/investments/movements");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      type: "contribution",
+      account_id: "acc-1",
+      contribution_amount: 30_00,
+      dividend_amount: 5_00,
+    });
+  });
+
+  it("requests investment overview with view and date range", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          view: "monthly",
+          from: "2026-03-01T00:00:00Z",
+          to: "2026-03-31T23:59:59Z",
+          totals: {
+            contribution_total: 30_00,
+            dividend_total: 5_00,
+            withdrawal_total: 18_00,
+            invested_balance: 15_00,
+            cash_balance: 68_00,
+            wealth: 83_00,
+            dividends_accumulated: 5_00,
+          },
+          goal: {
+            target: 0,
+            realized: 35_00,
+            remaining: 0,
+            progress_percent: 100,
+          },
+          series: {
+            wealth_evolution: [],
+            contribution_dividend_trend: [],
+          },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const fetchInvestmentOverview = (
+      api as unknown as {
+        fetchInvestmentOverview?: (params: {
+          view: "monthly";
+          from: string;
+          to: string;
+        }) => Promise<unknown>;
+      }
+    ).fetchInvestmentOverview;
+
+    await fetchInvestmentOverview?.({
+      view: "monthly",
+      from: "2026-03-01T00:00:00Z",
+      to: "2026-03-31T23:59:59Z",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/investments/overview?view=monthly&from=2026-03-01T00%3A00%3A00Z&to=2026-03-31T23%3A59%3A59Z",
+    );
+  });
 });

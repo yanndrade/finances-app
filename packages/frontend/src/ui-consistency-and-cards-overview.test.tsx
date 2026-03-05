@@ -6,6 +6,7 @@ import type {
   AccountSummary,
   CardSummary,
   DashboardSummary,
+  InvestmentOverview,
   TransactionSummary,
 } from "./lib/api";
 
@@ -108,12 +109,41 @@ function buildInvoice(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
   return invoice;
 }
 
+function buildInvestmentOverview(overrides: Partial<InvestmentOverview> = {}): InvestmentOverview {
+  return {
+    view: "monthly",
+    from: "2026-03-01T00:00:00Z",
+    to: "2026-03-31T23:59:59Z",
+    totals: {
+      contribution_total: 0,
+      dividend_total: 0,
+      withdrawal_total: 0,
+      invested_balance: 0,
+      cash_balance: 132_500,
+      wealth: 132_500,
+      dividends_accumulated: 0,
+    },
+    goal: {
+      target: 25_000,
+      realized: 0,
+      remaining: 25_000,
+      progress_percent: 0,
+    },
+    series: {
+      wealth_evolution: [],
+      contribution_dividend_trend: [],
+    },
+    ...overrides,
+  };
+}
+
 function installFetchMock(initialState?: {
   accounts?: AccountSummary[];
   cards?: CardSummary[];
   transactions?: TransactionSummary[];
   dashboard?: DashboardSummary;
   invoices?: InvoiceSummary[];
+  investmentOverview?: InvestmentOverview;
 }) {
   const state = {
     accounts: initialState?.accounts ?? [buildAccount()],
@@ -135,6 +165,7 @@ function installFetchMock(initialState?: {
         }),
       ],
     dashboard: initialState?.dashboard ?? buildDashboard(),
+    investmentOverview: initialState?.investmentOverview ?? buildInvestmentOverview(),
   };
 
   const fetchMock = vi.fn<(typeof fetch)>().mockImplementation(async (input) => {
@@ -158,6 +189,14 @@ function installFetchMock(initialState?: {
 
     if (url.includes("/api/transactions")) {
       return new Response(JSON.stringify(state.transactions));
+    }
+
+    if (url.includes("/api/investments/overview")) {
+      return new Response(JSON.stringify(state.investmentOverview));
+    }
+
+    if (url.includes("/api/investments/movements")) {
+      return new Response(JSON.stringify([]));
     }
 
     throw new Error(`Unexpected request: ${url}`);
@@ -256,4 +295,3 @@ describe("UI consistency and cards overview", () => {
     expect(screen.getByRole("button", { name: /pagar agora/i })).toBeInTheDocument();
   });
 });
-

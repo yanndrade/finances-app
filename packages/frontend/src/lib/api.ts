@@ -3,6 +3,61 @@ export type CategorySpending = {
   total: number;
 };
 
+export type InvestmentView = "daily" | "weekly" | "monthly" | "bimonthly" | "quarterly" | "yearly";
+
+export type InvestmentMovementSummary = {
+  movement_id: string;
+  occurred_at: string;
+  type: "contribution" | "withdrawal";
+  account_id: string;
+  description: string | null;
+  contribution_amount: number;
+  dividend_amount: number;
+  cash_amount: number;
+  invested_amount: number;
+  cash_delta: number;
+  invested_delta: number;
+};
+
+export type InvestmentWealthPoint = {
+  bucket: string;
+  cash_balance: number;
+  invested_balance: number;
+  wealth: number;
+};
+
+export type InvestmentTrendPoint = {
+  bucket: string;
+  contribution_total: number;
+  dividend_total: number;
+  withdrawal_total: number;
+};
+
+export type InvestmentOverview = {
+  view: InvestmentView;
+  from: string;
+  to: string;
+  totals: {
+    contribution_total: number;
+    dividend_total: number;
+    withdrawal_total: number;
+    invested_balance: number;
+    cash_balance: number;
+    wealth: number;
+    dividends_accumulated: number;
+  };
+  goal: {
+    target: number;
+    realized: number;
+    remaining: number;
+    progress_percent: number;
+  };
+  series: {
+    wealth_evolution: InvestmentWealthPoint[];
+    contribution_dividend_trend: InvestmentTrendPoint[];
+  };
+};
+
 export type CategoryBudgetSummary = {
   category_id: string;
   month: string;
@@ -191,10 +246,27 @@ export type MarkReimbursementReceivedPayload = {
   accountId?: string;
 };
 
+export type InvestmentMovementPayload = {
+  type: "contribution" | "withdrawal";
+  accountId: string;
+  occurredAt: string;
+  description?: string;
+  contributionAmountInCents?: number;
+  dividendAmountInCents?: number;
+  cashAmountInCents?: number;
+  investedAmountInCents?: number;
+};
+
 export type CategoryBudgetPayload = {
   categoryId: string;
   month: string;
   limitInCents: number;
+};
+
+export type InvestmentOverviewParams = {
+  view: InvestmentView;
+  from: string;
+  to: string;
 };
 
 export type TransactionFilters = {
@@ -463,6 +535,57 @@ export async function upsertCategoryBudget(
       limit: payload.limitInCents,
     }),
   });
+}
+
+export async function createInvestmentMovement(
+  payload: InvestmentMovementPayload,
+): Promise<InvestmentMovementSummary> {
+  return requestJson<InvestmentMovementSummary>("/api/investments/movements", {
+    method: "POST",
+    body: JSON.stringify({
+      id: `inv-${Date.now()}`,
+      occurred_at: normalizeTimestampForApi(payload.occurredAt),
+      type: payload.type,
+      account_id: payload.accountId,
+      description: payload.description || undefined,
+      contribution_amount: payload.contributionAmountInCents,
+      dividend_amount: payload.dividendAmountInCents ?? 0,
+      cash_amount: payload.cashAmountInCents,
+      invested_amount: payload.investedAmountInCents,
+    }),
+  });
+}
+
+export async function fetchInvestmentMovements(filters?: {
+  from?: string;
+  to?: string;
+}): Promise<InvestmentMovementSummary[]> {
+  const searchParams = new URLSearchParams();
+  if (filters?.from) {
+    searchParams.set("from", filters.from);
+  }
+  if (filters?.to) {
+    searchParams.set("to", filters.to);
+  }
+  const query = searchParams.toString();
+
+  return requestJson<InvestmentMovementSummary[]>(
+    query.length > 0
+      ? `/api/investments/movements?${query}`
+      : "/api/investments/movements",
+  );
+}
+
+export async function fetchInvestmentOverview(
+  params: InvestmentOverviewParams,
+): Promise<InvestmentOverview> {
+  const query = new URLSearchParams({
+    view: params.view,
+    from: params.from,
+    to: params.to,
+  }).toString();
+
+  return requestJson<InvestmentOverview>(`/api/investments/overview?${query}`);
 }
 
 export async function resetApplicationData(): Promise<{ status: string; message: string }> {

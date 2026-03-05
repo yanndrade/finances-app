@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date
 from datetime import datetime
+from datetime import timedelta
 from threading import RLock
 
 from sqlalchemy import Boolean
@@ -27,6 +28,7 @@ from finance_app.domain.projections import (
     BudgetProjection,
     CardProjection,
     CardPurchaseProjection,
+    InvestmentMovementProjection,
     InvoiceItemProjection,
     InvoiceProjection,
     PendingProjection,
@@ -194,6 +196,22 @@ class BudgetLimitRecord(ProjectionBase):
     category_id: Mapped[str] = mapped_column(String, primary_key=True)
     month: Mapped[str] = mapped_column(String, primary_key=True)
     limit: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class InvestmentMovementRecord(ProjectionBase):
+    __tablename__ = "investment_movements"
+
+    movement_id: Mapped[str] = mapped_column(String, primary_key=True)
+    occurred_at: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    contribution_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    dividend_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cash_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    invested_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cash_delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    invested_delta: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class Projector:
@@ -544,6 +562,235 @@ class Projector:
             ).to_dict()
             for row in rows
         ]
+
+    def list_investment_movements(
+        self,
+        *,
+        occurred_from: str | None = None,
+        occurred_to: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                query = session.query(InvestmentMovementRecord)
+                if occurred_from is not None:
+                    query = query.filter(InvestmentMovementRecord.occurred_at >= occurred_from)
+                if occurred_to is not None:
+                    query = query.filter(InvestmentMovementRecord.occurred_at <= occurred_to)
+
+                rows = (
+                    query.order_by(
+                        InvestmentMovementRecord.occurred_at.desc(),
+                        InvestmentMovementRecord.movement_id.desc(),
+                    )
+                    .all()
+                )
+
+        return [
+            InvestmentMovementProjection(
+                movement_id=row.movement_id,
+                occurred_at=row.occurred_at,
+                type=row.type,
+                account_id=row.account_id,
+                description=row.description,
+                contribution_amount=row.contribution_amount,
+                dividend_amount=row.dividend_amount,
+                cash_amount=row.cash_amount,
+                invested_amount=row.invested_amount,
+                cash_delta=row.cash_delta,
+                invested_delta=row.invested_delta,
+            ).to_dict()
+            for row in rows
+        ]
+
+    def get_investment_overview(
+        self,
+        *,
+        view: str,
+        occurred_from: str,
+        occurred_to: str,
+    ) -> dict[str, object]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                movements_in_range: Sequence[InvestmentMovementRecord] = (
+                    session.query(InvestmentMovementRecord)
+                    .filter(InvestmentMovementRecord.occurred_at >= occurred_from)
+                    .filter(InvestmentMovementRecord.occurred_at <= occurred_to)
+                    .order_by(
+                        InvestmentMovementRecord.occurred_at.asc(),
+                        InvestmentMovementRecord.movement_id.asc(),
+                    )
+                    .all()
+                )
+                movements_after_from: Sequence[InvestmentMovementRecord] = (
+                    session.query(InvestmentMovementRecord)
+                    .filter(InvestmentMovementRecord.occurred_at >= occurred_from)
+                    .all()
+                )
+                movement_rows_all: Sequence[InvestmentMovementRecord] = (
+                    session.query(InvestmentMovementRecord).all()
+                )
+                account_type_by_id = {
+                    row.account_id: row.type
+                    for row in session.query(AccountProjectionRecord).all()
+                }
+                current_cash_balance = int(
+                    session.query(func.coalesce(func.sum(BalanceStateRecord.current_balance), 0))
+                    .join(
+                        AccountProjectionRecord,
+                        AccountProjectionRecord.account_id == BalanceStateRecord.account_id,
+                    )
+                    .filter(AccountProjectionRecord.type != "investment")
+                    .scalar()
+                    or 0
+                )
+                current_invested_balance = sum(
+                    row.invested_delta for row in movement_rows_all
+                )
+                current_dividends_accumulated = sum(
+                    row.dividend_amount for row in movement_rows_all
+                )
+                tx_after_from: Sequence[TransactionProjectionRecord] = (
+                    session.query(TransactionProjectionRecord)
+                    .filter(TransactionProjectionRecord.status == "active")
+                    .filter(TransactionProjectionRecord.occurred_at >= occurred_from)
+                    .all()
+                )
+                tx_in_range: Sequence[TransactionProjectionRecord] = (
+                    session.query(TransactionProjectionRecord)
+                    .filter(TransactionProjectionRecord.status == "active")
+                    .filter(TransactionProjectionRecord.occurred_at >= occurred_from)
+                    .filter(TransactionProjectionRecord.occurred_at <= occurred_to)
+                    .all()
+                )
+
+                movement_cash_after_from = sum(
+                    row.cash_delta for row in movements_after_from
+                )
+                movement_invested_after_from = sum(
+                    row.invested_delta for row in movements_after_from
+                )
+                cash_after_from_from_transactions = sum(
+                    self._signed_amount(
+                        transaction_type=row.type,
+                        amount=row.amount,
+                        status=row.status,
+                        direction=row.direction,
+                    )
+                    for row in tx_after_from
+                    if account_type_by_id.get(row.account_id) != "investment"
+                )
+                cash_baseline = (
+                    current_cash_balance
+                    - movement_cash_after_from
+                    - cash_after_from_from_transactions
+                )
+                invested_baseline = current_invested_balance - movement_invested_after_from
+
+                income_by_month = self._income_totals_by_month(session=session)
+
+        contribution_total = sum(row.contribution_amount for row in movements_in_range)
+        dividend_total = sum(row.dividend_amount for row in movements_in_range)
+        withdrawal_total = sum(
+            row.cash_amount for row in movements_in_range if row.type == "withdrawal"
+        )
+        bucket_keys = self._bucket_keys_for_range(
+            view=view,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+        )
+        transaction_cash_by_bucket = {
+            key: 0 for key in bucket_keys
+        }
+        for row in tx_in_range:
+            if account_type_by_id.get(row.account_id) == "investment":
+                continue
+            bucket = self._bucket_key(view=view, occurred_at=row.occurred_at)
+            if bucket not in transaction_cash_by_bucket:
+                continue
+            transaction_cash_by_bucket[bucket] += self._signed_amount(
+                transaction_type=row.type,
+                amount=row.amount,
+                status=row.status,
+                direction=row.direction,
+            )
+        movement_cash_by_bucket = {key: 0 for key in bucket_keys}
+        movement_invested_by_bucket = {key: 0 for key in bucket_keys}
+        contribution_by_bucket = {key: 0 for key in bucket_keys}
+        dividend_by_bucket = {key: 0 for key in bucket_keys}
+        withdrawal_by_bucket = {key: 0 for key in bucket_keys}
+        for row in movements_in_range:
+            bucket = self._bucket_key(view=view, occurred_at=row.occurred_at)
+            if bucket not in movement_cash_by_bucket:
+                continue
+            movement_cash_by_bucket[bucket] += row.cash_delta
+            movement_invested_by_bucket[bucket] += row.invested_delta
+            contribution_by_bucket[bucket] += row.contribution_amount
+            dividend_by_bucket[bucket] += row.dividend_amount
+            if row.type == "withdrawal":
+                withdrawal_by_bucket[bucket] += row.cash_amount
+
+        running_cash = cash_baseline
+        running_invested = invested_baseline
+        wealth_series: list[dict[str, int | str]] = []
+        trend_series: list[dict[str, int | str]] = []
+        for bucket in bucket_keys:
+            running_cash += transaction_cash_by_bucket[bucket] + movement_cash_by_bucket[bucket]
+            running_invested += movement_invested_by_bucket[bucket]
+            wealth_series.append(
+                {
+                    "bucket": bucket,
+                    "cash_balance": running_cash,
+                    "invested_balance": running_invested,
+                    "wealth": running_cash + running_invested,
+                }
+            )
+            trend_series.append(
+                {
+                    "bucket": bucket,
+                    "contribution_total": contribution_by_bucket[bucket],
+                    "dividend_total": dividend_by_bucket[bucket],
+                    "withdrawal_total": withdrawal_by_bucket[bucket],
+                }
+            )
+
+        range_end_cash_balance = running_cash
+        range_end_invested_balance = running_invested
+        monthly_income_total = self._income_total_for_range(
+            income_by_month=income_by_month,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+        )
+        target = int(round(monthly_income_total * 0.1))
+        realized = contribution_total + dividend_total
+
+        return {
+            "view": view,
+            "from": occurred_from,
+            "to": occurred_to,
+            "totals": {
+                "contribution_total": contribution_total,
+                "dividend_total": dividend_total,
+                "withdrawal_total": withdrawal_total,
+                "invested_balance": range_end_invested_balance,
+                "cash_balance": range_end_cash_balance,
+                "wealth": range_end_cash_balance + range_end_invested_balance,
+                "dividends_accumulated": current_dividends_accumulated,
+            },
+            "goal": {
+                "target": target,
+                "realized": realized,
+                "remaining": max(target - realized, 0),
+                "progress_percent": (
+                    100 if target <= 0 else min(int(round((realized * 100) / target)), 100)
+                ),
+            },
+            "series": {
+                "wealth_evolution": wealth_series,
+                "contribution_dividend_trend": trend_series,
+            },
+        }
 
     def list_recurring_rules(
         self,
@@ -937,6 +1184,10 @@ class Projector:
             self._apply_budget_updated(session, event.payload)
             return
 
+        if event.type == "InvestmentMovementRecorded":
+            self._apply_investment_movement_recorded(session, event.payload)
+            return
+
         if event.type == "InvoicePaid":
             self._apply_invoice_paid(session, event.payload)
             return
@@ -1185,6 +1436,37 @@ class Projector:
             return
 
         existing.limit = int(payload["limit"])
+
+    def _apply_investment_movement_recorded(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        movement_id = str(payload["id"])
+        if session.get(InvestmentMovementRecord, movement_id) is not None:
+            return
+
+        cash_delta = int(payload["cash_delta"])
+        session.add(
+            InvestmentMovementRecord(
+                movement_id=movement_id,
+                occurred_at=str(payload["occurred_at"]),
+                type=str(payload["type"]),
+                account_id=str(payload["account_id"]),
+                description=_optional_string(payload.get("description")),
+                contribution_amount=int(payload.get("contribution_amount", 0)),
+                dividend_amount=int(payload.get("dividend_amount", 0)),
+                cash_amount=int(payload.get("cash_amount", 0)),
+                invested_amount=int(payload.get("invested_amount", 0)),
+                cash_delta=cash_delta,
+                invested_delta=int(payload["invested_delta"]),
+            )
+        )
+        self._apply_balance_delta(
+            session,
+            account_id=str(payload["account_id"]),
+            delta=cash_delta,
+        )
 
     def _apply_invoice_item(
         self,
@@ -1651,6 +1933,116 @@ class Projector:
         parsed_month = datetime.strptime(month, "%Y-%m")
         return date(parsed_month.year, parsed_month.month, due_day).isoformat()
 
+    def _income_totals_by_month(self, *, session: Session) -> dict[str, int]:
+        rows: Sequence[TransactionProjectionRecord] = (
+            session.query(TransactionProjectionRecord)
+            .filter(TransactionProjectionRecord.status == "active")
+            .filter(TransactionProjectionRecord.type == "income")
+            .all()
+        )
+        totals: dict[str, int] = {}
+        for row in rows:
+            month_key = row.occurred_at[:7]
+            totals[month_key] = totals.get(month_key, 0) + row.amount
+        return totals
+
+    def _income_total_for_range(
+        self,
+        *,
+        income_by_month: dict[str, int],
+        occurred_from: str,
+        occurred_to: str,
+    ) -> int:
+        start = self._parse_utc(occurred_from)
+        end = self._parse_utc(occurred_to)
+        total = 0
+        cursor = date(start.year, start.month, 1)
+        end_marker = date(end.year, end.month, 1)
+        while cursor <= end_marker:
+            key = f"{cursor.year:04d}-{cursor.month:02d}"
+            total += income_by_month.get(key, 0)
+            if cursor.month == 12:
+                cursor = date(cursor.year + 1, 1, 1)
+            else:
+                cursor = date(cursor.year, cursor.month + 1, 1)
+        return total
+
+    def _bucket_keys_for_range(
+        self,
+        *,
+        view: str,
+        occurred_from: str,
+        occurred_to: str,
+    ) -> list[str]:
+        start = self._parse_utc(occurred_from)
+        end = self._parse_utc(occurred_to)
+        if end < start:
+            return []
+
+        if view == "daily":
+            keys: list[str] = []
+            current = start.date()
+            while current <= end.date():
+                keys.append(current.isoformat())
+                current = current + timedelta(days=1)
+            return keys
+
+        if view == "weekly":
+            keys = []
+            current = (start - timedelta(days=start.weekday())).date()
+            while current <= end.date():
+                iso_year, iso_week, _ = current.isocalendar()
+                keys.append(f"{iso_year:04d}-W{iso_week:02d}")
+                current = current + timedelta(days=7)
+            return keys
+
+        if view in {"monthly", "bimonthly", "quarterly"}:
+            keys = []
+            seen: set[str] = set()
+            current = date(start.year, start.month, 1)
+            end_marker = date(end.year, end.month, 1)
+            while current <= end_marker:
+                key = self._bucket_key_for_date(view=view, value=current)
+                if key not in seen:
+                    keys.append(key)
+                    seen.add(key)
+                if current.month == 12:
+                    current = date(current.year + 1, 1, 1)
+                else:
+                    current = date(current.year, current.month + 1, 1)
+            return keys
+
+        if view == "yearly":
+            keys = []
+            for year in range(start.year, end.year + 1):
+                keys.append(f"{year:04d}")
+            return keys
+
+        return []
+
+    def _bucket_key(self, *, view: str, occurred_at: str) -> str:
+        parsed = self._parse_utc(occurred_at)
+        return self._bucket_key_for_date(view=view, value=parsed.date())
+
+    def _bucket_key_for_date(self, *, view: str, value: date) -> str:
+        if view == "daily":
+            return value.isoformat()
+        if view == "weekly":
+            iso_year, iso_week, _ = value.isocalendar()
+            return f"{iso_year:04d}-W{iso_week:02d}"
+        if view == "monthly":
+            return f"{value.year:04d}-{value.month:02d}"
+        if view == "bimonthly":
+            bi = ((value.month - 1) // 2) + 1
+            return f"{value.year:04d}-B{bi}"
+        if view == "quarterly":
+            quarter = ((value.month - 1) // 3) + 1
+            return f"{value.year:04d}-Q{quarter}"
+        return f"{value.year:04d}"
+
+    def _parse_utc(self, value: str) -> datetime:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
     def _projection_schema_requires_rebuild(self) -> bool:
         inspector = inspect(self._engine)
         table_names = set(inspector.get_table_names())
@@ -1849,6 +2241,28 @@ class Projector:
             "limit",
         }
         if budget_columns != expected_budget_columns:
+            return True
+
+        if "investment_movements" not in table_names:
+            return True
+
+        investment_columns = self._safe_column_names(inspector, "investment_movements")
+        if investment_columns is None:
+            return True
+        expected_investment_columns = {
+            "movement_id",
+            "occurred_at",
+            "type",
+            "account_id",
+            "description",
+            "contribution_amount",
+            "dividend_amount",
+            "cash_amount",
+            "invested_amount",
+            "cash_delta",
+            "invested_delta",
+        }
+        if investment_columns != expected_investment_columns:
             return True
 
         return False

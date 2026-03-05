@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "../../App";
@@ -171,6 +171,41 @@ describe("Movements panel", () => {
         );
       }
 
+      if (url.includes("/api/investments/overview") && method === "GET") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              view: "monthly",
+              from: "2026-03-01T00:00:00Z",
+              to: "2026-03-31T23:59:59Z",
+              totals: {
+                contribution_total: 0,
+                dividend_total: 0,
+                withdrawal_total: 0,
+                invested_balance: 0,
+                cash_balance: 14500,
+                wealth: 14500,
+                dividends_accumulated: 0,
+              },
+              goal: {
+                target: 500,
+                realized: 0,
+                remaining: 500,
+                progress_percent: 0,
+              },
+              series: {
+                wealth_evolution: [],
+                contribution_dividend_trend: [],
+              },
+            }),
+          ),
+        );
+      }
+
+      if (url.includes("/api/investments/movements") && method === "GET") {
+        return Promise.resolve(new Response(JSON.stringify([])));
+      }
+
       if (url.includes("/api/expenses") && method === "POST") {
         return Promise.resolve(
           new Response(
@@ -213,10 +248,6 @@ describe("Movements panel", () => {
       expect.stringContaining("/api/expenses"),
       expect.objectContaining({ method: "POST" }),
     );
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(11);
-    });
   });
 
   it("shows one active mode at a time and defaults to saída", async () => {

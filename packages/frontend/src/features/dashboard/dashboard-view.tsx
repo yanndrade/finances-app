@@ -1,9 +1,15 @@
-import type { AccountSummary, DashboardSummary, TransactionSummary } from "../../lib/api";
+import type {
+  AccountSummary,
+  DashboardSummary,
+  InvestmentOverview,
+  TransactionSummary,
+} from "../../lib/api";
 import type { AppView } from "../../components/sidebar";
 import { DashboardBento } from "./dashboard-bento";
 
 type DashboardViewProps = {
   dashboard: DashboardSummary | null;
+  investmentOverview: InvestmentOverview | null;
   accounts: AccountSummary[];
   transactions: TransactionSummary[];
   loading: boolean;
@@ -26,6 +32,7 @@ type DashboardViewProps = {
 
 export function DashboardView({
   dashboard,
+  investmentOverview,
   accounts,
   loading,
   isSubmitting,
@@ -66,6 +73,7 @@ export function DashboardView({
       {dashboard !== null ? (
         <DashboardBento
           dashboard={dashboard}
+          investmentOverview={investmentOverview}
           accounts={accounts}
           isSubmitting={isSubmitting}
           onMarkReimbursementReceived={onMarkReimbursementReceived}
