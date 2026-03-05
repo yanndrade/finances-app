@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from finance_app.interfaces.http.bootstrap import AppServices, build_services
 from finance_app.interfaces.http.routes.accounts import build_accounts_router
+from finance_app.interfaces.http.routes.backups import build_backups_router
 from finance_app.interfaces.http.routes.budgets import build_budgets_router
 from finance_app.interfaces.http.routes.cards import build_cards_router
 from finance_app.interfaces.http.routes.dev import build_dev_router
@@ -16,6 +17,15 @@ from finance_app.interfaces.http.routes.transactions import build_transactions_r
 def build_router(services: AppServices) -> APIRouter:
     router = APIRouter()
     router.include_router(build_health_router())
+    router.include_router(
+        build_backups_router(
+            account_service=services.account_service,
+            card_service=services.card_service,
+            card_purchase_service=services.card_purchase_service,
+            investment_service=services.investment_service,
+            transaction_service=services.transaction_service,
+        )
+    )
     router.include_router(build_accounts_router(services.account_service))
     router.include_router(
         build_cards_router(

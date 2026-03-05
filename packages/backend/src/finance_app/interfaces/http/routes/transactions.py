@@ -23,6 +23,8 @@ from finance_app.application.transfers import InvalidTransferAccountsError, Tran
 
 PaymentMethod = Literal["PIX", "CASH", "OTHER"]
 TransactionType = Literal["income", "expense"]
+TransactionListType = Literal["income", "expense", "transfer", "investment"]
+TransferDirection = Literal["debit", "credit"]
 
 
 class CreateTransactionRequest(BaseModel):
@@ -63,6 +65,24 @@ class CreateTransferRequest(BaseModel):
     to_account_id: str = Field(min_length=1)
     amount: int = Field(gt=0)
     description: str | None = None
+
+
+class TransactionListItem(BaseModel):
+    transaction_id: str
+    occurred_at: str
+    type: TransactionListType
+    amount: int
+    account_id: str
+    payment_method: PaymentMethod
+    category_id: str
+    description: str | None = None
+    person_id: str | None = None
+    status: str
+    transfer_id: str | None = None
+    direction: TransferDirection | None = None
+    ledger_event_type: str | None = None
+    ledger_source: str | None = None
+    ledger_destination: str | None = None
 
 
 def build_transactions_router(
@@ -133,25 +153,34 @@ def build_transactions_router(
                 detail=str(exc),
             ) from exc
 
-    @router.get("/api/transactions")
+    @router.get(
+        "/api/transactions",
+        responses={200: {"model": list[TransactionListItem]}},
+    )
     def list_transactions(
         occurred_from: str | None = Query(default=None, alias="from"),
         occurred_to: str | None = Query(default=None, alias="to"),
+        transaction_type: TransactionListType | None = Query(default=None, alias="type"),
         category_id: str | None = Query(default=None, alias="category"),
         account_id: str | None = Query(default=None, alias="account"),
+        card_id: str | None = Query(default=None, alias="card"),
         payment_method: PaymentMethod | None = Query(default=None, alias="method"),
         person_id: str | None = Query(default=None, alias="person"),
         text: str | None = Query(default=None, alias="text"),
+        ledger: bool = Query(default=False),
     ) -> list[dict[str, str | int | None]]:
         try:
             return transaction_service.list_transactions(
                 occurred_from=occurred_from,
                 occurred_to=occurred_to,
+                transaction_type=transaction_type,
                 category_id=category_id,
                 account_id=account_id,
+                card_id=card_id,
                 payment_method=payment_method,
                 person_id=person_id,
                 text=text,
+                include_ledger=ledger,
             )
         except InvalidTransactionDateError as exc:
             raise HTTPException(
@@ -287,3 +316,5 @@ def build_transactions_router(
             ) from exc
 
     return router
+
+

@@ -120,6 +120,7 @@ describe("useAppDataOrchestrator", () => {
           to: "",
           category: "",
           account: "",
+          card: "",
           method: "",
           person: "",
           text: "",

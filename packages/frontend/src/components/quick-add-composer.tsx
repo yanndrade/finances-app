@@ -43,6 +43,14 @@ import {
 } from "./quick-add/use-quick-add-reducer";
 
 type PaymentMethod = "PIX" | "CASH" | "OTHER";
+export type QuickAddPreset =
+  | "expense"
+  | "income"
+  | "transfer_internal"
+  | "transfer_invoice_payment"
+  | "investment_contribution"
+  | "investment_withdrawal"
+  | "expense_card";
 
 const MOBILE_QUERY = "(max-width: 900px)";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -59,6 +67,8 @@ const ENTER_SUBMIT_INPUT_TYPES = new Set([
 type QuickAddComposerProps = {
   isOpen: boolean;
   onClose: () => void;
+  preset?: QuickAddPreset;
+  presetInvoiceId?: string;
   accounts: AccountSummary[];
   cards: CardSummary[];
   invoices: InvoiceSummary[];
@@ -75,6 +85,8 @@ type QuickAddComposerProps = {
 export function QuickAddComposer({
   isOpen,
   onClose,
+  preset,
+  presetInvoiceId,
   accounts,
   cards,
   invoices,
@@ -166,10 +178,65 @@ export function QuickAddComposer({
 
     dispatchQuickAdd({ type: "toAccountChanged", accountId: "" });
 
+    if (presetInvoiceId && invoiceId !== presetInvoiceId) {
+      const selectedInvoice = openInvoices.find((invoice) => invoice.invoice_id === presetInvoiceId);
+      if (selectedInvoice) {
+        dispatchQuickAdd({ type: "invoiceChanged", invoiceId: selectedInvoice.invoice_id });
+        return;
+      }
+    }
+
     if (!invoiceId && openInvoices.length > 0) {
       dispatchQuickAdd({ type: "invoiceChanged", invoiceId: openInvoices[0].invoice_id });
     }
-  }, [accountId, accounts, entryType, invoiceId, openInvoices, toAccountId, transferMode]);
+  }, [accountId, accounts, entryType, invoiceId, openInvoices, presetInvoiceId, toAccountId, transferMode]);
+
+  useEffect(() => {
+    if (!isOpen || !preset) {
+      return;
+    }
+
+    dispatchQuickAdd({ type: "validationErrorsSet", errors: {} });
+
+    switch (preset) {
+      case "expense":
+      case "income":
+        dispatchQuickAdd({ type: "entryTypeChanged", entryType: preset });
+        return;
+      case "expense_card":
+        dispatchQuickAdd({ type: "entryTypeChanged", entryType: "expense" });
+        dispatchQuickAdd({ type: "expensePaymentModeChanged", mode: "CARD" });
+        return;
+      case "transfer_internal":
+        dispatchQuickAdd({ type: "entryTypeChanged", entryType: "transfer" });
+        dispatchQuickAdd({ type: "transferModeChanged", mode: "internal" });
+        return;
+      case "transfer_invoice_payment":
+        dispatchQuickAdd({ type: "entryTypeChanged", entryType: "transfer" });
+        dispatchQuickAdd({ type: "transferModeChanged", mode: "invoice_payment" });
+        if (presetInvoiceId) {
+          const selectedInvoice = openInvoices.find((invoice) => invoice.invoice_id === presetInvoiceId);
+          if (selectedInvoice) {
+            dispatchQuickAdd({ type: "invoiceChanged", invoiceId: selectedInvoice.invoice_id });
+            return;
+          }
+        }
+        if (openInvoices.length > 0) {
+          dispatchQuickAdd({ type: "invoiceChanged", invoiceId: openInvoices[0].invoice_id });
+        }
+        return;
+      case "investment_contribution":
+        dispatchQuickAdd({ type: "entryTypeChanged", entryType: "investment" });
+        dispatchQuickAdd({ type: "investmentModeChanged", mode: "contribution" });
+        return;
+      case "investment_withdrawal":
+        dispatchQuickAdd({ type: "entryTypeChanged", entryType: "investment" });
+        dispatchQuickAdd({ type: "investmentModeChanged", mode: "withdrawal" });
+        return;
+      default:
+        return;
+    }
+  }, [isOpen, openInvoices, preset, presetInvoiceId]);
 
   function resetForm() {
     setAmount("");
@@ -851,3 +918,5 @@ function useMediaQuery(query: string): boolean {
 
   return matches;
 }
+
+

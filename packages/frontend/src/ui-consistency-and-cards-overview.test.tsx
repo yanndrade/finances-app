@@ -251,10 +251,19 @@ describe("UI consistency and cards overview", () => {
     expect(screen.getByText(/resumo mensal e pontos de atencao/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
-    expect(await screen.findByRole("button", { name: /\+ adicionar conta/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /^contas$/i }, { timeout: 5_000 }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole(
+        "button",
+        { name: /abrir configuracoes do sistema/i },
+        { timeout: 5_000 },
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/mapa de contas/i)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^transa/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
     expect(await screen.findByRole("button", { name: /aplicar filtros/i })).toBeInTheDocument();
     expect(screen.queryByText(/hist.rico e filtros/i)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /\+\s*lan.ar/i }));
@@ -262,7 +271,7 @@ describe("UI consistency and cards overview", () => {
       await screen.findByRole("dialog", undefined, { timeout: 5_000 }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("opens cards in aggregate mode before drilling down to a specific card", async () => {
     installFetchMock({

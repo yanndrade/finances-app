@@ -41,37 +41,37 @@ export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
   },
   {
     id: "transactions",
-    label: "Transacoes",
-    shortLabel: "Transacoes",
-    description: "Filtros, edicao e estorno",
+    label: "Historico unificado",
+    shortLabel: "Historico",
+    description: "Linha do tempo completa do dinheiro",
     icon: ReceiptText,
   },
   {
     id: "cards",
     label: "Cartoes",
     shortLabel: "Cartoes",
-    description: "Cadastro e ciclo de pagamento",
+    description: "Faturas, limite e ciclo de pagamento",
     icon: CreditCard,
   },
   {
     id: "reports",
-    label: "Relatorios",
-    shortLabel: "Relatorios",
-    description: "Periodos, categorias e parcelas futuras",
+    label: "Analises & relatorios",
+    shortLabel: "Analises",
+    description: "Tendencias, cashflow e compromissos",
     icon: BarChart3,
   },
   {
     id: "investments",
-    label: "Investimentos",
-    shortLabel: "Investimentos",
-    description: "Aportes, dividendos e patrimonio",
+    label: "Patrimonio & investimentos",
+    shortLabel: "Patrimonio",
+    description: "Composicao, evolucao e movimentos",
     icon: LineChart,
   },
   {
     id: "accounts",
     label: "Contas",
     shortLabel: "Contas",
-    description: "Saldo, criacao e ajustes",
+    description: "Saldos e status da carteira",
     icon: Wallet2,
   },
 ];
@@ -128,7 +128,7 @@ export function Sidebar({ activeView, onNavigate }: SidebarProps) {
             <span className="nav-item__label">Configuracoes</span>
           </span>
           <span aria-hidden="true" className="nav-item__description">
-            Desenvolvimento e preferencias
+            Regras, preferencias e backup
           </span>
         </button>
       </div>

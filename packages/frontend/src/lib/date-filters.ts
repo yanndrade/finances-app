@@ -29,8 +29,10 @@ export function toTransactionApiFilters(
   return {
     from: range.from,
     to: range.to,
+    type: filters.type,
     category: normalized.category,
     account: normalized.account,
+    card: normalized.card,
     method: normalized.method,
     person: normalized.person,
     text: normalized.text,
@@ -48,6 +50,7 @@ export function toReportApiFilters(filters: TransactionFilters): ReportFilters {
     to: range.to,
     category: normalized.category,
     account: normalized.account,
+    card: normalized.card,
     method: normalized.method,
     person: normalized.person,
     text: normalized.text,
@@ -67,6 +70,7 @@ function normalizeReportFilters(filters: TransactionFilters): ReportFilters {
     to: filters.to,
     category: filters.category,
     account: filters.account,
+    card: filters.card,
     method: filters.method,
     person: filters.person,
     text: filters.text,
@@ -125,3 +129,4 @@ function formatLocalDate(value: Date): string {
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+

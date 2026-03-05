@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "./App";
@@ -251,6 +251,19 @@ function installAppFetchMock(initialState?: {
 
     if (url.includes("/api/dashboard") && method === "GET") {
       return new Response(JSON.stringify(state.dashboard));
+    }
+
+    if (url.includes("/api/backups/export") && method === "GET") {
+      return new Response(
+        JSON.stringify({
+          accounts: state.accounts,
+          cards: state.cards,
+          invoices: state.invoices,
+          transactions: state.transactions,
+          investment_movements: state.investmentMovements,
+          report_summary: state.reportSummary,
+        }),
+      );
     }
 
     if (url.includes("/api/investments/overview") && method === "GET") {
@@ -735,6 +748,10 @@ function installAppFetchMock(initialState?: {
 }
 
 describe("App", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it("navigates between desktop views", async () => {
     installAppFetchMock();
 
@@ -749,12 +766,45 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
     expect(
-      await screen.findByRole("region", { name: /gerenciar contas/i }),
+      await screen.findByRole("region", { name: /contas e saldos/i }),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^trans/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
     expect(
       await screen.findByRole("region", { name: /historico e filtros/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render a fixed contextual panel in desktop shell", async () => {
+    installAppFetchMock();
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+
+    expect(
+      screen.queryByRole("heading", { name: /painel contextual/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/espaco reservado para formularios rapidos/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses unified desktop navigation taxonomy labels", async () => {
+    installAppFetchMock();
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+
+    expect(
+      screen.getByRole("button", { name: /historico unificado/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /patrimonio & investimentos/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /analises & relatorios/i }),
     ).toBeInTheDocument();
   });
 
@@ -764,10 +814,15 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /^investimentos$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^patrimonio/i }));
+    await screen.findByRole("heading", { level: 1, name: /patrim.nio & investimentos/i });
 
     expect(
-      await screen.findByRole("heading", { level: 2, name: /evolu..o do patrim.nio/i }),
+      await screen.findByRole(
+        "heading",
+        { level: 2, name: /evolu..o do patrim.nio/i },
+        { timeout: 3000 },
+      ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /di.rio/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /semanal/i })).toBeInTheDocument();
@@ -775,6 +830,61 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /bimestral/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /trimestral/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /anual/i })).toBeInTheDocument();
+  });
+
+  it("routes investment actions to the global quick add with presets", async () => {
+    installAppFetchMock();
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await userEvent.click(screen.getByRole("button", { name: /^patrimonio/i }));
+
+    expect(screen.queryByRole("button", { name: /salvar aporte/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /salvar resgate/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /novo aporte/i }));
+
+    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
+    expect(within(dialog).getByLabelText(/^tipo$/i)).toHaveValue("investment");
+    expect(within(dialog).getByLabelText(/tipo do movimento/i)).toHaveValue("contribution");
+  });
+
+  it("opens the unified ledger from investments quick action", async () => {
+    installAppFetchMock({
+      transactions: [
+        buildTransaction({
+          transaction_id: "tx-invest",
+          description: "Invest aporte mensal",
+          category_id: "investment",
+        }),
+        buildTransaction({
+          transaction_id: "tx-salary",
+          type: "income",
+          category_id: "salary",
+          description: "Salario principal",
+          amount: 7_500_00,
+        }),
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await userEvent.click(screen.getByRole("button", { name: /^patrimonio/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /ver movimentos no historico/i }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+    ).toBeInTheDocument();
+    const searchInput = await screen.findByLabelText(/buscar/i);
+    expect(searchInput).toHaveValue("invest");
+    expect(await screen.findByText(/invest aporte mensal/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
+    });
   });
 
   it("marks a pending reimbursement as received from dashboard", async () => {
@@ -823,7 +933,7 @@ describe("App", () => {
     });
   });
 
-  it("shows category budget alerts and updates monthly limits from dashboard", async () => {
+  it("shows category budget alerts on dashboard and updates monthly limits from settings", async () => {
     const fetchMock = installAppFetchMock({
       dashboard: buildDashboard({
         spending_by_category: [{ category_id: "food", total: 8_500 }],
@@ -854,10 +964,20 @@ describe("App", () => {
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
     expect(await screen.findByText(/orcamentos por categoria/i)).toBeInTheDocument();
-    expect(screen.getByText(/em alerta/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Em alerta$/i)).toBeInTheDocument();
     expect(screen.getByText(/r\$\s*85,00 de r\$\s*100,00/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /salvar limite/i })).not.toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText(/limite mensal/i), "15000");
+    await userEvent.click(
+      screen.getByRole("button", { name: /ajustar limites em configuracoes/i }),
+    );
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /^config/i }),
+    ).toBeInTheDocument();
+
+    const budgetLimitInput = await screen.findByLabelText(/limite mensal/i);
+    await userEvent.clear(budgetLimitInput);
+    await userEvent.type(budgetLimitInput, "15000");
     await userEvent.click(screen.getByRole("button", { name: /salvar limite/i }));
 
     await waitFor(() => {
@@ -869,8 +989,224 @@ describe("App", () => {
     });
     await waitFor(() => {
       expect(screen.getByText(/saudavel/i)).toBeInTheDocument();
-      expect(screen.getByText(/sem alertas/i)).toBeInTheDocument();
     });
+  });
+
+  it("opens the unified ledger with budget-alert context from dashboard quick corrections", async () => {
+    installAppFetchMock({
+      transactions: [
+        buildTransaction({
+          transaction_id: "tx-food",
+          category_id: "food",
+          description: "Mercado semanal",
+        }),
+        buildTransaction({
+          transaction_id: "tx-salary",
+          type: "income",
+          category_id: "salary",
+          description: "Salario principal",
+          amount: 7_500_00,
+        }),
+      ],
+      dashboard: buildDashboard({
+        spending_by_category: [{ category_id: "food", total: 8_500 }],
+        category_budgets: [
+          {
+            category_id: "food",
+            month: "2026-03",
+            limit: 10_000,
+            spent: 8_500,
+            usage_percent: 85,
+            status: "warning",
+          },
+        ],
+        budget_alerts: [
+          {
+            category_id: "food",
+            month: "2026-03",
+            limit: 10_000,
+            spent: 8_500,
+            usage_percent: 85,
+            status: "warning",
+          },
+        ],
+      }),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await userEvent.click(screen.getByRole("button", { name: /ver categorias em alerta/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+    ).toBeInTheDocument();
+    const searchInput = await screen.findByLabelText(/buscar/i);
+    expect(searchInput).toHaveValue("Alimentação");
+    expect(await screen.findByText(/mercado semanal/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it("opens the unified ledger with review-queue context from dashboard quick corrections", async () => {
+    installAppFetchMock({
+      transactions: [
+        buildTransaction({
+          transaction_id: "tx-review",
+          category_id: "other",
+          description: "Compra sem categoria",
+        }),
+        buildTransaction({
+          transaction_id: "tx-salary",
+          type: "income",
+          category_id: "salary",
+          description: "Salario principal",
+          amount: 7_500_00,
+        }),
+      ],
+      dashboard: buildDashboard({
+        review_queue: [
+          {
+            transaction_id: "tx-review",
+            occurred_at: "2026-03-03T12:00:00Z",
+            type: "expense",
+            amount: 12_000,
+            account_id: "acc-1",
+            payment_method: "PIX",
+            category_id: "other",
+            description: "Compra sem categoria",
+            person_id: null,
+            status: "active",
+          },
+        ],
+      }),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    expect(await screen.findByText(/^Sem categoria$/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+    ).toBeInTheDocument();
+    const searchInput = await screen.findByLabelText(/buscar/i);
+    expect(searchInput).toHaveValue("Compra sem categoria");
+    expect(await screen.findByText(/compra sem categoria/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it("opens the unified ledger from reports category shortcuts", async () => {
+    installAppFetchMock({
+      reportSummary: buildReportSummary({
+        category_breakdown: [{ category_id: "food", total: 30_000 }],
+      }),
+      transactions: [
+        buildTransaction({
+          transaction_id: "tx-food",
+          category_id: "food",
+          description: "Mercado mensal",
+          amount: 30_000,
+        }),
+        buildTransaction({
+          transaction_id: "tx-rent",
+          category_id: "housing",
+          description: "Aluguel",
+          amount: 120_000,
+        }),
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await userEvent.click(screen.getByRole("button", { name: /analises.*relatorios/i }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /^an.lises/i }),
+    ).toBeInTheDocument();
+
+    const openLedgerFromReportsButton = await screen.findByRole("button", {
+      name: /abrir .*hist.rico/i,
+    });
+    await userEvent.click(openLedgerFromReportsButton);
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+    ).toBeInTheDocument();
+    const searchInput = await screen.findByLabelText(/buscar/i);
+    expect((searchInput as HTMLInputElement).value).toMatch(/alimenta/i);
+    expect(await screen.findByText(/mercado mensal/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/aluguel/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it("preserves the report range when drilling from weekly reports into the ledger", async () => {
+    const fetchMock = installAppFetchMock({
+      reportSummary: buildReportSummary({
+        period: {
+          type: "week",
+          from: "2026-04-07T00:00:00Z",
+          to: "2026-04-13T23:59:59Z",
+        },
+      }),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await userEvent.click(screen.getByRole("button", { name: /analises.*relatorios/i }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /^an.lises/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: /ver recorte do periodo/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+    ).toBeInTheDocument();
+
+    const transactionCalls = fetchMock.mock.calls
+      .map(([input]) => String(input))
+      .filter((url) => url.includes("/api/transactions"));
+    const ledgerRequest = new URL(transactionCalls.at(-1) ?? "http://127.0.0.1");
+    expect(ledgerRequest.searchParams.get("from")).toBe("2026-04-07T00:00:00Z");
+    expect(ledgerRequest.searchParams.get("to")).toBe("2026-04-13T23:59:59Z");
+  });
+
+  it("shows upcoming events on dashboard and opens cards workspace from that section", async () => {
+    installAppFetchMock({
+      cards: [
+        buildCard({ card_id: "card-1", name: "Nubank" }),
+      ],
+      invoices: [
+        buildInvoice({
+          invoice_id: "card-1:2026-03",
+          card_id: "card-1",
+          reference_month: "2026-03",
+          due_date: "2026-03-20",
+          total_amount: 100_00,
+          remaining_amount: 100_00,
+          status: "open",
+        }),
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    expect(await screen.findByText(/proximos eventos/i)).toBeInTheDocument();
+    expect(screen.getByText(/nubank/i)).toBeInTheDocument();
+    expect(screen.getByText(/vence em 2026-03-20/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /abrir cartoes/i }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: /^cart/i })).toBeInTheDocument();
   });
 
   it("opens quick add with controlled category selection", async () => {
@@ -941,6 +1277,54 @@ describe("App", () => {
     expect(await screen.findByRole("option", { name: /alimenta/i })).toBeInTheDocument();
   });
 
+  it("opens command palette with Ctrl+K and routes actions to the global launcher", async () => {
+    installAppFetchMock({
+      invoices: [buildInvoice()],
+    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      vi.fn(() => ({
+        observe: vi.fn(),
+        unobserve: vi.fn(),
+        disconnect: vi.fn(),
+      })),
+    );
+    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+      configurable: true,
+      value: vi.fn(() => false),
+    });
+    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+
+    const paletteDialog = await screen.findByRole("dialog", {
+      name: /command palette/i,
+    });
+    expect(within(paletteDialog).getByText(/registrar despesa/i)).toBeInTheDocument();
+
+    await userEvent.click(within(paletteDialog).getByText(/registrar despesa/i));
+
+    const launcherDialog = await screen.findByRole("dialog", {
+      name: /^lancar$/i,
+    });
+    expect(within(launcherDialog).getByLabelText(/^tipo$/i)).toHaveValue("expense");
+  });
+
   it("uses explicit invoice payment copy", async () => {
     installAppFetchMock({
       invoices: [buildInvoice()],
@@ -1004,31 +1388,18 @@ describe("App", () => {
     expect(screen.getByText(/limite dispon/i)).toBeInTheDocument();
   });
 
-  it("creates an account from the accounts view and refreshes the desktop data", async () => {
-    const fetchMock = installAppFetchMock();
+  it("restores account management actions from the accounts workspace", async () => {
+    installAppFetchMock();
 
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
 
-    await userEvent.click(await screen.findByRole("button", { name: /\+ adicionar conta/i }));
-    await userEvent.type(screen.getByLabelText(/nome da conta/i), "Reserva");
-    await userEvent.selectOptions(screen.getByLabelText(/tipo da conta/i), "savings");
-    const balanceInput = screen.getByDisplayValue("0,00");
-    await userEvent.clear(balanceInput);
-    await userEvent.type(balanceInput, "500");
-    await userEvent.click(screen.getByRole("button", { name: /criar conta/i }));
-
-    expect(await screen.findByText("Reserva")).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).endsWith("/api/accounts") && init?.method === "POST";
-        }),
-      ).toBe(true);
-    });
+    const accountsSection = await screen.findByRole("region", { name: /gerenciar contas/i });
+    expect(within(accountsSection).getByRole("button", { name: /\+ adicionar conta/i })).toBeInTheDocument();
+    expect(within(accountsSection).getByRole("button", { name: /^editar$/i })).toBeInTheDocument();
+    expect(within(accountsSection).getByRole("button", { name: /abrir configuracoes/i })).toBeInTheDocument();
   });
 
   it("renders the cards overview and wallet settings", async () => {
@@ -1042,12 +1413,54 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
 
     expect((await screen.findAllByText(/faturas abertas/i)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/carteira/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/carteira/i).length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getByRole("tab", { name: /ajustes/i }));
 
     expect(await screen.findByText(/ajustes da carteira/i)).toBeInTheDocument();
     expect(screen.getByText(/contas de pagamento/i)).toBeInTheDocument();
+  });
+
+  it("opens the unified ledger from cards quick action", async () => {
+    installAppFetchMock({
+      transactions: [
+        buildTransaction({
+          transaction_id: "purchase-1:card-purchase",
+          description: "Mercado no cartao",
+          category_id: "food",
+          payment_method: "OTHER",
+          ledger_event_type: "card_purchase",
+          ledger_source: "card_liability:card-1",
+          ledger_destination: "category:food",
+          status: "readonly",
+        }),
+        buildTransaction({
+          transaction_id: "tx-salary",
+          type: "income",
+          category_id: "salary",
+          description: "Salario principal",
+          amount: 7_500_00,
+        }),
+      ],
+      invoices: [buildInvoice()],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /referencia 2026-03/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /ver gastos/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+    ).toBeInTheDocument();
+    const cardFilter = await screen.findByLabelText(/cartao do filtro/i);
+    expect(cardFilter).toHaveValue("card-1");
+    expect(await screen.findByText(/mercado no cartao/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
+    });
   });
 
   it("shows consolidated invoice rows in the cards purchases tab", async () => {
@@ -1100,9 +1513,12 @@ describe("App", () => {
     expect(await screen.findByText(/fatura de 2026-03/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /pagar agora/i }));
-    await userEvent.clear(screen.getByLabelText(/valor do pagamento/i));
-    await userEvent.type(screen.getByLabelText(/valor do pagamento/i), "3000");
-    await userEvent.click(screen.getByRole("button", { name: /confirmar pagamento/i }));
+
+    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
+    expect(within(dialog).getByLabelText(/^tipo$/i)).toHaveValue("transfer");
+    expect(within(dialog).getByLabelText(/modo da transfer.ncia/i)).toHaveValue("invoice_payment");
+    await userEvent.type(within(dialog).getByPlaceholderText("0,00"), "3000");
+    await userEvent.click(within(dialog).getByRole("button", { name: /^lan.ar$/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Parcial")).toBeInTheDocument();
@@ -1115,6 +1531,60 @@ describe("App", () => {
       expect(
         fetchMock.mock.calls.some(([url, init]) => {
           return String(url).includes("/api/invoices/card-1%3A2026-03/payments") &&
+            init?.method === "POST";
+        }),
+      ).toBe(true);
+    });
+  });
+
+  it("keeps the viewed invoice selected when paying from cards with multiple open invoices", async () => {
+    const fetchMock = installAppFetchMock({
+      cards: [
+        buildCard({ card_id: "card-1", name: "Cartao A" }),
+        buildCard({ card_id: "card-2", name: "Cartao B" }),
+      ],
+      invoices: [
+        buildInvoice({
+          invoice_id: "card-1:2026-03",
+          card_id: "card-1",
+          reference_month: "2026-03",
+          closing_date: "2026-03-10",
+          due_date: "2026-03-20",
+          total_amount: 80_00,
+        }),
+        buildInvoice({
+          invoice_id: "card-2:2026-03",
+          card_id: "card-2",
+          reference_month: "2026-03",
+          closing_date: "2026-03-10",
+          due_date: "2026-03-20",
+          total_amount: 120_00,
+        }),
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.selectOptions(screen.getByLabelText(/escopo dos cartoes/i), "card-2");
+
+    expect(await screen.findByText(/fatura de 2026-03/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /pagar agora/i }));
+
+    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText(/fatura/i)).toHaveValue("card-2:2026-03");
+    });
+
+    await userEvent.type(within(dialog).getByPlaceholderText("0,00"), "5000");
+    await userEvent.click(within(dialog).getByRole("button", { name: /^lan.ar$/i }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return String(url).includes("/api/invoices/card-2%3A2026-03/payments") &&
             init?.method === "POST";
         }),
       ).toBe(true);
@@ -1176,32 +1646,30 @@ describe("App", () => {
   });
 
   it("shows feedback as a global toast that auto-hides after success", async () => {
+    const confirmMock = vi.fn<(message?: string) => boolean>(() => true);
+    vi.stubGlobal("confirm", confirmMock);
+
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
-
-    await userEvent.click(await screen.findByRole("button", { name: /\+ adicionar conta/i }));
-    await userEvent.type(screen.getByLabelText(/nome da conta/i), "Reserva toast");
-    await userEvent.selectOptions(screen.getByLabelText(/tipo da conta/i), "savings");
-    const balanceInput = screen.getByDisplayValue("0,00");
-    await userEvent.clear(balanceInput);
-    await userEvent.type(balanceInput, "500");
-    await userEvent.click(screen.getByRole("button", { name: /criar conta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^config/i }));
+    await screen.findByRole("region", { name: /configuracoes do sistema/i });
+    await userEvent.click(screen.getByRole("button", { name: /zona de perigo/i }));
+    await userEvent.click(screen.getByRole("button", { name: /apagar todos os dados/i }));
 
     expect(
-      await screen.findByRole("status", { name: /conta criada com sucesso/i }),
+      await screen.findByRole("status", { name: /aplicacao zerada com sucesso/i }),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^trans/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
     expect(
-      screen.queryByText("Conta criada com sucesso.", { selector: ".success-banner" }),
+      screen.queryByText("Aplicacao zerada com sucesso.", { selector: ".success-banner" }),
     ).not.toBeInTheDocument();
 
     await waitFor(
       () => {
         expect(
-          screen.queryByRole("status", { name: /conta criada com sucesso/i }),
+          screen.queryByRole("status", { name: /aplicacao zerada com sucesso/i }),
         ).not.toBeInTheDocument();
       },
       { timeout: 4500 },
@@ -1214,15 +1682,12 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^trans/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
 
     const transactionsSection = await screen.findByRole("region", {
       name: /historico e filtros/i,
     });
     expect(within(transactionsSection).getByText("Supermercado")).toBeInTheDocument();
-    expect(screen.queryByLabelText(/m.todo do filtro/i)).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /filtros avan.ados/i }));
     expect(screen.getByLabelText(/m.todo do filtro/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/categoria do filtro/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/pessoa do filtro/i)).toBeInTheDocument();
@@ -1252,6 +1717,164 @@ describe("App", () => {
         }),
       ).toBe(true);
     });
+  });
+
+  it("shows unified ledger header with top filters and slice KPIs", async () => {
+    installAppFetchMock({
+      transactions: [
+        buildTransaction({
+          transaction_id: "tx-income",
+          type: "income",
+          amount: 500_00,
+          description: "Salario",
+          category_id: "salary",
+        }),
+        buildTransaction({
+          transaction_id: "tx-expense",
+          type: "expense",
+          amount: 125_00,
+          description: "Mercado",
+          category_id: "food",
+        }),
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: /historico unificado/i }),
+    ).toBeInTheDocument();
+    const kpiGroup = screen.getByRole("group", { name: /kpis do recorte/i });
+    expect(within(kpiGroup).getByText(/entradas/i)).toBeInTheDocument();
+    expect(within(kpiGroup).getByText(/saidas/i)).toBeInTheDocument();
+    expect(within(kpiGroup).getByText(/resultado/i)).toBeInTheDocument();
+    expect(within(kpiGroup).getByText(/R\$\s*500,00/i)).toBeInTheDocument();
+    expect(within(kpiGroup).getByText(/R\$\s*125,00/i)).toBeInTheDocument();
+    expect(within(kpiGroup).getByText(/R\$\s*375,00/i)).toBeInTheDocument();
+
+    expect(screen.getByLabelText(/periodo/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/buscar/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/conta do filtro/i)).toBeInTheDocument();
+  });
+
+  it("shows origem e destino columns in the unified ledger and drawer details", async () => {
+    installAppFetchMock({
+      transactions: [
+        buildTransaction({
+          transaction_id: "tx-expense",
+          type: "expense",
+          amount: 90_00,
+          category_id: "food",
+          description: "Almoco",
+        }),
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+
+    const transactionsSection = await screen.findByRole("region", {
+      name: /historico e filtros/i,
+    });
+    expect(within(transactionsSection).getByText(/^Origem$/i)).toBeInTheDocument();
+    expect(within(transactionsSection).getByText(/^Destino$/i)).toBeInTheDocument();
+
+    await userEvent.click(within(transactionsSection).getByText("Almoco"));
+
+    const detailDialog = await screen.findByRole("dialog", {
+      name: /detalhes da transacao/i,
+    });
+    expect(within(detailDialog).getByText(/^Origem$/i)).toBeInTheDocument();
+    expect(within(detailDialog).getByText(/^Destino$/i)).toBeInTheDocument();
+  });
+
+  it("filters the ledger table instantly through the top search field", async () => {
+    installAppFetchMock({
+      transactions: [
+        buildTransaction({
+          transaction_id: "tx-market",
+          description: "Supermercado centro",
+          category_id: "food",
+        }),
+        buildTransaction({
+          transaction_id: "tx-salary",
+          type: "income",
+          description: "Salario principal",
+          category_id: "salary",
+          amount: 8_500_00,
+        }),
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+
+    expect(await screen.findByText(/supermercado centro/i)).toBeInTheDocument();
+    expect(screen.getByText(/salario principal/i)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/buscar/i), "super");
+
+    expect(screen.getByText(/supermercado centro/i)).toBeInTheDocument();
+    expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
+  });
+
+  it("supports density modes for the ledger table", async () => {
+    installAppFetchMock();
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+
+    const transactionsSection = await screen.findByRole("region", {
+      name: /historico e filtros/i,
+    });
+    const dataTable = within(transactionsSection).getByRole("table");
+    const tableShell = dataTable.closest(".table-shell");
+    expect(tableShell).toHaveClass("table-shell--compact");
+
+    await userEvent.selectOptions(screen.getByLabelText(/densidade da tabela/i), "compact");
+    expect(tableShell).toHaveClass("table-shell--compact");
+
+    await userEvent.selectOptions(screen.getByLabelText(/densidade da tabela/i), "dense");
+    expect(tableShell).toHaveClass("table-shell--dense");
+  });
+
+  it("opens ledger drill-down details when selecting a transaction row", async () => {
+    installAppFetchMock({
+      transactions: [
+        buildTransaction({
+          transaction_id: "tx-detail",
+          description: "Supermercado centro",
+          category_id: "food",
+        }),
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+
+    const transactionsSection = await screen.findByRole("region", {
+      name: /historico e filtros/i,
+    });
+    await userEvent.click(within(transactionsSection).getByText("Supermercado centro"));
+
+    const detailDialog = await screen.findByRole("dialog", {
+      name: /detalhes da transacao/i,
+    });
+    expect(detailDialog).toHaveClass("ledger-detail-drawer");
+    expect(within(detailDialog).getByText(/supermercado centro/i)).toBeInTheDocument();
+    expect(within(detailDialog).getByText(/^categoria$/i)).toBeInTheDocument();
+    expect(within(detailDialog).getByText(/forma de pagamento/i)).toBeInTheDocument();
   });
 
   it("keeps report summary visible when a stale non-report refresh settles later", async () => {
@@ -1310,7 +1933,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /^relat/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^analises/i }));
     expect(await screen.findByRole("heading", { level: 1, name: /relat/i })).toBeInTheDocument();
     expect(await screen.findByText(/consumo por categoria/i)).toBeInTheDocument();
 
@@ -1326,16 +1949,151 @@ describe("App", () => {
     expect(screen.queryByText(/n.o foi poss.vel carregar os relat.rios/i)).not.toBeInTheDocument();
   });
 
+  it("exports a full backup snapshot from the dedicated backup endpoint", async () => {
+    const fullTransactions = [
+      buildTransaction({
+        transaction_id: "tx-full-1",
+        occurred_at: "2026-02-01T10:00:00Z",
+        description: "Snapshot transaction",
+      }),
+      buildTransaction({
+        transaction_id: "tx-full-2",
+        occurred_at: "2026-03-10T10:00:00Z",
+        description: "Another transaction",
+      }),
+    ];
+    const fullInvestmentMovements = [
+      {
+        movement_id: "inv-full-1",
+        occurred_at: "2026-01-15T10:00:00Z",
+        type: "contribution" as const,
+        account_id: "acc-1",
+        description: "Aporte anual",
+        contribution_amount: 100_00,
+        dividend_amount: 0,
+        cash_amount: 100_00,
+        invested_amount: 100_00,
+        cash_delta: -100_00,
+        invested_delta: 100_00,
+      },
+    ];
+    const fullReportSummary = buildReportSummary({
+      period: {
+        type: "custom",
+        from: "2026-02-01T10:00:00Z",
+        to: "2026-03-10T10:00:00Z",
+      },
+      category_breakdown: [{ category_id: "backup", total: 4_000 }],
+    });
+    const fetchMock = installAppFetchMock({
+      transactions: fullTransactions,
+      investmentMovements: fullInvestmentMovements,
+      reportSummary: fullReportSummary,
+      invoices: [
+        {
+          invoice_id: "card-1:2026-03",
+          card_id: "card-1",
+          reference_month: "2026-03",
+          closing_date: "2026-03-10",
+          due_date: "2026-03-20",
+          total_amount: 12_000,
+          paid_amount: 0,
+          remaining_amount: 12_000,
+          purchase_count: 1,
+          status: "open",
+        },
+      ],
+    });
+    let serializedBackup = "";
+    const OriginalBlob = Blob;
+    class BackupBlob extends Blob {
+      constructor(blobParts?: BlobPart[], options?: BlobPropertyBag) {
+        super(blobParts, options);
+        serializedBackup = String(blobParts?.[0] ?? "");
+      }
+    }
+    vi.stubGlobal("Blob", BackupBlob);
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    const createObjectUrlSpy = vi.fn(() => "blob:backup");
+    const revokeObjectUrlSpy = vi.fn(() => undefined);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: createObjectUrlSpy,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: revokeObjectUrlSpy,
+    });
+    const anchorClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^config/i }));
+    await screen.findByRole("region", { name: /configuracoes do sistema/i });
+    await userEvent.click(screen.getByRole("button", { name: /exportar backup json/i }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return String(url).endsWith("/api/backups/export") && (init?.method ?? "GET") === "GET";
+        }),
+      ).toBe(true);
+    });
+
+    expect(serializedBackup).not.toBe("");
+
+    const payload = JSON.parse(serializedBackup) as {
+      transactions: TransactionSummary[];
+      investment_movements: InvestmentMovementSummary[];
+      report_summary: ReportSummary | null;
+      invoices: InvoiceSummary[];
+      selected_month: string;
+    };
+
+    expect(payload.selected_month).toBe("2026-03");
+    expect(payload.transactions).toEqual(fullTransactions);
+    expect(payload.investment_movements).toEqual(fullInvestmentMovements);
+    expect(payload.report_summary).toEqual(fullReportSummary);
+    expect(payload.invoices).toHaveLength(1);
+    expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
+    expect(anchorClickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrlSpy).toHaveBeenCalledWith("blob:backup");
+
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: originalCreateObjectURL,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: originalRevokeObjectURL,
+    });
+    vi.stubGlobal("Blob", OriginalBlob);
+    anchorClickSpy.mockRestore();
+  });
+
   it("renders settings and resets the app in development mode", async () => {
     const fetchMock = installAppFetchMock();
-    const confirmMock = vi.fn(() => true);
+    const confirmMock = vi.fn<(message?: string) => boolean>(() => true);
     vi.stubGlobal("confirm", confirmMock);
 
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
     await userEvent.click(screen.getByRole("button", { name: /^config/i }));
+    await screen.findByRole("region", { name: /configuracoes do sistema/i });
 
+    expect(
+      await screen.findByRole("button", { name: /zona de perigo/i }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /zona de perigo/i }));
     expect(
       await screen.findByRole("heading", { name: /zerar aplicacao/i }),
     ).toBeInTheDocument();
@@ -1363,6 +2121,20 @@ describe("App", () => {
       await screen.findByRole("heading", { level: 1, name: /vis/i }),
     ).toBeInTheDocument();
     expect((await screen.findAllByText("R$ 0,00")).length).toBeGreaterThan(0);
+  });
+
+  it("navigates from settings back to the account management workspace", async () => {
+    installAppFetchMock();
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^config/i }));
+    await screen.findByRole("region", { name: /configuracoes do sistema/i });
+
+    await userEvent.click(screen.getByRole("button", { name: /gerenciar contas/i }));
+
+    expect(await screen.findByRole("region", { name: /gerenciar contas/i })).toBeInTheDocument();
   });
 });
 
@@ -1406,3 +2178,15 @@ function allocateMockInvoices({
     });
   });
 }
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,52 +1,73 @@
 import type {
   AccountSummary,
+  CardSummary,
   DashboardSummary,
   InvestmentOverview,
+  InvoiceSummary,
+  TransactionFilters,
   TransactionSummary,
 } from "../../lib/api";
 import type { AppView } from "../../components/sidebar";
+import { cn } from "../../lib/utils";
+import type { UiDensity } from "../../lib/ui-density";
 import { DashboardBento } from "./dashboard-bento";
 
 type DashboardViewProps = {
   dashboard: DashboardSummary | null;
   investmentOverview: InvestmentOverview | null;
   accounts: AccountSummary[];
+  cards: CardSummary[];
+  invoices: InvoiceSummary[];
   transactions: TransactionSummary[];
   loading: boolean;
   isSubmitting: boolean;
   month: string;
   onMarkReimbursementReceived: (transactionId: string) => Promise<void>;
-  onUpsertBudget: (
-    month: string,
-    categoryId: string,
-    limitInCents: number,
-  ) => Promise<void>;
   onMonthChange: (month: string) => void;
   onNavigate: (view: AppView) => void;
-  onOpenQuickAdd: () => void;
-  onUpdateTransaction: (
-    transactionId: string,
-    updates: { categoryId?: string; description?: string },
+  onOpenLedgerFiltered: (
+    filters: Partial<TransactionFilters>,
+    month?: string,
   ) => void;
+  onOpenQuickAdd: () => void;
+  uiDensity: UiDensity;
 };
 
 export function DashboardView({
   dashboard,
   investmentOverview,
   accounts,
+  cards,
+  invoices,
   loading,
   isSubmitting,
   month,
   onMarkReimbursementReceived,
-  onUpsertBudget,
   onMonthChange,
   onNavigate,
+  onOpenLedgerFiltered,
   onOpenQuickAdd,
+  uiDensity,
 }: DashboardViewProps) {
   return (
-    <div className="space-y-8">
+    <div
+      className={cn(
+        "space-y-8",
+        uiDensity === "compact" && "space-y-6",
+        uiDensity === "dense" && "space-y-4",
+      )}
+    >
       <div className="flex justify-end">
-        <div className="bg-white p-2 rounded-2xl shadow-sm border-none">
+        <div
+          className={cn(
+            "finance-toolbar-card",
+            uiDensity === "dense"
+              ? "rounded-[1.25rem] px-3 py-2"
+              : uiDensity === "compact"
+                ? "rounded-[1.5rem] px-3.5 py-2.5"
+                : "rounded-[1.75rem] px-4 py-3",
+          )}
+        >
           <input
             onChange={(event) => onMonthChange(event.target.value)}
             type="month"
@@ -75,11 +96,14 @@ export function DashboardView({
           dashboard={dashboard}
           investmentOverview={investmentOverview}
           accounts={accounts}
+          cards={cards}
+          invoices={invoices}
           isSubmitting={isSubmitting}
           onMarkReimbursementReceived={onMarkReimbursementReceived}
           onNavigate={onNavigate}
+          onOpenLedgerFiltered={onOpenLedgerFiltered}
           onOpenQuickAdd={onOpenQuickAdd}
-          onUpsertBudget={onUpsertBudget}
+          uiDensity={uiDensity}
         />
       ) : null}
     </div>
