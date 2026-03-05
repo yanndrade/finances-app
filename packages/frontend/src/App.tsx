@@ -15,6 +15,7 @@ import {
   fetchAccounts,
   fetchCards,
   fetchDashboardSummary,
+  fetchReportSummary,
   fetchInvestmentMovements,
   fetchInvestmentOverview,
   fetchInvoices,
@@ -42,6 +43,8 @@ import {
   type InvestmentOverview,
   type InvestmentView,
   type InvoiceSummary,
+  type ReportFilters,
+  type ReportSummary,
   type TransactionFilters,
   type TransactionSummary,
   type TransactionUpdatePayload,
@@ -68,6 +71,11 @@ const DashboardView = lazy(async () => {
   return { default: module.DashboardView };
 });
 
+const ReportsView = lazy(async () => {
+  const module = await import("./features/reports/reports-view");
+  return { default: module.ReportsView };
+});
+
 const SettingsView = lazy(async () => {
   const module = await import("./features/settings/settings-view");
   return { default: module.SettingsView };
@@ -84,6 +92,8 @@ const TransactionsView = lazy(async () => {
 });
 
 const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
+  period: "month",
+  reference: currentDate(),
   from: "",
   to: "",
   category: "",
@@ -103,6 +113,10 @@ const VIEW_META: Record<
   dashboard: {
     title: "Vis\u00E3o geral",
     description: "Resumo mensal e pontos de atencao.",
+  },
+  reports: {
+    title: "Relat\u00F3rios",
+    description: "Filtros globais, categorias e exposicao futura.",
   },
   investments: {
     title: "Investimentos",
@@ -139,6 +153,7 @@ export function App() {
   const [cards, setCards] = useState<CardSummary[]>([]);
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
   const [transactions, setTransactions] = useState<TransactionSummary[]>([]);
+  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
   const [investmentOverview, setInvestmentOverview] = useState<InvestmentOverview | null>(null);
   const [investmentMovements, setInvestmentMovements] = useState<InvestmentMovementSummary[]>([]);
   const [investmentView, setInvestmentView] = useState<InvestmentView>("monthly");
@@ -159,6 +174,14 @@ export function App() {
   useEffect(() => {
     void refreshData({ month: selectedMonth });
   }, [selectedMonth]);
+
+  useEffect(() => {
+    if (activeView !== "reports") {
+      return;
+    }
+
+    void refreshData({ includeReport: true });
+  }, [activeView]);
 
   useEffect(() => {
     if (toast === null) {
@@ -188,22 +211,34 @@ export function App() {
     investmentView?: InvestmentView;
     investmentFromDate?: string;
     investmentToDate?: string;
+    includeReport?: boolean;
   }) {
     const month = options?.month ?? selectedMonth;
     const filters = options?.filters ?? transactionFilters;
     const activeInvestmentView = options?.investmentView ?? investmentView;
     const activeFromDate = options?.investmentFromDate ?? investmentFromDate;
     const activeToDate = options?.investmentToDate ?? investmentToDate;
+    const shouldFetchReport = options?.includeReport ?? activeView === "reports";
+    const transactionApiFilters = toTransactionApiFilters(filters);
+    const reportApiFilters = toReportApiFilters(filters);
 
     setLoading(true);
 
     try {
-      const [nextCards, nextInvoices, nextDashboard, nextAccounts, nextTransactions, nextInvestmentOverview, nextInvestmentMovements] = await Promise.all([
+      const [
+        nextCards,
+        nextInvoices,
+        nextDashboard,
+        nextAccounts,
+        nextTransactions,
+        nextInvestmentOverview,
+        nextInvestmentMovements,
+      ] = await Promise.all([
         fetchCards(),
         fetchInvoices(),
         fetchDashboardSummary(month),
         fetchAccounts(),
-        fetchTransactions(filters),
+        fetchTransactions(transactionApiFilters),
         fetchInvestmentOverview({
           view: activeInvestmentView,
           from: toIsoFromDate(activeFromDate, false),
@@ -214,6 +249,9 @@ export function App() {
           to: toIsoFromDate(activeToDate, true),
         }),
       ]);
+      const nextReportSummary = shouldFetchReport
+        ? await fetchReportSummary(reportApiFilters)
+        : reportSummary;
 
       setCards(nextCards);
       setInvoices(nextInvoices);
@@ -222,6 +260,7 @@ export function App() {
       setTransactions(nextTransactions);
       setInvestmentOverview(nextInvestmentOverview);
       setInvestmentMovements(nextInvestmentMovements);
+      setReportSummary(nextReportSummary);
       setTransactionFilters(filters);
       setInvestmentView(activeInvestmentView);
       setInvestmentFromDate(activeFromDate);
@@ -238,6 +277,7 @@ export function App() {
     successMessage: string,
     options?: {
       filters?: TransactionFilters;
+      includeReport?: boolean;
     },
   ): Promise<boolean> {
     setIsSubmitting(true);
@@ -245,7 +285,10 @@ export function App() {
 
     try {
       await action();
-      await refreshData({ filters: options?.filters });
+      await refreshData({
+        filters: options?.filters,
+        includeReport: options?.includeReport,
+      });
       showToast("success", successMessage);
       return true;
     } catch (error) {
@@ -342,7 +385,11 @@ export function App() {
   }
 
   async function handleApplyTransactionFilters(filters: TransactionFilters): Promise<void> {
-    await refreshData({ filters });
+    await refreshData({ filters, includeReport: false });
+  }
+
+  async function handleApplyReportFilters(filters: TransactionFilters): Promise<void> {
+    await refreshData({ filters, includeReport: true });
   }
 
   async function handleUpdateTransaction(
@@ -477,6 +524,17 @@ export function App() {
           />
         ) : null}
 
+        {activeView === "reports" ? (
+          <ReportsView
+            accounts={accounts}
+            filters={transactionFilters}
+            isSubmitting={isSubmitting}
+            loading={loading}
+            onApplyFilters={handleApplyReportFilters}
+            summary={reportSummary}
+          />
+        ) : null}
+
         {activeView === "investments" ? (
           <InvestmentsView
             accounts={accounts}
@@ -598,10 +656,11 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
 }
 
 function currentMonth(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return currentDate().slice(0, 7);
+}
 
-  return `${now.getFullYear()}-${month}`;
+function currentDate(): string {
+  return formatLocalDate(new Date());
 }
 
 function monthFirstDay(month: string): string {
@@ -616,9 +675,108 @@ function monthLastDay(month: string): string {
   return `${month}-${String(lastDay).padStart(2, "0")}`;
 }
 
+function toTransactionApiFilters(filters: TransactionFilters): Partial<TransactionFilters> {
+  const normalized = normalizeReportFilters(filters);
+  const range = resolveFilterRange(normalized);
+
+  return {
+    from: range.from,
+    to: range.to,
+    category: normalized.category,
+    account: normalized.account,
+    method: normalized.method,
+    person: normalized.person,
+    text: normalized.text,
+  };
+}
+
+function toReportApiFilters(filters: TransactionFilters): ReportFilters {
+  const normalized = normalizeReportFilters(filters);
+  const range = resolveFilterRange(normalized);
+
+  return {
+    period: normalized.period,
+    reference: normalized.reference,
+    from: range.from,
+    to: range.to,
+    category: normalized.category,
+    account: normalized.account,
+    method: normalized.method,
+    person: normalized.person,
+    text: normalized.text,
+  };
+}
+
+function normalizeReportFilters(filters: TransactionFilters): ReportFilters {
+  return {
+    period: filters.period ?? "month",
+    reference: filters.reference ?? currentDate(),
+    from: filters.from,
+    to: filters.to,
+    category: filters.category,
+    account: filters.account,
+    method: filters.method,
+    person: filters.person,
+    text: filters.text,
+  };
+}
+
+function resolveFilterRange(filters: ReportFilters): { from: string; to: string } {
+  if (filters.period === "custom") {
+    if (!filters.from || !filters.to) {
+      return { from: "", to: "" };
+    }
+    return {
+      from: toIsoFromDate(filters.from, false),
+      to: toIsoFromDate(filters.to, true),
+    };
+  }
+
+  const safeReference = normalizeReferenceDate(filters.reference);
+  const [yearText, monthText, dayText] = safeReference.split("-");
+  const year = parseInt(yearText ?? "1970", 10);
+  const month = parseInt(monthText ?? "1", 10);
+  const day = parseInt(dayText ?? "1", 10);
+  const referenceDate = new Date(Date.UTC(year, month - 1, day));
+  let start = new Date(referenceDate);
+  let end = new Date(referenceDate);
+
+  if (filters.period === "week") {
+    const weekDay = referenceDate.getUTCDay();
+    const mondayOffset = (weekDay + 6) % 7;
+    start = new Date(referenceDate);
+    start.setUTCDate(referenceDate.getUTCDate() - mondayOffset);
+    end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+  } else if (filters.period === "month") {
+    start = new Date(Date.UTC(year, month - 1, 1));
+    end = new Date(Date.UTC(year, month, 0));
+  }
+
+  return {
+    from: `${start.toISOString().slice(0, 10)}T00:00:00Z`,
+    to: `${end.toISOString().slice(0, 10)}T23:59:59Z`,
+  };
+}
+
 function toIsoFromDate(value: string, endOfDay: boolean): string {
   const suffix = endOfDay ? "T23:59:59Z" : "T00:00:00Z";
   return `${value}${suffix}`;
+}
+
+function normalizeReferenceDate(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  return currentDate();
+}
+
+function formatLocalDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function getErrorMessage(error: unknown): string {

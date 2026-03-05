@@ -42,6 +42,11 @@ type TransactionEditForm = {
   personId: string;
 };
 
+type RequiredTransactionFilters = TransactionFilters & {
+  period: "day" | "week" | "month" | "custom";
+  reference: string;
+};
+
 export function TransactionsView({
   accounts,
   transactions,
@@ -51,13 +56,15 @@ export function TransactionsView({
   onUpdateTransaction,
   onVoidTransaction,
 }: TransactionsViewProps) {
-  const [filterForm, setFilterForm] = useState<TransactionFilters>(filters);
+  const [filterForm, setFilterForm] = useState<RequiredTransactionFilters>(() =>
+    normalizeTransactionFilters(filters),
+  );
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<TransactionEditForm | null>(null);
 
   useEffect(() => {
-    setFilterForm(filters);
+    setFilterForm(normalizeTransactionFilters(filters));
   }, [filters]);
 
   async function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
@@ -93,6 +100,23 @@ export function TransactionsView({
     <section aria-label="Historico e filtros" className="panel-card">
       <form className="filters-grid" onSubmit={handleFilterSubmit}>
         <label>
+          Periodo
+          <select
+            onChange={(event) =>
+              setFilterForm((current) => ({
+                ...current,
+                period: event.target.value as RequiredTransactionFilters["period"],
+              }))
+            }
+            value={filterForm.period}
+          >
+            <option value="day">Dia</option>
+            <option value="week">Semana</option>
+            <option value="month">Mês</option>
+            <option value="custom">Customizado</option>
+          </select>
+        </label>
+        <label>
           Buscar
           <input
             onChange={(event) =>
@@ -104,32 +128,50 @@ export function TransactionsView({
             value={filterForm.text}
           />
         </label>
-        <label>
-          De
-          <input
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                from: event.target.value,
-              }))
-            }
-            type="date"
-            value={filterForm.from}
-          />
-        </label>
-        <label>
-          {"At\u00E9"}
-          <input
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                to: event.target.value,
-              }))
-            }
-            type="date"
-            value={filterForm.to}
-          />
-        </label>
+        {filterForm.period === "custom" ? (
+          <>
+            <label>
+              De
+              <input
+                onChange={(event) =>
+                  setFilterForm((current) => ({
+                    ...current,
+                    from: event.target.value,
+                  }))
+                }
+                type="date"
+                value={filterForm.from}
+              />
+            </label>
+            <label>
+              {"At\u00E9"}
+              <input
+                onChange={(event) =>
+                  setFilterForm((current) => ({
+                    ...current,
+                    to: event.target.value,
+                  }))
+                }
+                type="date"
+                value={filterForm.to}
+              />
+            </label>
+          </>
+        ) : (
+          <label>
+            Referência
+            <input
+              onChange={(event) =>
+                setFilterForm((current) => ({
+                  ...current,
+                  reference: event.target.value,
+                }))
+              }
+              type="date"
+              value={filterForm.reference}
+            />
+          </label>
+        )}
         <label>
           Conta do filtro
           <select
@@ -478,6 +520,22 @@ export function TransactionsView({
       )}
     </section>
   );
+}
+
+function normalizeTransactionFilters(filters: TransactionFilters): RequiredTransactionFilters {
+  return {
+    ...filters,
+    period: filters.period ?? "month",
+    reference: filters.reference ?? localDateToday(),
+  };
+}
+
+function localDateToday(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function resolveAccountName(accountId: string, accounts: AccountSummary[]): string {
