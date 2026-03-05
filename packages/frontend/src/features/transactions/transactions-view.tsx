@@ -16,6 +16,7 @@ import type {
   TransactionTypeFilter,
   TransactionUpdatePayload,
 } from "../../lib/api";
+import type { CategoryRule } from "../../lib/category-rules";
 import { getCategoryOptions } from "../../lib/categories";
 import {
   formatCategoryName,
@@ -31,12 +32,14 @@ import type { UiDensity } from "../../lib/ui-density";
 
 type TransactionsViewProps = {
   accounts: AccountSummary[];
+  categoryRules: CategoryRule[];
   cards: CardSummary[];
   transactions: TransactionSummary[];
   filters: TransactionFilters;
   isSubmitting: boolean;
   onApplyFilters: (filters: TransactionFilters) => Promise<void>;
   onDensityChange: (density: UiDensity) => void;
+  onUpsertCategoryRule: (pattern: string, categoryId: string) => boolean;
   onUpdateTransaction: (
     transactionId: string,
     payload: TransactionUpdatePayload,
@@ -89,20 +92,16 @@ type SplitLine = {
   amountInCents: number;
 };
 
-type CategoryRule = {
-  id: string;
-  pattern: string;
-  categoryId: string;
-};
-
 export function TransactionsView({
   accounts,
+  categoryRules,
   cards,
   transactions,
   filters,
   isSubmitting,
   onApplyFilters,
   onDensityChange,
+  onUpsertCategoryRule,
   onUpdateTransaction,
   onVoidTransaction,
   uiDensity,
@@ -120,7 +119,6 @@ export function TransactionsView({
   const [splitDraft, setSplitDraft] = useState<SplitDraftLine[] | null>(null);
   const [splitFeedback, setSplitFeedback] = useState<string | null>(null);
   const [splitError, setSplitError] = useState<string | null>(null);
-  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
   const [rulePattern, setRulePattern] = useState("");
   const [ruleCategoryId, setRuleCategoryId] = useState("");
   const [ruleFeedback, setRuleFeedback] = useState<string | null>(null);
@@ -411,23 +409,11 @@ export function TransactionsView({
       return;
     }
 
-    setCategoryRules((current) => {
-      const existing = current.find((rule) => rule.pattern === normalizedPattern);
-      if (existing) {
-        return current.map((rule) =>
-          rule.id === existing.id ? { ...rule, categoryId: ruleCategoryId } : rule,
-        );
-      }
+    const wasSaved = onUpsertCategoryRule(normalizedPattern, ruleCategoryId);
+    if (!wasSaved) {
+      return;
+    }
 
-      return [
-        ...current,
-        {
-          id: `${Date.now()}-${normalizedPattern}`,
-          pattern: normalizedPattern,
-          categoryId: ruleCategoryId,
-        },
-      ];
-    });
     setRuleFeedback("Regra salva e aplicada no historico.");
     setSelectedTransactionId(null);
   }
@@ -1567,7 +1553,6 @@ function DetailItem({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
 
 
 

@@ -63,11 +63,13 @@ class CardService:
         limit_amount: int,
         closing_day: int,
         due_day: int,
-        payment_account_id: str,
+        payment_account_id: str | None = None,
     ) -> dict[str, str | int | bool]:
         self._sync_projections()
         if self._find_card(card_id) is not None:
             raise CardAlreadyExistsError(f"Card '{card_id}' already exists.")
+
+        normalized_payment_account_id = self._normalize_payment_account_id(payment_account_id)
 
         payload = {
             "id": card_id,
@@ -75,12 +77,13 @@ class CardService:
             "limit": limit_amount,
             "closing_day": closing_day,
             "due_day": due_day,
-            "payment_account_id": payment_account_id,
+            "payment_account_id": normalized_payment_account_id,
             "is_active": True,
         }
 
         self._validate_payload(payload)
-        self._account_reader.get_account(payment_account_id)
+        if normalized_payment_account_id:
+            self._account_reader.get_account(normalized_payment_account_id)
         self._append_event("CardCreated", payload)
         return self.get_card(card_id)
 
@@ -110,7 +113,7 @@ class CardService:
             ),
             "due_day": due_day if due_day is not None else int(existing["due_day"]),
             "payment_account_id": (
-                payment_account_id
+                self._normalize_payment_account_id(payment_account_id)
                 if payment_account_id is not None
                 else str(existing["payment_account_id"])
             ),
@@ -118,7 +121,8 @@ class CardService:
         }
 
         self._validate_payload(merged)
-        self._account_reader.get_account(str(merged["payment_account_id"]))
+        if str(merged["payment_account_id"]):
+            self._account_reader.get_account(str(merged["payment_account_id"]))
 
         comparable = {
             "name": merged["name"],
@@ -152,8 +156,6 @@ class CardService:
 
         if not str(payload["name"]).strip():
             raise CardServiceError("name is required.")
-        if not str(payload["payment_account_id"]).strip():
-            raise CardServiceError("payment_account_id is required.")
 
     def _validate_cycle_day(self, value: int, field_name: str) -> None:
         if value < 1 or value > 28:
@@ -181,6 +183,12 @@ class CardService:
                 return card
 
         return None
+
+    def _normalize_payment_account_id(self, payment_account_id: str | None) -> str:
+        if payment_account_id is None:
+            return ""
+
+        return payment_account_id.strip()
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

@@ -223,7 +223,7 @@ export type CardPayload = {
   limitInCents: number;
   closingDay: number;
   dueDay: number;
-  paymentAccountId: string;
+  paymentAccountId?: string;
 };
 
 export type CardUpdatePayload = CardPayload & {
@@ -514,7 +514,7 @@ export async function createCard(payload: CardPayload): Promise<CardSummary> {
       limit: payload.limitInCents,
       closing_day: payload.closingDay,
       due_day: payload.dueDay,
-      payment_account_id: payload.paymentAccountId,
+      payment_account_id: payload.paymentAccountId || undefined,
     }),
   });
 }
@@ -798,7 +798,6 @@ export function normalizeTimestampForApi(
 
   throw new Error("Data da compra invalida.");
 }
-
 
 
 

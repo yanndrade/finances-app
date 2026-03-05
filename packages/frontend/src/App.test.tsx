@@ -483,6 +483,39 @@ function installAppFetchMock(initialState?: {
       return new Response(JSON.stringify(nextAccount), { status: 201 });
     }
 
+    if (url.includes("/api/accounts/") && method === "PATCH") {
+      const accountId = url.split("/api/accounts/")[1];
+      const payload = JSON.parse(String(init?.body)) as {
+        name?: string;
+        type?: string;
+        initial_balance?: number;
+        is_active?: boolean;
+      };
+
+      state.accounts = state.accounts.map((account) => {
+        if (account.account_id !== accountId) {
+          return account;
+        }
+
+        return {
+          ...account,
+          ...(payload.name !== undefined ? { name: payload.name } : {}),
+          ...(payload.type !== undefined ? { type: payload.type } : {}),
+          ...(payload.initial_balance !== undefined
+            ? {
+                initial_balance: payload.initial_balance,
+                current_balance: payload.initial_balance,
+              }
+            : {}),
+          ...(payload.is_active !== undefined ? { is_active: payload.is_active } : {}),
+        };
+      });
+
+      return new Response(
+        JSON.stringify(state.accounts.find((account) => account.account_id === accountId)),
+      );
+    }
+
     if (url.endsWith("/api/budgets") && method === "POST") {
       const payload = JSON.parse(String(init?.body)) as {
         category_id: string;
@@ -540,7 +573,7 @@ function installAppFetchMock(initialState?: {
         limit: number;
         closing_day: number;
         due_day: number;
-        payment_account_id: string;
+        payment_account_id?: string;
       };
       const nextCard = buildCard({
         card_id: payload.id,
@@ -548,7 +581,7 @@ function installAppFetchMock(initialState?: {
         limit: payload.limit,
         closing_day: payload.closing_day,
         due_day: payload.due_day,
-        payment_account_id: payload.payment_account_id,
+        payment_account_id: payload.payment_account_id ?? "",
       });
       state.cards = [...state.cards, nextCard];
 
@@ -855,8 +888,10 @@ describe("App", () => {
       transactions: [
         buildTransaction({
           transaction_id: "tx-invest",
+          type: "investment",
           description: "Invest aporte mensal",
-          category_id: "investment",
+          category_id: "investment_contribution",
+          ledger_event_type: "investment_contribution",
         }),
         buildTransaction({
           transaction_id: "tx-salary",
@@ -879,8 +914,8 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
     ).toBeInTheDocument();
-    const searchInput = await screen.findByLabelText(/buscar/i);
-    expect(searchInput).toHaveValue("invest");
+    const typeFilter = await screen.findByRole("combobox", { name: /tipo do filtro/i });
+    expect(typeFilter).toHaveValue("investment");
     expect(await screen.findByText(/invest aporte mensal/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
@@ -1042,7 +1077,7 @@ describe("App", () => {
       await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
     ).toBeInTheDocument();
     const searchInput = await screen.findByLabelText(/buscar/i);
-    expect(searchInput).toHaveValue("Alimentação");
+    expect(searchInput).toHaveValue("Alimentacao");
     expect(await screen.findByText(/mercado semanal/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
@@ -1264,7 +1299,7 @@ describe("App", () => {
       within(dialog).getByLabelText(/modo da transfer.ncia/i),
       "invoice_payment",
     );
-    expect(within(dialog).getByLabelText(/fatura/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/^fatura$/i)).toBeInTheDocument();
 
     await userEvent.selectOptions(within(dialog).getByLabelText(/tipo/i), "expense");
     const categorySelect = await within(dialog).findByRole("combobox", { name: /categoria/i }, {
@@ -1399,7 +1434,52 @@ describe("App", () => {
     const accountsSection = await screen.findByRole("region", { name: /gerenciar contas/i });
     expect(within(accountsSection).getByRole("button", { name: /\+ adicionar conta/i })).toBeInTheDocument();
     expect(within(accountsSection).getByRole("button", { name: /^editar$/i })).toBeInTheDocument();
+    expect(within(accountsSection).getByRole("button", { name: /excluir conta/i })).toBeInTheDocument();
     expect(within(accountsSection).getByRole("button", { name: /abrir configuracoes/i })).toBeInTheDocument();
+  });
+
+  it("removes an account from active operation from the accounts workspace", async () => {
+    const fetchMock = installAppFetchMock({
+      accounts: [
+        buildAccount(),
+        buildAccount({
+          account_id: "acc-2",
+          name: "Reserva secundaria",
+          type: "wallet",
+          initial_balance: 25_000,
+          current_balance: 25_000,
+        }),
+      ],
+    });
+    const confirmMock = vi.fn<(message?: string) => boolean>(() => true);
+    vi.stubGlobal("confirm", confirmMock);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
+
+    const accountsSection = await screen.findByRole("region", { name: /gerenciar contas/i });
+    await userEvent.click(
+      within(accountsSection).getAllByRole("button", { name: /excluir conta/i })[0],
+    );
+
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByRole("status", { name: /conta removida da operacao ativa/i }),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return (
+            String(url).includes("/api/accounts/acc-1") &&
+            init?.method === "PATCH" &&
+            String(init?.body).includes('"is_active":false')
+          );
+        }),
+      ).toBe(true);
+    });
   });
 
   it("renders the cards overview and wallet settings", async () => {
@@ -1418,7 +1498,38 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("tab", { name: /ajustes/i }));
 
     expect(await screen.findByText(/ajustes da carteira/i)).toBeInTheDocument();
-    expect(screen.getByText(/contas de pagamento/i)).toBeInTheDocument();
+    expect(screen.getByText(/contas padrao/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /excluir cartao/i })).toBeInTheDocument();
+  });
+
+  it("removes a card from active operation from the wallet settings", async () => {
+    const fetchMock = installAppFetchMock();
+    const confirmMock = vi.fn<(message?: string) => boolean>(() => true);
+    vi.stubGlobal("confirm", confirmMock);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /ajustes/i }));
+    await userEvent.click(screen.getByRole("button", { name: /excluir cartao/i }));
+
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByRole("status", { name: /cartao removido da operacao ativa/i }),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return (
+            String(url).includes("/api/cards/card-1") &&
+            init?.method === "PATCH" &&
+            String(init?.body).includes('"is_active":false')
+          );
+        }),
+      ).toBe(true);
+    });
   });
 
   it("opens the unified ledger from cards quick action", async () => {
@@ -1575,7 +1686,7 @@ describe("App", () => {
 
     const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
     await waitFor(() => {
-      expect(within(dialog).getByLabelText(/fatura/i)).toHaveValue("card-2:2026-03");
+      expect(within(dialog).getByLabelText(/^fatura$/i)).toHaveValue("card-2:2026-03");
     });
 
     await userEvent.type(within(dialog).getByPlaceholderText("0,00"), "5000");
@@ -2098,7 +2209,7 @@ describe("App", () => {
       await screen.findByRole("heading", { name: /zerar aplicacao/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/limpa compras, transferencias e contas/i),
+      screen.getByText(/limpa compras, transferencias, contas e cartoes/i),
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /apagar todos os dados/i }));

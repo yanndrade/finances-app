@@ -15,6 +15,7 @@ type AccountsViewProps = {
   isSubmitting: boolean;
   onCreateAccount: (payload: AccountPayload) => Promise<void>;
   onOpenSettings: () => void;
+  onSetAccountActive: (account: AccountSummary, isActive: boolean) => Promise<void>;
   onUpdateAccount: (
     accountId: string,
     payload: AccountUpdatePayload,
@@ -42,6 +43,7 @@ export function AccountsView({
   isSubmitting,
   onCreateAccount,
   onOpenSettings,
+  onSetAccountActive,
   onUpdateAccount,
 }: AccountsViewProps) {
   const [createForm, setCreateForm] = useState<AccountFormState>(EMPTY_ACCOUNT_FORM);
@@ -112,6 +114,21 @@ export function AccountsView({
     setEditingAccountId(null);
   }
 
+  async function handleToggleAccountActive(account: AccountSummary) {
+    const nextIsActive = !account.is_active;
+
+    if (
+      !nextIsActive &&
+      !globalThis.confirm(
+        "Excluir esta conta da operacao ativa? O historico sera preservado.",
+      )
+    ) {
+      return;
+    }
+
+    await onSetAccountActive(account, nextIsActive);
+  }
+
   return (
     <div className="screen-stack">
       <div className="stats-grid">
@@ -130,7 +147,7 @@ export function AccountsView({
             <p className="eyebrow">Gestao</p>
             <h3 className="section-title">Contas e saldos</h3>
             <p className="section-copy">
-              Cadastre a primeira conta, ajuste saldo inicial e mantenha status ativo/inativo sem sair desta tela.
+              Cadastre, edite, remova da operacao ativa ou reative contas sem sair desta tela.
             </p>
           </div>
           <div className="inline-actions">
@@ -193,21 +210,38 @@ export function AccountsView({
                 <p className="account-card__meta">
                   Saldo inicial {formatCurrency(account.initial_balance)}
                 </p>
-                <button
-                  className="ghost-button"
-                  onClick={() => {
-                    setEditingAccountId(account.account_id);
-                    setEditForm({
-                      name: account.name,
-                      type: account.type as AccountPayload["type"],
-                      initialBalance: String(account.initial_balance),
-                      isActive: account.is_active,
-                    });
-                  }}
-                  type="button"
-                >
-                  Editar
-                </button>
+                {!account.is_active ? (
+                  <p className="account-card__meta">
+                    Fora da operacao ativa. O historico continua preservado.
+                  </p>
+                ) : null}
+                <div className="inline-actions">
+                  <button
+                    className="ghost-button"
+                    onClick={() => {
+                      setEditingAccountId(account.account_id);
+                      setEditForm({
+                        name: account.name,
+                        type: account.type as AccountPayload["type"],
+                        initialBalance: String(account.initial_balance),
+                        isActive: account.is_active,
+                      });
+                    }}
+                    type="button"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    className={account.is_active ? "ghost-button ghost-button--danger" : "ghost-button"}
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      void handleToggleAccountActive(account);
+                    }}
+                    type="button"
+                  >
+                    {account.is_active ? "Excluir conta" : "Reativar conta"}
+                  </button>
+                </div>
               </article>
             ))}
           </div>

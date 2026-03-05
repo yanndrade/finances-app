@@ -1,3 +1,5 @@
+import { resolveCategoryLabel } from "./categories";
+
 export function formatCurrency(valueInCents: number): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -102,23 +104,5 @@ export function formatDelta(current: number, previous: number): DeltaInfo {
 }
 
 export function formatCategoryName(categoryId: string): string {
-  const labels: Record<string, string> = {
-    food: "Alimenta\u00E7\u00E3o",
-    transport: "Transporte",
-    housing: "Moradia",
-    health: "Sa\u00FAde",
-    education: "Educa\u00E7\u00E3o",
-    entertainment: "Lazer",
-    clothing: "Vestu\u00E1rio",
-    utilities: "Contas",
-    salary: "Sal\u00E1rio",
-    freelance: "Freelance",
-    transfer: "Transfer\u00EAncia",
-    invoice_payment: "Pagamento de fatura",
-    investment_contribution: "Aporte em investimento",
-    investment_withdrawal: "Resgate de investimento",
-    other: "Outros",
-  };
-
-  return labels[categoryId] ?? categoryId;
+  return resolveCategoryLabel(categoryId);
 }

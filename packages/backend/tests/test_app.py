@@ -1563,7 +1563,7 @@ def test_cards_endpoints_support_create_list_and_update(tmp_path) -> None:
     }
 
 
-def test_cards_endpoints_validate_cycle_days_and_payment_account(tmp_path) -> None:
+def test_cards_endpoints_validate_cycle_days_and_optional_payment_account(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -1609,6 +1609,20 @@ def test_cards_endpoints_validate_cycle_days_and_payment_account(tmp_path) -> No
     assert invalid_due_response.status_code == 422
     assert missing_account_response.status_code == 404
 
+    create_without_account_response = client.post(
+        "/api/cards",
+        json={
+            "id": "card-4",
+            "name": "Cartao sem conta",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+        },
+    )
+
+    assert create_without_account_response.status_code == 201
+    assert create_without_account_response.json()["payment_account_id"] == ""
+
 
 def test_cards_endpoints_return_422_for_card_domain_validation_errors(tmp_path) -> None:
     app = create_app(
@@ -1644,12 +1658,13 @@ def test_cards_endpoints_return_422_for_card_domain_validation_errors(tmp_path) 
     update_response = client.patch(
         "/api/cards/card-2",
         json={
-            "payment_account_id": "   ",
+            "payment_account_id": "",
         },
     )
 
     assert create_response.status_code == 422
-    assert update_response.status_code == 422
+    assert update_response.status_code == 200
+    assert update_response.json()["payment_account_id"] == ""
 
 
 def test_card_purchase_endpoint_allocates_purchases_into_prd_invoice_cycles(tmp_path) -> None:
@@ -2854,6 +2869,5 @@ def _create_budget(client: TestClient, payload: dict[str, str | int]) -> None:
     response = client.post("/api/budgets", json=payload)
 
     assert response.status_code in (200, 201)
-
 
 

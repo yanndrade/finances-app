@@ -1,75 +1,37 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-import { CATEGORY_OPTIONS } from "../../lib/categories";
+import type { CategoryRule } from "../../lib/category-rules";
+import type { CategoryOption } from "../../lib/categories";
+import { isDefaultCategory } from "../../lib/categories";
 import type { CategoryBudgetSummary } from "../../lib/api";
 import { formatCategoryName, formatCurrency } from "../../lib/format";
 import { UI_DENSITY_OPTIONS, type UiDensity } from "../../lib/ui-density";
 import { cn } from "../../lib/utils";
 
 type SettingsViewProps = {
+  accountsCount: number;
   budgetMonth: string;
+  cardsCount: number;
+  categories: CategoryOption[];
+  categoryRules: CategoryRule[];
   categoryBudgets: CategoryBudgetSummary[];
   isSubmitting: boolean;
+  onCreateCategory: (label: string) => boolean;
   onOpenAccounts: () => void;
+  onOpenCards: () => void;
+  onRemoveCategory: (categoryId: string) => void;
+  onRemoveCategoryRule: (ruleId: string) => void;
   onUpsertCategoryBudget: (
     month: string,
     categoryId: string,
     limitInCents: number,
   ) => Promise<void>;
+  onUpsertCategoryRule: (pattern: string, categoryId: string) => boolean;
   onExportBackup: () => void;
   onUiDensityChange: (density: UiDensity) => void;
   onResetApplicationData: () => Promise<void>;
   uiDensity: UiDensity;
 };
-
-const SETTINGS_HUB_ITEMS = [
-  {
-    id: "categories",
-    title: "Categorias e hierarquia",
-    description:
-      "Organize categorias para manter relatorios e regras consistentes em todas as telas.",
-    statusLabel: "Ativo",
-    statusClass: "status-badge status-badge--active",
-  },
-  {
-    id: "accounts",
-    title: "Contas e cartoes",
-    description:
-      "Cadastre contas/cartoes padrao e concentre ajustes estruturais fora do dashboard.",
-    statusLabel: "Ativo",
-    statusClass: "status-badge status-badge--active",
-  },
-  {
-    id: "rules",
-    title: "Regras de auto-categorizacao",
-    description:
-      "Defina regras por contrapartes para preencher categoria automaticamente no ledger.",
-    statusLabel: "Em revisao",
-    statusClass: "status-badge status-badge--pending",
-  },
-  {
-    id: "backup",
-    title: "Importacao, exportacao e backup",
-    description:
-      "Exporte snapshot para auditoria e restauracao manual em cenarios de contingencia.",
-    statusLabel: "Ativo",
-    statusClass: "status-badge status-badge--active",
-  },
-  {
-    id: "preferences",
-    title: "Preferencias de densidade e atalhos",
-    description:
-      "Padronize produtividade desktop com atalhos e niveis de densidade no historico.",
-    statusLabel: "Ativo",
-    statusClass: "status-badge status-badge--active",
-  },
-] as const;
-
-const RULE_EXAMPLES = [
-  "uber -> Transporte",
-  "mercado local -> Alimentacao",
-  "ifood -> Alimentacao",
-] as const;
 
 const PRODUCTIVITY_SHORTCUTS = [
   "Ctrl+N abre + Lancar",
@@ -78,11 +40,20 @@ const PRODUCTIVITY_SHORTCUTS = [
 ] as const;
 
 export function SettingsView({
+  accountsCount,
   budgetMonth,
+  cardsCount,
+  categories,
+  categoryRules,
   categoryBudgets,
   isSubmitting,
+  onCreateCategory,
   onOpenAccounts,
+  onOpenCards,
+  onRemoveCategory,
+  onRemoveCategoryRule,
   onUpsertCategoryBudget,
+  onUpsertCategoryRule,
   onExportBackup,
   onUiDensityChange,
   onResetApplicationData,
@@ -93,18 +64,29 @@ export function SettingsView({
       return categoryBudgets[0].category_id;
     }
 
-    return CATEGORY_OPTIONS[0]?.value ?? "";
-  }, [categoryBudgets]);
+    return categories[0]?.value ?? "";
+  }, [categories, categoryBudgets]);
 
   const [budgetCategoryId, setBudgetCategoryId] = useState(defaultBudgetCategory);
   const [budgetLimitRaw, setBudgetLimitRaw] = useState("");
+  const [newCategoryLabel, setNewCategoryLabel] = useState("");
+  const [categoryFeedback, setCategoryFeedback] = useState<string | null>(null);
+  const [rulePattern, setRulePattern] = useState("");
+  const [ruleCategoryId, setRuleCategoryId] = useState(defaultBudgetCategory);
+  const [ruleFeedback, setRuleFeedback] = useState<string | null>(null);
   const [isDangerZoneOpen, setIsDangerZoneOpen] = useState(false);
 
   useEffect(() => {
-    if (!budgetCategoryId && defaultBudgetCategory) {
+    if (!budgetCategoryId || !categories.some((category) => category.value === budgetCategoryId)) {
       setBudgetCategoryId(defaultBudgetCategory);
     }
-  }, [budgetCategoryId, defaultBudgetCategory]);
+  }, [budgetCategoryId, categories, defaultBudgetCategory]);
+
+  useEffect(() => {
+    if (!ruleCategoryId || !categories.some((category) => category.value === ruleCategoryId)) {
+      setRuleCategoryId(defaultBudgetCategory);
+    }
+  }, [categories, defaultBudgetCategory, ruleCategoryId]);
 
   async function handleBudgetSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -118,114 +100,252 @@ export function SettingsView({
     setBudgetLimitRaw("");
   }
 
+  function handleCreateCategorySubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const wasCreated = onCreateCategory(newCategoryLabel);
+    if (!wasCreated) {
+      setCategoryFeedback("Use um nome unico para criar uma nova categoria.");
+      return;
+    }
+
+    setNewCategoryLabel("");
+    setCategoryFeedback("Categoria adicionada e liberada para lancamentos e orcamentos.");
+  }
+
+  function handleRuleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const wasSaved = onUpsertCategoryRule(rulePattern, ruleCategoryId);
+    if (!wasSaved) {
+      setRuleFeedback("Informe um padrao e uma categoria para salvar a regra.");
+      return;
+    }
+
+    setRulePattern("");
+    setRuleFeedback("Regra salva. O Historico passa a reutilizar esse mapeamento.");
+  }
+
   return (
     <div className="screen-stack">
       <section className="panel-card settings-panel" aria-label="Configuracoes do sistema">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Hub</p>
+            <p className="eyebrow">Core</p>
             <h3 className="section-title">Configuracoes do sistema</h3>
             <p className="section-copy">
-              Parametrizacoes infrequentes ficam centralizadas aqui para manter o dashboard focado em acao.
+              Use esta tela para destravar a base da aplicacao: contas, cartoes, categorias,
+              regras e preferencias.
             </p>
           </div>
         </div>
 
         <div className="settings-hub-list">
-          {SETTINGS_HUB_ITEMS.map((section) => (
-            <article key={section.id} className="settings-hub-item">
-              <header className="settings-hub-item__header">
-                <strong>{section.title}</strong>
-                <span className={section.statusClass}>{section.statusLabel}</span>
-              </header>
-              <p>{section.description}</p>
+          <article className="settings-hub-item">
+            <header className="settings-hub-item__header">
+              <strong>Contas, cartoes e estrutura base</strong>
+              <span className="status-badge status-badge--active">Core</span>
+            </header>
+            <p>
+              Se a aplicacao estiver vazia, comece aqui: crie ao menos uma conta e depois vincule
+              seus cartoes ao workspace certo.
+            </p>
+            <div className="settings-chip-list" aria-label="Resumo da estrutura base">
+              <span className="settings-chip">{accountsCount} conta(s)</span>
+              <span className="settings-chip">{cardsCount} cartao(oes)</span>
+            </div>
+            <div className="settings-action-row">
+              <button className="secondary-button" onClick={onOpenAccounts} type="button">
+                Gerenciar contas
+              </button>
+              <button className="secondary-button" onClick={onOpenCards} type="button">
+                Gerenciar cartoes
+              </button>
+              <span className="settings-muted-copy">
+                Contas alimentam caixa, cartoes, faturas e pagamentos.
+              </span>
+            </div>
+          </article>
 
-              {section.id === "categories" ? (
-                <div className="settings-chip-list" aria-label="Categorias principais">
-                  {CATEGORY_OPTIONS.slice(0, 6).map((category) => (
-                    <span key={category.value} className="settings-chip">
-                      {category.label}
+          <article className="settings-hub-item">
+            <header className="settings-hub-item__header">
+              <strong>Categorias</strong>
+              <span className="status-badge status-badge--active">Editavel</span>
+            </header>
+            <p>
+              Adicione e remova categorias customizadas para refletir o seu uso real no
+              lancamento rapido, no historico e no planejamento mensal.
+            </p>
+            <form className="settings-inline-form" onSubmit={handleCreateCategorySubmit}>
+              <label className="settings-inline-form__field">
+                Nova categoria
+                <input
+                  aria-label="Nova categoria"
+                  onChange={(event) => {
+                    setNewCategoryLabel(event.target.value);
+                    setCategoryFeedback(null);
+                  }}
+                  placeholder="Ex: Pets, Assinaturas, Viagens"
+                  value={newCategoryLabel}
+                />
+              </label>
+              <button className="primary-button" type="submit">
+                Adicionar categoria
+              </button>
+            </form>
+            {categoryFeedback ? <p className="settings-feedback">{categoryFeedback}</p> : null}
+            <div className="settings-token-grid" aria-label="Lista de categorias">
+              {categories.map((category) => (
+                <div key={category.value} className="settings-token-card">
+                  <div>
+                    <strong>{category.label}</strong>
+                    <p>{category.value}</p>
+                  </div>
+                  <div className="settings-token-card__actions">
+                    <span
+                      className={cn(
+                        "status-badge",
+                        isDefaultCategory(category.value)
+                          ? "status-badge--active"
+                          : "status-badge--pending",
+                      )}
+                    >
+                      {isDefaultCategory(category.value) ? "Padrao" : "Custom"}
                     </span>
-                  ))}
-                </div>
-              ) : null}
-
-              {section.id === "accounts" ? (
-                <div className="settings-action-row">
-                  <button
-                    className="secondary-button"
-                    onClick={onOpenAccounts}
-                    type="button"
-                  >
-                    Gerenciar contas
-                  </button>
-                  <span className="settings-muted-copy">
-                    Abra o workspace de contas para criar a primeira conta ou editar saldos existentes.
-                  </span>
-                </div>
-              ) : null}
-
-              {section.id === "rules" ? (
-                <ul className="settings-inline-list" aria-label="Exemplos de regra">
-                  {RULE_EXAMPLES.map((rule) => (
-                    <li key={rule}>{rule}</li>
-                  ))}
-                </ul>
-              ) : null}
-
-              {section.id === "backup" ? (
-                <div className="settings-action-row">
-                  <button
-                    className="secondary-button"
-                    onClick={onExportBackup}
-                    type="button"
-                  >
-                    Exportar backup JSON
-                  </button>
-                  <span className="settings-muted-copy">
-                    Importacao assistida permanece em rollout controlado.
-                  </span>
-                </div>
-              ) : null}
-
-              {section.id === "preferences" ? (
-                <div className="space-y-4">
-                  <ul className="settings-inline-list" aria-label="Atalhos e densidade">
-                    {PRODUCTIVITY_SHORTCUTS.map((shortcut) => (
-                      <li key={shortcut}>{shortcut}</li>
-                    ))}
-                    <li>Densidade propagada para Dashboard, Cartoes, Investimentos e Relatorios.</li>
-                  </ul>
-                  <div
-                    aria-label="Preferencia global de densidade"
-                    className="settings-density-picker"
-                    role="radiogroup"
-                  >
-                    {UI_DENSITY_OPTIONS.map((option) => {
-                      const isActive = option.value === uiDensity;
-
-                      return (
-                        <button
-                          key={option.value}
-                          aria-checked={isActive}
-                          className={cn(
-                            "settings-density-option",
-                            isActive && "is-active",
-                          )}
-                          onClick={() => onUiDensityChange(option.value)}
-                          role="radio"
-                          type="button"
-                        >
-                          <strong>{option.label}</strong>
-                          <span>{option.description}</span>
-                        </button>
-                      );
-                    })}
+                    {!isDefaultCategory(category.value) ? (
+                      <button
+                        className="ghost-button"
+                        onClick={() => onRemoveCategory(category.value)}
+                        type="button"
+                      >
+                        Excluir categoria
+                      </button>
+                    ) : null}
                   </div>
                 </div>
-              ) : null}
-            </article>
-          ))}
+              ))}
+            </div>
+            <p className="settings-muted-copy">
+              Categorias padrao permanecem protegidas para evitar quebrar fluxos essenciais.
+            </p>
+          </article>
+
+          <article className="settings-hub-item">
+            <header className="settings-hub-item__header">
+              <strong>Regras de auto-categorizacao</strong>
+              <span className="status-badge status-badge--pending">Persistente</span>
+            </header>
+            <p>
+              Regras salvas aqui reaparecem no Historico para acelerar a classificacao de
+              transacoes recorrentes.
+            </p>
+            <form className="settings-rule-grid" onSubmit={handleRuleSubmit}>
+              <label className="settings-inline-form__field">
+                Padrao da regra
+                <input
+                  aria-label="Padrao da regra"
+                  onChange={(event) => {
+                    setRulePattern(event.target.value);
+                    setRuleFeedback(null);
+                  }}
+                  placeholder="Ex: uber, ifood, mercado local"
+                  value={rulePattern}
+                />
+              </label>
+              <label className="settings-inline-form__field custom-select-wrapper">
+                Categoria da regra
+                <select
+                  aria-label="Categoria da regra"
+                  onChange={(event) => {
+                    setRuleCategoryId(event.target.value);
+                    setRuleFeedback(null);
+                  }}
+                  value={ruleCategoryId}
+                >
+                  {categories.map((category) => (
+                    <option key={category.value} value={category.value}>
+                      {category.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="primary-button settings-rule-grid__submit" type="submit">
+                Salvar regra
+              </button>
+            </form>
+            {ruleFeedback ? <p className="settings-feedback">{ruleFeedback}</p> : null}
+            {categoryRules.length > 0 ? (
+              <div className="settings-rule-list">
+                {categoryRules.map((rule) => (
+                  <div key={rule.id} className="settings-token-card">
+                    <div>
+                      <strong>{rule.pattern}</strong>
+                      <p>{formatCategoryName(rule.categoryId)}</p>
+                    </div>
+                    <button
+                      className="ghost-button"
+                      onClick={() => onRemoveCategoryRule(rule.id)}
+                      type="button"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="empty-state">
+                Nenhuma regra salva ainda. Crie a primeira para padronizar descricoes recorrentes.
+              </p>
+            )}
+          </article>
+
+          <article className="settings-hub-item">
+            <header className="settings-hub-item__header">
+              <strong>Preferencias e backup</strong>
+              <span className="status-badge status-badge--active">Ativo</span>
+            </header>
+            <p>
+              Ajuste densidade para o desktop e exporte um backup quando quiser congelar o estado
+              atual da base.
+            </p>
+            <div className="settings-action-row">
+              <button className="secondary-button" onClick={onExportBackup} type="button">
+                Exportar backup JSON
+              </button>
+              <span className="settings-muted-copy">
+                O arquivo inclui contas, cartoes, faturas, transacoes e investimentos.
+              </span>
+            </div>
+            <ul className="settings-inline-list" aria-label="Atalhos e densidade">
+              {PRODUCTIVITY_SHORTCUTS.map((shortcut) => (
+                <li key={shortcut}>{shortcut}</li>
+              ))}
+              <li>Densidade propagada para Dashboard, Cartoes, Investimentos e Relatorios.</li>
+            </ul>
+            <div
+              aria-label="Preferencia global de densidade"
+              className="settings-density-picker"
+              role="radiogroup"
+            >
+              {UI_DENSITY_OPTIONS.map((option) => {
+                const isActive = option.value === uiDensity;
+
+                return (
+                  <button
+                    key={option.value}
+                    aria-checked={isActive}
+                    className={cn("settings-density-option", isActive && "is-active")}
+                    onClick={() => onUiDensityChange(option.value)}
+                    role="radio"
+                    type="button"
+                  >
+                    <strong>{option.label}</strong>
+                    <span>{option.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </article>
         </div>
       </section>
 
@@ -233,38 +353,34 @@ export function SettingsView({
         <div className="section-heading">
           <div>
             <p className="eyebrow">Planejamento</p>
-            <h3 className="section-title">Orcamentos e regras</h3>
+            <h3 className="section-title">Orcamentos mensais</h3>
             <p className="section-copy">
-              Defina limites mensais aqui. A Visao Geral exibe somente status e alertas.
+              Defina limites por categoria sem sair das configuracoes. As categorias customizadas
+              tambem entram aqui.
             </p>
           </div>
         </div>
 
-        <form
-          className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_auto]"
-          onSubmit={(event) => {
-            void handleBudgetSubmit(event);
-          }}
-        >
-          <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+        <form className="settings-budget-form" onSubmit={(event) => void handleBudgetSubmit(event)}>
+          <label className="settings-inline-form__field custom-select-wrapper">
             Categoria
             <select
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              aria-label="Categoria"
               value={budgetCategoryId}
               onChange={(event) => setBudgetCategoryId(event.target.value)}
             >
-              {CATEGORY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {categories.map((category) => (
+                <option key={category.value} value={category.value}>
+                  {category.label}
                 </option>
               ))}
             </select>
           </label>
 
-          <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+          <label className="settings-inline-form__field">
             Limite mensal
             <input
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              aria-label="Limite mensal"
               inputMode="numeric"
               onChange={(event) => setBudgetLimitRaw(event.target.value)}
               placeholder="Ex: 12000"
@@ -273,7 +389,7 @@ export function SettingsView({
           </label>
 
           <button
-            className="primary-button h-10 self-end px-5"
+            className="primary-button settings-budget-form__submit"
             disabled={isSubmitting}
             type="submit"
           >
@@ -288,7 +404,8 @@ export function SettingsView({
                 <div>
                   <strong>{formatCategoryName(budget.category_id)}</strong>
                   <p>
-                    {formatCurrency(budget.spent)} de {formatCurrency(budget.limit)} ({budget.usage_percent}%)
+                    {formatCurrency(budget.spent)} de {formatCurrency(budget.limit)} (
+                    {budget.usage_percent}%)
                   </p>
                 </div>
                 <span className={budgetStatusClass(budget.status)}>
@@ -319,8 +436,8 @@ export function SettingsView({
               <p className="eyebrow">Ambiente</p>
               <h3 className="section-title">Zerar aplicacao</h3>
               <p className="section-copy">
-                Limpa compras, transferencias e contas para voltar ao estado de primeira abertura
-                da aplicacao.
+                Limpa compras, transferencias, contas e cartoes para voltar ao estado de primeira
+                abertura da aplicacao.
               </p>
             </div>
 

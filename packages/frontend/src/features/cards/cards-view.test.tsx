@@ -78,6 +78,7 @@ function renderCardsView(
     overrides.onCreateCardPurchase ?? vi.fn(() => Promise.resolve());
   const onOpenLedgerFiltered = overrides.onOpenLedgerFiltered ?? vi.fn();
   const onOpenQuickAdd = overrides.onOpenQuickAdd ?? vi.fn();
+  const onSetCardActive = overrides.onSetCardActive ?? vi.fn(() => Promise.resolve());
   const onUpdateCard = overrides.onUpdateCard ?? vi.fn(() => Promise.resolve());
 
   render(
@@ -90,6 +91,7 @@ function renderCardsView(
       onCreateCardPurchase={onCreateCardPurchase}
       onOpenLedgerFiltered={onOpenLedgerFiltered}
       onOpenQuickAdd={onOpenQuickAdd}
+      onSetCardActive={onSetCardActive}
       onUpdateCard={onUpdateCard}
       uiDensity={overrides.uiDensity ?? "compact"}
     />,
@@ -98,6 +100,7 @@ function renderCardsView(
   return {
     onCreateCard,
     onOpenQuickAdd,
+    onSetCardActive,
     onUpdateCard,
   };
 }
@@ -130,6 +133,8 @@ describe("CardsView", () => {
 
     await user.click(screen.getByRole("tab", { name: /ajustes/i }));
     await user.click(screen.getAllByRole("button", { name: /^novo cartao$/i })[1]);
+    expect((screen.getByLabelText(/limite total/i) as HTMLInputElement).value).toMatch(/R\$\s*0,00/);
+    expect(screen.getByText(/opcional\./i)).toBeInTheDocument();
     await user.type(screen.getByLabelText(/nome do cartao/i), "Cartao Verde");
     await user.clear(screen.getByLabelText(/limite total/i));
     await user.type(screen.getByLabelText(/limite total/i), "250000");
@@ -145,7 +150,7 @@ describe("CardsView", () => {
         limitInCents: 250000,
         closingDay: 15,
         dueDay: 25,
-        paymentAccountId: "acc-1",
+        paymentAccountId: undefined,
       });
     });
   });
@@ -174,6 +179,21 @@ describe("CardsView", () => {
     });
   });
 
+  it("lets the user remove a card from active operation in the settings tab", async () => {
+    const user = userEvent.setup();
+    const confirmMock = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirmMock);
+    const { onSetCardActive } = renderCardsView();
+
+    await user.click(screen.getByRole("tab", { name: /ajustes/i }));
+    await user.click(screen.getByRole("button", { name: /excluir cartao/i }));
+
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(onSetCardActive).toHaveBeenCalledWith(defaultCards[0], false);
+    });
+  });
+
   it("shows invoice item loading errors instead of silently hiding them", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "fetchInvoiceItems").mockRejectedValue(new Error("network"));
@@ -190,4 +210,3 @@ describe("CardsView", () => {
     });
   });
 });
-

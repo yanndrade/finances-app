@@ -46,6 +46,40 @@ describe("api timestamp normalization", () => {
     });
   });
 
+  it("omits payment_account_id when creating a card without conta padrao", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          card_id: "card-ui-1",
+          name: "Cartao livre",
+          limit: 150_000,
+          closing_day: 10,
+          due_day: 20,
+          payment_account_id: "",
+          is_active: true,
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.createCard({
+      name: "Cartao livre",
+      limitInCents: 150_000,
+      closingDay: 10,
+      dueDay: 20,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      id: expect.any(String),
+      name: "Cartao livre",
+      limit: 150_000,
+      closing_day: 10,
+      due_day: 20,
+    });
+  });
+
   it("converts payment datetime-local values and sends invoice payment payload", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(
@@ -336,4 +370,3 @@ describe("api timestamp normalization", () => {
     await expect(api.requestJson("/api/health")).resolves.toBeUndefined();
   });
 });
-

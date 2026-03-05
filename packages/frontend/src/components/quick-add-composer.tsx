@@ -662,11 +662,21 @@ export function QuickAddComposer({
 
         <div className="col-span-2 space-y-2 md:col-span-1">
           <Label htmlFor="quick-add-account">
-            {entryType === "transfer" ? "Conta origem" : "Conta"}
+            {entryType === "transfer" && transferMode === "invoice_payment"
+              ? "Conta que vai pagar a fatura"
+              : entryType === "transfer"
+                ? "Conta origem"
+                : "Conta"}
           </Label>
           <select
             id="quick-add-account"
-            aria-label={entryType === "transfer" ? "Conta origem" : "Conta"}
+            aria-label={
+              entryType === "transfer" && transferMode === "invoice_payment"
+                ? "Conta que vai pagar a fatura"
+                : entryType === "transfer"
+                  ? "Conta origem"
+                  : "Conta"
+            }
             className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
             onChange={(event) => {
               dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
@@ -918,5 +928,4 @@ function useMediaQuery(query: string): boolean {
 
   return matches;
 }
-
 

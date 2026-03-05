@@ -9,6 +9,18 @@ import type { AppView } from "./components/sidebar";
 import { ToastViewport, type AppToast } from "./components/toast-viewport";
 import { useAppDataOrchestrator } from "./features/app/use-app-data-orchestrator";
 import {
+  buildCategoryRule,
+  readStoredCategoryRules,
+  storeCategoryRules,
+  type CategoryRule,
+} from "./lib/category-rules";
+import {
+  createCategoryOption,
+  readStoredCategoryOptions,
+  storeCategoryOptions,
+  type CategoryOption,
+} from "./lib/categories";
+import {
   createAccount,
   createCard,
   createCardPurchase,
@@ -24,8 +36,10 @@ import {
   updateCard,
   updateTransaction,
   voidTransaction,
+  type AccountSummary,
   type AccountPayload,
   type AccountUpdatePayload,
+  type CardSummary,
   type CardPayload,
   type CardPurchasePayload,
   type CardUpdatePayload,
@@ -150,6 +164,12 @@ export function App() {
   const [activeView, setActiveView] = useState<AppView>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [uiDensity, setUiDensity] = useState<UiDensity>(() => readStoredUiDensity());
+  const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>(() =>
+    readStoredCategoryOptions(),
+  );
+  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>(() =>
+    readStoredCategoryRules(),
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -203,6 +223,14 @@ export function App() {
 
     window.localStorage.setItem(UI_DENSITY_STORAGE_KEY, uiDensity);
   }, [uiDensity]);
+
+  useEffect(() => {
+    storeCategoryOptions(categoryOptions);
+  }, [categoryOptions]);
+
+  useEffect(() => {
+    storeCategoryRules(categoryRules);
+  }, [categoryRules]);
 
   useEffect(() => {
     if (toast === null) {
@@ -344,6 +372,31 @@ export function App() {
     }
   }
 
+  async function handleSetAccountActive(
+    account: AccountSummary,
+    isActive: boolean,
+  ): Promise<void> {
+    if (!isActive && account.is_active && accounts.filter((item) => item.is_active).length === 1) {
+      showToast("error", "Mantenha ao menos uma conta ativa.");
+      return;
+    }
+
+    const wasSuccessful = await runMutation(
+      () =>
+        updateAccount(account.account_id, {
+          name: account.name,
+          type: account.type as AccountPayload["type"],
+          initialBalanceInCents: account.initial_balance,
+          isActive,
+        }),
+      isActive ? "Conta reativada com sucesso." : "Conta removida da operacao ativa.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel atualizar a conta.");
+    }
+  }
+
   async function handleCreateCard(payload: CardPayload): Promise<void> {
     const wasSuccessful = await runMutation(
       () => createCard(payload),
@@ -359,6 +412,25 @@ export function App() {
     const wasSuccessful = await runMutation(
       () => updateCard(cardId, payload),
       "Cartao atualizado com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel atualizar o cartao.");
+    }
+  }
+
+  async function handleSetCardActive(card: CardSummary, isActive: boolean): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () =>
+        updateCard(card.card_id, {
+          name: card.name,
+          limitInCents: card.limit,
+          closingDay: card.closing_day,
+          dueDay: card.due_day,
+          paymentAccountId: card.payment_account_id,
+          isActive,
+        }),
+      isActive ? "Cartao reativado com sucesso." : "Cartao removido da operacao ativa.",
     );
 
     if (!wasSuccessful) {
@@ -520,6 +592,54 @@ export function App() {
     }
   }
 
+  function handleCreateCategory(label: string): boolean {
+    const nextCategory = createCategoryOption(label, categoryOptions);
+    if (nextCategory === null) {
+      return false;
+    }
+
+    const alreadyExists = categoryOptions.some(
+      (option) =>
+        option.value === nextCategory.value ||
+        option.label.toLowerCase() === nextCategory.label.toLowerCase(),
+    );
+    if (alreadyExists) {
+      return false;
+    }
+
+    setCategoryOptions([...categoryOptions, nextCategory]);
+    return true;
+  }
+
+  function handleRemoveCategory(categoryId: string): void {
+    setCategoryOptions(categoryOptions.filter((option) => option.value !== categoryId));
+    setCategoryRules(categoryRules.filter((rule) => rule.categoryId !== categoryId));
+  }
+
+  function handleUpsertCategoryRule(pattern: string, categoryId: string): boolean {
+    const nextRule = buildCategoryRule(pattern, categoryId);
+    if (nextRule === null) {
+      return false;
+    }
+
+    const existing = categoryRules.find((rule) => rule.pattern === nextRule.pattern);
+    if (existing) {
+      setCategoryRules(
+        categoryRules.map((rule) =>
+          rule.id === existing.id ? { ...rule, categoryId: nextRule.categoryId } : rule,
+        ),
+      );
+      return true;
+    }
+
+    setCategoryRules([...categoryRules, nextRule]);
+    return true;
+  }
+
+  function handleRemoveCategoryRule(ruleId: string): void {
+    setCategoryRules(categoryRules.filter((rule) => rule.id !== ruleId));
+  }
+
   const activeMeta = VIEW_META[activeView];
   return (
     <AppShell
@@ -590,11 +710,13 @@ export function App() {
         {activeView === "transactions" ? (
           <TransactionsView
             accounts={accounts}
+            categoryRules={categoryRules}
             cards={cards}
             filters={transactionFilters}
             isSubmitting={isSubmitting}
             onApplyFilters={handleApplyTransactionFilters}
             onDensityChange={setUiDensity}
+            onUpsertCategoryRule={handleUpsertCategoryRule}
             onUpdateTransaction={handleUpdateTransaction}
             onVoidTransaction={handleVoidTransaction}
             transactions={transactions}
@@ -608,6 +730,7 @@ export function App() {
             isSubmitting={isSubmitting}
             onCreateAccount={handleCreateAccount}
             onOpenSettings={() => setActiveView("settings")}
+            onSetAccountActive={handleSetAccountActive}
             onUpdateAccount={handleUpdateAccount}
           />
         ) : null}
@@ -622,6 +745,7 @@ export function App() {
             onOpenQuickAdd={(preset, options) => openQuickAdd(preset, options)}
             onCreateCard={handleCreateCard}
             onCreateCardPurchase={handleCreateCardPurchase}
+            onSetCardActive={handleSetCardActive}
             onUpdateCard={handleUpdateCard}
             uiDensity={uiDensity}
           />
@@ -629,15 +753,24 @@ export function App() {
 
         {activeView === "settings" ? (
           <SettingsView
+            accountsCount={accounts.length}
             budgetMonth={dashboard?.month ?? selectedMonth}
+            cardsCount={cards.length}
+            categories={categoryOptions}
+            categoryRules={categoryRules}
             categoryBudgets={dashboard?.category_budgets ?? []}
             isSubmitting={isSubmitting}
+            onCreateCategory={handleCreateCategory}
             onOpenAccounts={() => setActiveView("accounts")}
+            onOpenCards={() => setActiveView("cards")}
             onExportBackup={() => {
               void handleExportBackup();
             }}
+            onRemoveCategory={handleRemoveCategory}
+            onRemoveCategoryRule={handleRemoveCategoryRule}
             onUiDensityChange={setUiDensity}
             onUpsertCategoryBudget={handleUpsertCategoryBudget}
+            onUpsertCategoryRule={handleUpsertCategoryRule}
             onResetApplicationData={handleResetAllData}
             uiDensity={uiDensity}
           />
@@ -738,9 +871,6 @@ function getErrorMessage(error: unknown): string {
 
   return "Nao foi possivel concluir a operacao.";
 }
-
-
-
 
 
 

@@ -234,7 +234,7 @@ describe("QuickAddComposer", () => {
       expect(screen.getByLabelText(/modo da transferencia/i)).toHaveValue("invoice_payment");
     });
     expect(screen.getByLabelText(/tipo/i)).toHaveValue("transfer");
-    expect(screen.getByLabelText(/fatura/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^fatura$/i)).toBeInTheDocument();
   });
 
 
@@ -273,9 +273,12 @@ describe("QuickAddComposer", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/fatura/i)).toHaveValue("invoice-2");
+      expect(screen.getByLabelText(/^fatura$/i)).toHaveValue("invoice-2");
     });
-  });  it("does not submit when Enter is pressed on a select control", async () => {
+    expect(screen.getByLabelText(/conta que vai pagar a fatura/i)).toBeInTheDocument();
+  });
+
+  it("does not submit when Enter is pressed on a select control", async () => {
     installMatchMedia(false);
     const user = userEvent.setup();
     const { onSubmitTransaction } = renderComposer();
@@ -311,6 +314,4 @@ describe("QuickAddComposer", () => {
     });
   });
 });
-
-
 

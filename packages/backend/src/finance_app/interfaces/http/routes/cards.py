@@ -33,7 +33,7 @@ class CreateCardRequest(BaseModel):
     limit: int = Field(gt=0)
     closing_day: int = Field(ge=1, le=28)
     due_day: int = Field(ge=1, le=28)
-    payment_account_id: str = Field(min_length=1)
+    payment_account_id: str | None = None
 
 
 class UpdateCardRequest(BaseModel):
@@ -41,7 +41,7 @@ class UpdateCardRequest(BaseModel):
     limit: int | None = Field(default=None, gt=0)
     closing_day: int | None = Field(default=None, ge=1, le=28)
     due_day: int | None = Field(default=None, ge=1, le=28)
-    payment_account_id: str | None = Field(default=None, min_length=1)
+    payment_account_id: str | None = None
     is_active: bool | None = None
 
 

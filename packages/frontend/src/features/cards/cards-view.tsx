@@ -33,6 +33,13 @@ import {
 import type { QuickAddPreset } from "../../components/quick-add-composer";
 import { Progress } from "../../components/ui/progress";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -72,6 +79,7 @@ type CardsViewProps = {
   ) => void;
   onCreateCard: (payload: CardPayload) => Promise<void>;
   onCreateCardPurchase: (payload: CardPurchasePayload) => Promise<void>;
+  onSetCardActive: (card: CardSummary, isActive: boolean) => Promise<void>;
   onUpdateCard: (cardId: string, payload: CardUpdatePayload) => Promise<void>;
   uiDensity: UiDensity;
 };
@@ -89,6 +97,7 @@ type CardEditFormState = CardFormState & {
 };
 
 const ALL_CARDS_SCOPE = "all";
+const NO_PAYMENT_ACCOUNT_VALUE = "__card-no-payment-account__";
 
 export function CardsView({
   accounts,
@@ -99,6 +108,7 @@ export function CardsView({
   onOpenLedgerFiltered,
   onCreateCard,
   onCreateCardPurchase: _onCreateCardPurchase,
+  onSetCardActive,
   onUpdateCard,
   uiDensity,
 }: CardsViewProps) {
@@ -111,9 +121,7 @@ export function CardsView({
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
-  const [createForm, setCreateForm] = useState<CardFormState>(() =>
-    createEmptyCardForm(accounts[0]?.account_id ?? ""),
-  );
+  const [createForm, setCreateForm] = useState<CardFormState>(() => createEmptyCardForm());
   const [editForm, setEditForm] = useState<CardEditFormState | null>(null);
   const {
     invoiceItems,
@@ -176,7 +184,7 @@ export function CardsView({
   }
 
   function openCreateDialog() {
-    setCreateForm(createEmptyCardForm(accounts[0]?.account_id ?? ""));
+    setCreateForm(createEmptyCardForm());
     setIsCreateDialogOpen(true);
   }
 
@@ -194,7 +202,7 @@ export function CardsView({
 
   async function handleCreateCardSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!createForm.paymentAccountId || !createForm.name.trim()) {
+    if (!createForm.name.trim()) {
       return;
     }
 
@@ -203,16 +211,16 @@ export function CardsView({
       limitInCents: parseInt(createForm.limit || "0", 10),
       closingDay: parseInt(createForm.closingDay || "0", 10),
       dueDay: parseInt(createForm.dueDay || "0", 10),
-      paymentAccountId: createForm.paymentAccountId,
+      paymentAccountId: createForm.paymentAccountId || undefined,
     });
 
     setIsCreateDialogOpen(false);
-    setCreateForm(createEmptyCardForm(accounts[0]?.account_id ?? ""));
+    setCreateForm(createEmptyCardForm());
   }
 
   async function handleUpdateCardSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (editingCardId === null || editForm === null || !editForm.paymentAccountId || !editForm.name.trim()) {
+    if (editingCardId === null || editForm === null || !editForm.name.trim()) {
       return;
     }
 
@@ -227,6 +235,30 @@ export function CardsView({
 
     setEditingCardId(null);
     setEditForm(null);
+  }
+
+  async function handleToggleCardActive(card: CardSummary) {
+    const nextIsActive = !card.is_active;
+
+    if (
+      !nextIsActive &&
+      !globalThis.confirm(
+        "Excluir este cartao da operacao ativa? Faturas e historico serao preservados.",
+      )
+    ) {
+      return;
+    }
+
+    await onSetCardActive(card, nextIsActive);
+
+    if (!nextIsActive && selectedScope === card.card_id) {
+      setSelectedScope(ALL_CARDS_SCOPE);
+    }
+
+    if (editingCardId === card.card_id) {
+      setEditingCardId(null);
+      setEditForm(null);
+    }
   }
 
   return (
@@ -479,7 +511,7 @@ export function CardsView({
                   <div>
                     <CardTitle className="text-2xl font-black text-slate-900">Ajustes da carteira</CardTitle>
                     <CardDescription className="font-bold text-slate-400">
-                      Cadastre novos cartoes e revise limite, ciclo e conta de pagamento sem sair desta tela.
+                      Cadastre, revise, remova da operacao ativa ou reative cartoes sem sair desta tela.
                     </CardDescription>
                   </div>
                   <Button type="button" onClick={openCreateDialog}>Novo cartao</Button>
@@ -489,7 +521,7 @@ export function CardsView({
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
                   <SummaryStat label="Cartoes ativos" value={String(activeCards.length)} />
                   <SummaryStat label="Limite total" value={formatCurrency(totalLimit)} />
-                  <SummaryStat label="Contas de pagamento" value={String(uniquePaymentAccounts(activeCards))} />
+                  <SummaryStat label="Contas padrao" value={String(uniquePaymentAccounts(activeCards))} />
                 </div>
                 <div className="space-y-3">
                   {cards.length === 0 ? (
@@ -509,13 +541,24 @@ export function CardsView({
                             Limite {formatCurrency(card.limit)} | Fecha dia {card.closing_day} | Vence dia {card.due_day}
                           </p>
                           <p className="text-sm text-slate-500">
-                            Conta de pagamento: {accountName(card.payment_account_id, accounts)}
+                            Conta padrao: {accountName(card.payment_account_id, accounts)}
                           </p>
                         </div>
-                        <Button type="button" variant="outline" onClick={() => openEditDialog(card)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Editar
-                        </Button>
+                        <div className="flex flex-wrap gap-3">
+                          <Button type="button" variant="outline" onClick={() => openEditDialog(card)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Editar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={card.is_active ? "destructive" : "secondary"}
+                            onClick={() => {
+                              void handleToggleCardActive(card);
+                            }}
+                          >
+                            {card.is_active ? "Excluir cartao" : "Reativar cartao"}
+                          </Button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -529,11 +572,22 @@ export function CardsView({
                   <div>
                     <CardTitle className="text-2xl font-black text-slate-900">Ajustes do cartao</CardTitle>
                     <CardDescription className="font-bold text-slate-400">
-                      Ciclo, limite e conta de pagamento do cartao selecionado.
+                      Ciclo, limite, conta padrao opcional e status do cartao selecionado.
                     </CardDescription>
                   </div>
                   {selectedCard ? (
-                    <Button type="button" onClick={() => openEditDialog(selectedCard)}>Editar cartao</Button>
+                    <div className="flex flex-wrap gap-3">
+                      <Button type="button" onClick={() => openEditDialog(selectedCard)}>Editar cartao</Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => {
+                          void handleToggleCardActive(selectedCard);
+                        }}
+                      >
+                        Excluir cartao
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
               </CardHeader>
@@ -543,7 +597,7 @@ export function CardsView({
                 <MiniMetric label="Fechamento" value={String(selectedCard?.closing_day ?? "--")} />
                 <MiniMetric label="Vencimento" value={String(selectedCard?.due_day ?? "--")} />
                 <MiniMetric
-                  label="Conta de pagamento"
+                  label="Conta padrao"
                   value={selectedCard ? accountName(selectedCard.payment_account_id, accounts) : "--"}
                 />
                 <MiniMetric label="Status" value={selectedCard?.is_active ? "Ativo" : "Inativo"} />
@@ -609,7 +663,7 @@ export function CardsView({
           <DialogHeader>
             <DialogTitle>Novo cartao</DialogTitle>
             <DialogDescription>
-              Defina limite, ciclo e conta de pagamento para liberar compras e conciliacao.
+              Defina limite e ciclo do cartao. A conta padrao para pagamento pode ficar em branco.
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={(event) => void handleCreateCardSubmit(event)}>
@@ -639,7 +693,7 @@ export function CardsView({
           <DialogHeader>
             <DialogTitle>Editar cartao</DialogTitle>
             <DialogDescription>
-              Atualize limite, ciclo, conta de pagamento ou desative o cartao sem perder historico.
+              Atualize limite, ciclo, conta padrao opcional ou desative o cartao sem perder historico.
             </DialogDescription>
           </DialogHeader>
           {editForm ? (
@@ -912,14 +966,14 @@ function CardScopeDetail({
   );
 }
 
-function CardFormFields({
+function CardFormFields<TForm extends CardFormState>({
   form,
   accounts,
   onChange,
 }: {
-  form: CardFormState;
+  form: TForm;
   accounts: AccountSummary[];
-  onChange: React.Dispatch<React.SetStateAction<CardFormState>>;
+  onChange: (updater: (current: TForm) => TForm) => void;
 }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -937,34 +991,47 @@ function CardFormFields({
         <input
           className="h-11 rounded-xl border border-slate-200 px-3"
           inputMode="numeric"
-          value={form.limit}
+          value={formatCurrencyInput(form.limit)}
           onChange={(event) =>
             onChange((current) => ({
               ...current,
               limit: event.target.value.replace(/\D/g, ""),
             }))
           }
+          placeholder="R$ 0,00"
           required
         />
       </label>
-      <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-        Conta de pagamento
-        <select
-          className="h-11 rounded-xl border border-slate-200 px-3"
-          value={form.paymentAccountId}
-          onChange={(event) =>
-            onChange((current) => ({ ...current, paymentAccountId: event.target.value }))
+      <div className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+        <span>Conta padrao para pagamento</span>
+        <Select
+          value={form.paymentAccountId || NO_PAYMENT_ACCOUNT_VALUE}
+          onValueChange={(value) =>
+            onChange((current) => ({
+              ...current,
+              paymentAccountId: value === NO_PAYMENT_ACCOUNT_VALUE ? "" : value,
+            }))
           }
-          required
         >
-          <option value="">Selecione</option>
-          {accounts.map((account) => (
-            <option key={account.account_id} value={account.account_id}>
-              {account.name}
-            </option>
-          ))}
-        </select>
-      </label>
+          <SelectTrigger
+            aria-label="Conta de pagamento"
+            className="h-11 rounded-xl border-slate-200 text-left shadow-none"
+          >
+            <SelectValue placeholder="Sem conta padrao" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_PAYMENT_ACCOUNT_VALUE}>Sem conta padrao</SelectItem>
+            {accounts.map((account) => (
+              <SelectItem key={account.account_id} value={account.account_id}>
+                {account.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs font-medium text-slate-400">
+          Opcional. Na quitação da fatura você escolhe de qual conta sai o dinheiro.
+        </p>
+      </div>
       <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
         Dia de fechamento
         <input
@@ -1117,21 +1184,29 @@ function cardName(cardId: string, cards: CardSummary[]) {
 }
 
 function accountName(accountId: string, accounts: AccountSummary[]) {
+  if (!accountId.trim()) {
+    return "Sem conta padrao";
+  }
+
   return accounts.find((account) => account.account_id === accountId)?.name ?? accountId;
 }
 
 function uniquePaymentAccounts(cards: CardSummary[]) {
-  return new Set(cards.map((card) => card.payment_account_id)).size;
+  return new Set(
+    cards.map((card) => card.payment_account_id).filter((accountId) => accountId.trim().length > 0),
+  ).size;
 }
 
-function createEmptyCardForm(paymentAccountId: string): CardFormState {
+function createEmptyCardForm(): CardFormState {
   return {
     name: "",
     limit: "0",
     closingDay: "10",
     dueDay: "20",
-    paymentAccountId,
+    paymentAccountId: "",
   };
 }
 
-
+function formatCurrencyInput(value: string) {
+  return formatCurrency(parseInt(value || "0", 10));
+}
