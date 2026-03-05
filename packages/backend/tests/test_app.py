@@ -2011,6 +2011,55 @@ def test_reports_endpoint_accepts_custom_range_with_millisecond_precision(tmp_pa
     }
 
 
+def test_reports_endpoint_respects_custom_subday_range_for_installments(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 90_00,
+            "installments_count": 1,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Headphones",
+        },
+    )
+
+    response = client.get(
+        "/api/reports/summary",
+        params={
+            "period": "custom",
+            "from": "2026-04-20T00:00:00Z",
+            "to": "2026-04-20T00:00:00.500Z",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["future_commitments"] == {
+        "period_installment_impact_total": 0,
+        "future_installment_total": 90_00,
+        "future_installment_months": [{"month": "2026-04", "total": 90_00}],
+    }
+
+
 def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
     tmp_path,
 ) -> None:

@@ -554,8 +554,8 @@ class Projector:
                 )
                 period_installment_rows = self._list_installments_for_report(
                     session,
-                    due_from=occurred_from[:10],
-                    due_to=occurred_to[:10],
+                    due_from_timestamp=occurred_from,
+                    due_to_timestamp=occurred_to,
                     category_id=category_id,
                     account_id=account_id,
                     payment_method=payment_method,
@@ -564,7 +564,7 @@ class Projector:
                 )
                 future_installment_rows = self._list_installments_for_report(
                     session,
-                    due_after=occurred_to[:10],
+                    due_after_timestamp=occurred_to,
                     category_id=category_id,
                     account_id=account_id,
                     payment_method=payment_method,
@@ -2194,9 +2194,9 @@ class Projector:
         self,
         session: Session,
         *,
-        due_from: str | None = None,
-        due_to: str | None = None,
-        due_after: str | None = None,
+        due_from_timestamp: str | None = None,
+        due_to_timestamp: str | None = None,
+        due_after_timestamp: str | None = None,
         category_id: str | None = None,
         account_id: str | None = None,
         payment_method: str | None = None,
@@ -2207,12 +2207,16 @@ class Projector:
             return []
 
         query = session.query(CardPurchaseInstallmentRecord)
-        if due_from is not None:
-            query = query.filter(CardPurchaseInstallmentRecord.due_date >= due_from)
-        if due_to is not None:
-            query = query.filter(CardPurchaseInstallmentRecord.due_date <= due_to)
-        if due_after is not None:
-            query = query.filter(CardPurchaseInstallmentRecord.due_date > due_after)
+        due_timestamp = func.printf(
+            "%sT23:59:59Z",
+            CardPurchaseInstallmentRecord.due_date,
+        )
+        if due_from_timestamp is not None:
+            query = query.filter(due_timestamp >= due_from_timestamp)
+        if due_to_timestamp is not None:
+            query = query.filter(due_timestamp <= due_to_timestamp)
+        if due_after_timestamp is not None:
+            query = query.filter(due_timestamp > due_after_timestamp)
         if category_id is not None:
             query = query.filter(CardPurchaseInstallmentRecord.category_id == category_id)
 

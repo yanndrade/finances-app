@@ -1,4 +1,4 @@
-﻿import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "./App";
@@ -8,6 +8,7 @@ import type {
   DashboardSummary,
   InvestmentMovementSummary,
   InvestmentOverview,
+  ReportSummary,
   TransactionSummary,
 } from "./lib/api";
 
@@ -134,6 +135,38 @@ function buildInvestmentOverview(
   };
 }
 
+function buildReportSummary(
+  overrides: Partial<ReportSummary> = {},
+): ReportSummary {
+  return {
+    period: {
+      type: "month",
+      from: "2026-03-01T00:00:00Z",
+      to: "2026-03-31T23:59:59Z",
+    },
+    totals: {
+      income_total: 250_000,
+      expense_total: 117_500,
+      net_total: 132_500,
+    },
+    category_breakdown: [{ category_id: "mercado", total: 2_500 }],
+    weekly_trend: [
+      {
+        week: "2026-W10",
+        income_total: 250_000,
+        expense_total: 117_500,
+        net_total: 132_500,
+      },
+    ],
+    future_commitments: {
+      period_installment_impact_total: 0,
+      future_installment_total: 0,
+      future_installment_months: [],
+    },
+    ...overrides,
+  };
+}
+
 function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
   return {
     card_id: "card-1",
@@ -192,6 +225,7 @@ function installAppFetchMock(initialState?: {
   dashboard?: DashboardSummary;
   investmentOverview?: InvestmentOverview;
   investmentMovements?: InvestmentMovementSummary[];
+  reportSummary?: ReportSummary;
   invoices?: InvoiceSummary[];
   invoiceItemsByInvoiceId?: Record<string, InvoiceItemSummary[]>;
 }) {
@@ -201,6 +235,7 @@ function installAppFetchMock(initialState?: {
     transactions: initialState?.transactions ?? [buildTransaction()],
     investmentOverview: initialState?.investmentOverview ?? buildInvestmentOverview(),
     investmentMovements: initialState?.investmentMovements ?? [],
+    reportSummary: initialState?.reportSummary ?? buildReportSummary(),
     invoices: initialState?.invoices ?? [],
     invoiceItemsByInvoiceId: initialState?.invoiceItemsByInvoiceId ?? {},
     dashboard:
@@ -259,6 +294,10 @@ function installAppFetchMock(initialState?: {
 
     if (url.includes("/api/transactions") && method === "GET") {
       return new Response(JSON.stringify(state.transactions));
+    }
+
+    if (url.includes("/api/reports/summary") && method === "GET") {
+      return new Response(JSON.stringify(state.reportSummary));
     }
 
     if (
@@ -1215,6 +1254,78 @@ describe("App", () => {
     });
   });
 
+  it("keeps report summary visible when a stale non-report refresh settles later", async () => {
+    let resolveFirstTransactionsRequest: (() => void) | null = null;
+    const firstTransactionsRequestBlocked = new Promise<void>((resolve) => {
+      resolveFirstTransactionsRequest = resolve;
+    });
+    let transactionRequestCount = 0;
+    const reportSummary = buildReportSummary({
+      category_breakdown: [{ category_id: "food", total: 3_000 }],
+    });
+    const fetchMock = vi.fn<(typeof fetch)>().mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url.includes("/api/transactions") && method === "GET") {
+        transactionRequestCount += 1;
+        if (transactionRequestCount === 1) {
+          await firstTransactionsRequestBlocked;
+        }
+        return new Response(JSON.stringify([buildTransaction()]));
+      }
+
+      if (url.includes("/api/reports/summary") && method === "GET") {
+        return new Response(JSON.stringify(reportSummary));
+      }
+
+      if (url.includes("/api/dashboard") && method === "GET") {
+        return new Response(JSON.stringify(buildDashboard()));
+      }
+
+      if (url.includes("/api/accounts") && method === "GET") {
+        return new Response(JSON.stringify([buildAccount()]));
+      }
+
+      if (url.includes("/api/cards") && method === "GET") {
+        return new Response(JSON.stringify([buildCard()]));
+      }
+
+      if (url.includes("/api/invoices") && method === "GET") {
+        return new Response(JSON.stringify([]));
+      }
+
+      if (url.includes("/api/investments/overview") && method === "GET") {
+        return new Response(JSON.stringify(buildInvestmentOverview()));
+      }
+
+      if (url.includes("/api/investments/movements") && method === "GET") {
+        return new Response(JSON.stringify([]));
+      }
+
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await userEvent.click(screen.getByRole("button", { name: /^relat/i }));
+    expect(await screen.findByRole("heading", { level: 1, name: /relat/i })).toBeInTheDocument();
+    expect(await screen.findByText(/consumo por categoria/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveFirstTransactionsRequest?.();
+      await new Promise((resolve) => {
+        setTimeout(resolve, 60);
+      });
+    });
+
+    expect(transactionRequestCount).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/consumo por categoria/i)).toBeInTheDocument();
+    expect(screen.queryByText(/n.o foi poss.vel carregar os relat.rios/i)).not.toBeInTheDocument();
+  });
+
   it("renders settings and resets the app in development mode", async () => {
     const fetchMock = installAppFetchMock();
     const confirmMock = vi.fn(() => true);
@@ -1288,3 +1399,4 @@ function allocateMockInvoices({
     });
   });
 }
+

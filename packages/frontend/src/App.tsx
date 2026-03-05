@@ -249,9 +249,10 @@ export function App() {
           to: toIsoFromDate(activeToDate, true),
         }),
       ]);
-      const nextReportSummary = shouldFetchReport
-        ? await fetchReportSummary(reportApiFilters)
-        : reportSummary;
+      let nextReportSummary: ReportSummary | undefined;
+      if (shouldFetchReport) {
+        nextReportSummary = await fetchReportSummary(reportApiFilters);
+      }
 
       setCards(nextCards);
       setInvoices(nextInvoices);
@@ -260,7 +261,9 @@ export function App() {
       setTransactions(nextTransactions);
       setInvestmentOverview(nextInvestmentOverview);
       setInvestmentMovements(nextInvestmentMovements);
-      setReportSummary(nextReportSummary);
+      if (nextReportSummary !== undefined) {
+        setReportSummary(nextReportSummary);
+      }
       setTransactionFilters(filters);
       setInvestmentView(activeInvestmentView);
       setInvestmentFromDate(activeFromDate);
