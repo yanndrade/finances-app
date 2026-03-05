@@ -3,6 +3,8 @@ import "./styles.css";
 import { Suspense, lazy, useEffect, useState } from "react";
 
 import { AppShell } from "./components/app-shell";
+import { CommandPalette } from "./components/command-palette";
+import type { QuickAddPreset } from "./components/quick-add-composer";
 import type { AppView } from "./components/sidebar";
 import { ToastViewport, type AppToast } from "./components/toast-viewport";
 import { useAppDataOrchestrator } from "./features/app/use-app-data-orchestrator";
@@ -13,6 +15,7 @@ import {
   createCashTransaction,
   createInvestmentMovement,
   createTransfer,
+  fetchBackupSnapshot,
   markReimbursementReceived,
   payInvoice,
   resetApplicationData,
@@ -22,12 +25,10 @@ import {
   updateTransaction,
   voidTransaction,
   type AccountPayload,
-  type AccountSummary,
+  type AccountUpdatePayload,
   type CardPayload,
   type CardPurchasePayload,
-  type CardSummary,
   type CardUpdatePayload,
-  type AccountUpdatePayload,
   type CashTransactionPayload,
   type InvoicePaymentPayload,
   type InvestmentMovementPayload,
@@ -43,6 +44,11 @@ import {
   monthFirstDay,
   monthLastDay,
 } from "./lib/date-filters";
+import {
+  UI_DENSITY_STORAGE_KEY,
+  readStoredUiDensity,
+  type UiDensity,
+} from "./lib/ui-density";
 
 const QuickAddComposer = lazy(async () => {
   const module = await import("./components/quick-add-composer");
@@ -89,8 +95,10 @@ const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
   reference: currentDate(),
   from: "",
   to: "",
+  type: undefined,
   category: "",
   account: "",
+  card: "",
   method: "",
   person: "",
   text: "",
@@ -108,16 +116,16 @@ const VIEW_META: Record<
     description: "Resumo mensal e pontos de atencao.",
   },
   reports: {
-    title: "Relat\u00F3rios",
-    description: "Filtros globais, categorias e exposicao futura.",
+    title: "An\u00E1lises & relat\u00F3rios",
+    description: "Tendencias, variacoes e compromissos futuros.",
   },
   investments: {
-    title: "Investimentos",
-    description: "Patrimonio, aportes e dividendos.",
+    title: "Patrim\u00F4nio & investimentos",
+    description: "Composicao patrimonial, aportes e rendimento.",
   },
   transactions: {
-    title: "Transa\u00E7\u00F5es",
-    description: "Filtro, ajuste e hist\u00F3rico.",
+    title: "Hist\u00F3rico unificado",
+    description: "Filtro, ajuste e linha do tempo financeira.",
   },
   accounts: {
     title: "Contas",
@@ -141,8 +149,12 @@ const TOAST_DURATION_MS = {
 export function App() {
   const [activeView, setActiveView] = useState<AppView>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
+  const [uiDensity, setUiDensity] = useState<UiDensity>(() => readStoredUiDensity());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [quickAddPreset, setQuickAddPreset] = useState<QuickAddPreset | undefined>(undefined);
+  const [quickAddInvoiceId, setQuickAddInvoiceId] = useState<string | undefined>(undefined);
   const [toast, setToast] = useState<AppToast>(null);
 
   const {
@@ -185,6 +197,14 @@ export function App() {
   }, [activeView]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(UI_DENSITY_STORAGE_KEY, uiDensity);
+  }, [uiDensity]);
+
+  useEffect(() => {
     if (toast === null) {
       return;
     }
@@ -203,6 +223,45 @@ export function App() {
       id: Date.now(),
       tone,
       message,
+    });
+  }
+
+  function openQuickAdd(
+    preset?: QuickAddPreset,
+    options?: { invoiceId?: string },
+  ) {
+    setIsCommandPaletteOpen(false);
+    setQuickAddPreset(preset);
+    setQuickAddInvoiceId(options?.invoiceId);
+    setIsQuickAddOpen(true);
+  }
+
+  function openCommandPalette() {
+    setIsCommandPaletteOpen(true);
+  }
+
+  function openLedgerWithFilters(
+    filters: Partial<TransactionFilters>,
+    monthOverride?: string,
+  ) {
+    const targetMonth = monthOverride ?? selectedMonth;
+    const hasExplicitRange =
+      typeof filters.from === "string" &&
+      filters.from.length > 0 &&
+      typeof filters.to === "string" &&
+      filters.to.length > 0;
+    const nextFilters: TransactionFilters = {
+      ...EMPTY_TRANSACTION_FILTERS,
+      reference: `${targetMonth}-01`,
+      ...filters,
+      period: hasExplicitRange ? "custom" : (filters.period ?? "month"),
+    };
+
+    setActiveView("transactions");
+    void refreshData({
+      month: targetMonth,
+      filters: nextFilters,
+      includeReport: false,
     });
   }
 
@@ -261,7 +320,28 @@ export function App() {
   }
 
   async function handleCreateAccount(payload: AccountPayload): Promise<void> {
-    await runMutation(() => createAccount(payload), "Conta criada com sucesso.");
+    const wasSuccessful = await runMutation(
+      () => createAccount(payload),
+      "Conta criada com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel criar a conta.");
+    }
+  }
+
+  async function handleUpdateAccount(
+    accountId: string,
+    payload: AccountUpdatePayload,
+  ): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => updateAccount(accountId, payload),
+      "Conta atualizada com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel atualizar a conta.");
+    }
   }
 
   async function handleCreateCard(payload: CardPayload): Promise<void> {
@@ -273,16 +353,6 @@ export function App() {
     if (!wasSuccessful) {
       throw new Error("Nao foi possivel criar o cartao.");
     }
-  }
-
-  async function handleUpdateAccount(
-    accountId: string,
-    payload: AccountUpdatePayload,
-  ): Promise<void> {
-    await runMutation(
-      () => updateAccount(accountId, payload),
-      "Conta atualizada com sucesso.",
-    );
   }
 
   async function handleUpdateCard(cardId: string, payload: CardUpdatePayload): Promise<void> {
@@ -423,41 +493,51 @@ export function App() {
     }
   }
 
-  const activeMeta = VIEW_META[activeView];
-  const contextPanel = (
-    <div className="shell-context">
-      <p className="eyebrow">Desktop context</p>
-      <h2 className="shell-context__title">Painel contextual</h2>
-      <p className="section-copy">
-        Espaco reservado para formularios rapidos e acoes locais sem trocar de tela.
-      </p>
-      <button
-        className="primary-button"
-        onClick={() => setIsQuickAddOpen(true)}
-        type="button"
-      >
-        Abrir registro rapido
-      </button>
-      <p className="shell-context__meta">
-        Tela ativa: {activeMeta.title}
-      </p>
-    </div>
-  );
+  async function handleExportBackup(): Promise<void> {
+    if (typeof URL.createObjectURL !== "function") {
+      showToast("error", "Nao foi possivel exportar backup neste ambiente.");
+      return;
+    }
 
+    try {
+      const snapshot = {
+        exported_at: new Date().toISOString(),
+        selected_month: selectedMonth,
+        ...(await fetchBackupSnapshot()),
+      };
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+        type: "application/json",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `finances-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(objectUrl);
+      showToast("success", "Backup exportado com sucesso.");
+    } catch {
+      showToast("error", "Nao foi possivel exportar um backup completo.");
+    }
+  }
+
+  const activeMeta = VIEW_META[activeView];
   return (
     <AppShell
       activeView={activeView}
-      contextPanel={contextPanel}
       description={activeMeta.description}
       onNavigate={setActiveView}
-      onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+      onOpenCommandPalette={openCommandPalette}
+      onOpenQuickAdd={() => openQuickAdd()}
       title={activeMeta.title}
+      uiDensity={uiDensity}
     >
       <Suspense fallback={<ViewFallback activeView={activeView} />}>
         {activeView === "dashboard" ? (
           <DashboardView
             accounts={accounts}
+            cards={cards}
             dashboard={dashboard}
+            invoices={invoices}
             investmentOverview={investmentOverview}
             isSubmitting={isSubmitting}
             loading={isDataLoading}
@@ -465,20 +545,10 @@ export function App() {
             onMarkReimbursementReceived={handleMarkReimbursementReceived}
             onMonthChange={setSelectedMonth}
             onNavigate={setActiveView}
-            onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-            onUpsertBudget={handleUpsertCategoryBudget}
-            onUpdateTransaction={(transactionId, updates) => {
-              if (updates.description !== undefined) {
-                void runMutation(
-                  () =>
-                    updateTransaction(transactionId, {
-                      description: updates.description ?? "",
-                    }),
-                  "Descricao atualizada com sucesso.",
-                );
-              }
-            }}
+            onOpenLedgerFiltered={openLedgerWithFilters}
+            onOpenQuickAdd={() => openQuickAdd()}
             transactions={transactions}
+            uiDensity={uiDensity}
           />
         ) : null}
 
@@ -489,7 +559,9 @@ export function App() {
             isSubmitting={isSubmitting}
             loading={isDataLoading}
             onApplyFilters={handleApplyReportFilters}
+            onOpenLedgerFiltered={openLedgerWithFilters}
             summary={reportSummary}
+            uiDensity={uiDensity}
           />
         ) : null}
 
@@ -509,21 +581,24 @@ export function App() {
             onRangeChange={(nextFromDate, nextToDate) => {
               void handleInvestmentRangeChange(nextFromDate, nextToDate);
             }}
-            onCreateMovement={async (payload) => {
-              await handleCreateInvestmentMovement(payload);
-            }}
+            onOpenLedgerFiltered={openLedgerWithFilters}
+            onOpenQuickAdd={(preset) => openQuickAdd(preset)}
+            uiDensity={uiDensity}
           />
         ) : null}
 
         {activeView === "transactions" ? (
           <TransactionsView
             accounts={accounts}
+            cards={cards}
             filters={transactionFilters}
             isSubmitting={isSubmitting}
             onApplyFilters={handleApplyTransactionFilters}
+            onDensityChange={setUiDensity}
             onUpdateTransaction={handleUpdateTransaction}
             onVoidTransaction={handleVoidTransaction}
             transactions={transactions}
+            uiDensity={uiDensity}
           />
         ) : null}
 
@@ -532,6 +607,7 @@ export function App() {
             accounts={accounts}
             isSubmitting={isSubmitting}
             onCreateAccount={handleCreateAccount}
+            onOpenSettings={() => setActiveView("settings")}
             onUpdateAccount={handleUpdateAccount}
           />
         ) : null}
@@ -542,17 +618,28 @@ export function App() {
             cards={cards}
             invoices={invoices}
             isSubmitting={isSubmitting}
+            onOpenLedgerFiltered={openLedgerWithFilters}
+            onOpenQuickAdd={(preset, options) => openQuickAdd(preset, options)}
             onCreateCard={handleCreateCard}
             onCreateCardPurchase={handleCreateCardPurchase}
-            onPayInvoice={handlePayInvoice}
             onUpdateCard={handleUpdateCard}
+            uiDensity={uiDensity}
           />
         ) : null}
 
         {activeView === "settings" ? (
           <SettingsView
+            budgetMonth={dashboard?.month ?? selectedMonth}
+            categoryBudgets={dashboard?.category_budgets ?? []}
             isSubmitting={isSubmitting}
+            onOpenAccounts={() => setActiveView("accounts")}
+            onExportBackup={() => {
+              void handleExportBackup();
+            }}
+            onUiDensityChange={setUiDensity}
+            onUpsertCategoryBudget={handleUpsertCategoryBudget}
             onResetApplicationData={handleResetAllData}
+            uiDensity={uiDensity}
           />
         ) : null}
       </Suspense>
@@ -562,11 +649,26 @@ export function App() {
         toast={toast}
       />
 
+      <CommandPalette
+        open={isCommandPaletteOpen}
+        onOpenChange={setIsCommandPaletteOpen}
+        onNavigate={setActiveView}
+        onOpenQuickAdd={(preset) => {
+          openQuickAdd(preset);
+        }}
+      />
+
       {isQuickAddOpen ? (
         <Suspense fallback={null}>
           <QuickAddComposer
             isOpen={isQuickAddOpen}
-            onClose={() => setIsQuickAddOpen(false)}
+            onClose={() => {
+              setIsQuickAddOpen(false);
+              setQuickAddPreset(undefined);
+              setQuickAddInvoiceId(undefined);
+            }}
+            preset={quickAddPreset}
+            presetInvoiceId={quickAddInvoiceId}
             accounts={accounts}
             cards={cards}
             invoices={invoices}
@@ -606,6 +708,22 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
     );
   }
 
+  if (activeView === "accounts") {
+    return (
+      <section aria-label="Contas e saldos" className="panel-card">
+        <div className="h-5 w-48 rounded-full bg-slate-200 animate-pulse" aria-hidden="true" />
+      </section>
+    );
+  }
+
+  if (activeView === "transactions") {
+    return (
+      <section aria-label="Historico e filtros" className="panel-card">
+        <div className="h-5 w-56 rounded-full bg-slate-200 animate-pulse" aria-hidden="true" />
+      </section>
+    );
+  }
+
   return (
     <div className="rounded-[2rem] bg-white p-8 shadow-sm" aria-hidden="true">
       <div className="h-5 w-40 rounded-full bg-slate-200 animate-pulse" />
@@ -620,3 +738,16 @@ function getErrorMessage(error: unknown): string {
 
   return "Nao foi possivel concluir a operacao.";
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

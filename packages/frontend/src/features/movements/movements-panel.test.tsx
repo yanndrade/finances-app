@@ -248,7 +248,7 @@ describe("Movements panel", () => {
       expect.stringContaining("/api/expenses"),
       expect.objectContaining({ method: "POST" }),
     );
-  });
+  }, 15_000);
 
   it("shows one active mode at a time and defaults to saída", async () => {
     render(

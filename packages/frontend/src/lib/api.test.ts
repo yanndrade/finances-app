@@ -231,6 +231,27 @@ describe("api timestamp normalization", () => {
     );
   });
 
+  it("requests the dedicated backup snapshot endpoint", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          accounts: [],
+          cards: [],
+          invoices: [],
+          transactions: [],
+          investment_movements: [],
+          report_summary: null,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.fetchBackupSnapshot();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/backups/export");
+  });
+
   it("requests report summary with period and shared filters", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(
@@ -264,6 +285,7 @@ describe("api timestamp normalization", () => {
       to: "2026-04-30T23:59:59Z",
       category: "food",
       account: "acc-1",
+      card: "",
       method: "CASH",
       person: "alice",
       text: "Dinner",
@@ -314,3 +336,4 @@ describe("api timestamp normalization", () => {
     await expect(api.requestJson("/api/health")).resolves.toBeUndefined();
   });
 });
+

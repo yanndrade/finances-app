@@ -6,9 +6,12 @@ dist/
 target/
 coverage/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 *.log
+.worktrees/
 __pycache__/
 .pytest_cache/
 .mypy_cache/

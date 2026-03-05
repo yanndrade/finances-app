@@ -472,12 +472,18 @@ class Projector:
         *,
         occurred_from: str | None = None,
         occurred_to: str | None = None,
+        transaction_type: str | None = None,
         category_id: str | None = None,
         account_id: str | None = None,
+        card_id: str | None = None,
         payment_method: str | None = None,
         person_id: str | None = None,
         text: str | None = None,
+        include_ledger: bool = False,
     ) -> list[dict[str, str | int | None]]:
+        card_purchase_ledger_rows: list[dict[str, str | int | None]] = []
+        investment_ledger_rows: list[dict[str, str | int | None]] = []
+
         with self._lock:
             self.bootstrap()
             with self._session_factory() as session:
@@ -489,8 +495,10 @@ class Projector:
                     query = query.filter(TransactionProjectionRecord.occurred_at <= occurred_to)
                 query = self._apply_transaction_filters(
                     query,
+                    transaction_type=transaction_type,
                     category_id=category_id,
                     account_id=account_id,
+                    card_id=card_id,
                     payment_method=payment_method,
                     person_id=person_id,
                     text=text,
@@ -504,7 +512,33 @@ class Projector:
                     .all()
                 )
 
-        return [
+                if include_ledger:
+                    card_purchase_ledger_rows = self._list_card_purchases_for_ledger(
+                        session,
+                        occurred_from=occurred_from,
+                        occurred_to=occurred_to,
+                        transaction_type=transaction_type,
+                        category_id=category_id,
+                        account_id=account_id,
+                        card_id=card_id,
+                        payment_method=payment_method,
+                        person_id=person_id,
+                        text=text,
+                    )
+                    investment_ledger_rows = self._list_investment_movements_for_ledger(
+                        session,
+                        occurred_from=occurred_from,
+                        occurred_to=occurred_to,
+                        transaction_type=transaction_type,
+                        category_id=category_id,
+                        account_id=account_id,
+                        card_id=card_id,
+                        payment_method=payment_method,
+                        person_id=person_id,
+                        text=text,
+                    )
+
+        transactions = [
             TransactionProjection(
                 transaction_id=row.transaction_id,
                 occurred_at=row.occurred_at,
@@ -522,6 +556,29 @@ class Projector:
             for row in rows
         ]
 
+        if not include_ledger:
+            return transactions
+
+        ledger_transactions = transactions + card_purchase_ledger_rows + investment_ledger_rows
+        for item in ledger_transactions:
+            if item.get("ledger_event_type") is not None:
+                continue
+            (
+                item["ledger_event_type"],
+                item["ledger_source"],
+                item["ledger_destination"],
+            ) = self._ledger_projection_for_transaction(item)
+
+        ledger_transactions.sort(
+            key=lambda item: (
+                str(item.get("occurred_at") or ""),
+                str(item.get("transaction_id") or ""),
+            ),
+            reverse=True,
+        )
+
+        return ledger_transactions
+
     def get_report_summary(
         self,
         *,
@@ -529,6 +586,7 @@ class Projector:
         occurred_to: str,
         category_id: str | None = None,
         account_id: str | None = None,
+        card_id: str | None = None,
         payment_method: str | None = None,
         person_id: str | None = None,
         text: str | None = None,
@@ -546,6 +604,7 @@ class Projector:
                     transaction_query,
                     category_id=category_id,
                     account_id=account_id,
+                    card_id=card_id,
                     payment_method=payment_method,
                     person_id=person_id,
                     text=text,
@@ -563,6 +622,7 @@ class Projector:
                     due_to_timestamp=occurred_to,
                     category_id=category_id,
                     account_id=account_id,
+                    card_id=card_id,
                     payment_method=payment_method,
                     person_id=person_id,
                     text=text,
@@ -572,6 +632,7 @@ class Projector:
                     due_after_timestamp=occurred_to,
                     category_id=category_id,
                     account_id=account_id,
+                    card_id=card_id,
                     payment_method=payment_method,
                     person_id=person_id,
                     text=text,
@@ -2161,16 +2222,26 @@ class Projector:
         self,
         query: object,
         *,
+        transaction_type: str | None = None,
         category_id: str | None = None,
         account_id: str | None = None,
+        card_id: str | None = None,
         payment_method: str | None = None,
         person_id: str | None = None,
         text: str | None = None,
     ) -> object:
+        if transaction_type is not None:
+            query = query.filter(TransactionProjectionRecord.type == transaction_type)
         if category_id is not None:
             query = query.filter(TransactionProjectionRecord.category_id == category_id)
         if account_id is not None:
             query = query.filter(TransactionProjectionRecord.account_id == account_id)
+        if card_id is not None:
+            query = query.filter(
+                TransactionProjectionRecord.category_id == "invoice_payment"
+            ).filter(
+                TransactionProjectionRecord.description.ilike(f"%{card_id}%")
+            )
         if payment_method is not None:
             query = query.filter(
                 TransactionProjectionRecord.payment_method == payment_method
@@ -2196,6 +2267,7 @@ class Projector:
         due_after_timestamp: str | None = None,
         category_id: str | None = None,
         account_id: str | None = None,
+        card_id: str | None = None,
         payment_method: str | None = None,
         person_id: str | None = None,
         text: str | None = None,
@@ -2216,6 +2288,8 @@ class Projector:
             query = query.filter(due_timestamp > due_after_timestamp)
         if category_id is not None:
             query = query.filter(CardPurchaseInstallmentRecord.category_id == category_id)
+        if card_id is not None:
+            query = query.filter(CardPurchaseInstallmentRecord.card_id == card_id)
 
         if account_id is not None:
             query = query.join(
@@ -2255,6 +2329,187 @@ class Projector:
             )
             .all()
         )
+
+    def _list_card_purchases_for_ledger(
+        self,
+        session: Session,
+        *,
+        occurred_from: str | None = None,
+        occurred_to: str | None = None,
+        transaction_type: str | None = None,
+        category_id: str | None = None,
+        account_id: str | None = None,
+        card_id: str | None = None,
+        payment_method: str | None = None,
+        person_id: str | None = None,
+        text: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        if transaction_type is not None and transaction_type != "expense":
+            return []
+        if payment_method is not None and payment_method != "OTHER":
+            return []
+
+        query = session.query(
+            CardPurchaseProjectionRecord,
+            CardProjectionRecord.payment_account_id,
+        ).join(
+            CardProjectionRecord,
+            CardProjectionRecord.card_id == CardPurchaseProjectionRecord.card_id,
+        )
+        if occurred_from is not None:
+            query = query.filter(CardPurchaseProjectionRecord.purchase_date >= occurred_from)
+        if occurred_to is not None:
+            query = query.filter(CardPurchaseProjectionRecord.purchase_date <= occurred_to)
+        if category_id is not None:
+            query = query.filter(CardPurchaseProjectionRecord.category_id == category_id)
+        if card_id is not None:
+            query = query.filter(CardPurchaseProjectionRecord.card_id == card_id)
+        if account_id is not None:
+            query = query.filter(CardProjectionRecord.payment_account_id == account_id)
+        if person_id is not None:
+            query = query.join(
+                ReimbursementProjectionRecord,
+                and_(
+                    ReimbursementProjectionRecord.transaction_id
+                    == CardPurchaseProjectionRecord.purchase_id,
+                    ReimbursementProjectionRecord.person_id == person_id,
+                ),
+            )
+        if text is not None:
+            search = f"%{text}%"
+            query = query.filter(
+                or_(
+                    CardPurchaseProjectionRecord.description.ilike(search),
+                    CardPurchaseProjectionRecord.category_id.ilike(search),
+                    CardPurchaseProjectionRecord.card_id.ilike(search),
+                )
+            )
+
+        rows = (
+            query.order_by(
+                CardPurchaseProjectionRecord.purchase_date.desc(),
+                CardPurchaseProjectionRecord.purchase_id.desc(),
+            )
+            .all()
+        )
+
+        ledger_rows: list[dict[str, str | int | None]] = []
+        for purchase_row, payment_account_id in rows:
+            ledger_rows.append(
+                {
+                    "transaction_id": f"{purchase_row.purchase_id}:card-purchase",
+                    "occurred_at": purchase_row.purchase_date,
+                    "type": "expense",
+                    "amount": purchase_row.amount,
+                    "account_id": payment_account_id,
+                    "payment_method": "OTHER",
+                    "category_id": purchase_row.category_id,
+                    "description": purchase_row.description,
+                    "person_id": None,
+                    "status": "readonly",
+                    "ledger_event_type": "card_purchase",
+                    "ledger_source": f"card_liability:{purchase_row.card_id}",
+                    "ledger_destination": f"category:{purchase_row.category_id}",
+                }
+            )
+
+        return ledger_rows
+
+    def _list_investment_movements_for_ledger(
+        self,
+        session: Session,
+        *,
+        occurred_from: str | None = None,
+        occurred_to: str | None = None,
+        transaction_type: str | None = None,
+        category_id: str | None = None,
+        account_id: str | None = None,
+        card_id: str | None = None,
+        payment_method: str | None = None,
+        person_id: str | None = None,
+        text: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        if transaction_type is not None and transaction_type != "investment":
+            return []
+        if payment_method is not None and payment_method != "OTHER":
+            return []
+        if person_id is not None:
+            return []
+        if card_id is not None:
+            return []
+        if category_id is not None and category_id not in {
+            "investment_contribution",
+            "investment_withdrawal",
+        }:
+            return []
+
+        query = session.query(InvestmentMovementRecord)
+        if occurred_from is not None:
+            query = query.filter(InvestmentMovementRecord.occurred_at >= occurred_from)
+        if occurred_to is not None:
+            query = query.filter(InvestmentMovementRecord.occurred_at <= occurred_to)
+        if account_id is not None:
+            query = query.filter(InvestmentMovementRecord.account_id == account_id)
+        if category_id == "investment_contribution":
+            query = query.filter(InvestmentMovementRecord.type == "contribution")
+        if category_id == "investment_withdrawal":
+            query = query.filter(InvestmentMovementRecord.type == "withdrawal")
+        if text is not None:
+            search = f"%{text}%"
+            query = query.filter(
+                or_(
+                    InvestmentMovementRecord.description.ilike(search),
+                    InvestmentMovementRecord.type.ilike(search),
+                )
+            )
+
+        rows = (
+            query.order_by(
+                InvestmentMovementRecord.occurred_at.desc(),
+                InvestmentMovementRecord.movement_id.desc(),
+            )
+            .all()
+        )
+
+        ledger_rows: list[dict[str, str | int | None]] = []
+        for row in rows:
+            movement_category = (
+                "investment_contribution"
+                if row.type == "contribution"
+                else "investment_withdrawal"
+            )
+            amount = abs(row.cash_delta)
+            if row.type == "contribution":
+                ledger_source = f"account:{row.account_id}"
+                ledger_destination = f"investment_asset:{row.account_id}"
+            else:
+                ledger_source = f"investment_asset:{row.account_id}"
+                ledger_destination = f"account:{row.account_id}"
+
+            if text is not None and text.lower() not in movement_category.lower():
+                description = (row.description or "").lower()
+                if text.lower() not in description:
+                    continue
+
+            ledger_rows.append(
+                {
+                    "transaction_id": f"{row.movement_id}:investment",
+                    "occurred_at": row.occurred_at,
+                    "type": "investment",
+                    "amount": amount,
+                    "account_id": row.account_id,
+                    "payment_method": "OTHER",
+                    "category_id": movement_category,
+                    "description": row.description,
+                    "person_id": None,
+                    "status": "readonly",
+                    "ledger_event_type": movement_category,
+                    "ledger_source": ledger_source,
+                    "ledger_destination": ledger_destination,
+                }
+            )
+
+        return ledger_rows
 
     def _build_weekly_trend(
         self,
@@ -2586,6 +2841,60 @@ class Projector:
 
         return amount if transaction_type == "income" else -amount
 
+    def _ledger_projection_for_transaction(
+        self,
+        transaction: dict[str, str | int | None],
+    ) -> tuple[str, str, str]:
+        transaction_type = str(transaction.get("type") or "")
+        account_id = str(transaction.get("account_id") or "")
+        category_id = str(transaction.get("category_id") or "")
+        transfer_id = _optional_string(transaction.get("transfer_id"))
+        direction = _optional_string(transaction.get("direction"))
+        description = _optional_string(transaction.get("description"))
+        person_id = _optional_string(transaction.get("person_id"))
+
+        if transaction_type == "transfer":
+            ledger_transfer_id = transfer_id or str(transaction.get("transaction_id") or "unknown")
+            if direction == "credit":
+                return (
+                    "transfer_in",
+                    f"transfer:{ledger_transfer_id}",
+                    f"account:{account_id}",
+                )
+            return (
+                "transfer_out",
+                f"account:{account_id}",
+                f"transfer:{ledger_transfer_id}",
+            )
+
+        if transaction_type == "income":
+            if category_id == "reimbursement_received":
+                source = f"person:{person_id}" if person_id else "person:reembolso"
+                return ("reimbursement_received", source, f"account:{account_id}")
+            return ("income", f"category:{category_id}", f"account:{account_id}")
+
+        if transaction_type == "expense":
+            if category_id == "invoice_payment":
+                invoice_id = self._extract_invoice_identifier(description)
+                return (
+                    "invoice_payment",
+                    f"account:{account_id}",
+                    f"card_liability:{invoice_id}",
+                )
+            return ("expense", f"account:{account_id}", f"category:{category_id}")
+
+        return ("unknown", f"account:{account_id}", "unknown:unknown")
+
+    def _extract_invoice_identifier(self, description: str | None) -> str:
+        if description is None:
+            return "unknown"
+
+        marker = "Pagamento de fatura "
+        if marker in description:
+            return description.split(marker, maxsplit=1)[1].strip() or "unknown"
+
+        return "unknown"
+
     def _transaction_balance_impact(self, row: TransactionProjectionRecord) -> int:
         return self._signed_amount(
             transaction_type=row.type,
@@ -2612,3 +2921,13 @@ def _optional_string(value: object | None) -> str | None:
         return None
 
     return str(value)
+
+
+
+
+
+
+
+
+
+

@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AppShell } from "./app-shell";
@@ -56,6 +56,7 @@ function installMatchMedia(initialMatches: boolean): MatchMediaController {
 function renderShell(overrides?: Partial<ComponentProps<typeof AppShell>>) {
   const onNavigate = vi.fn<(view: AppView) => void>();
   const onOpenQuickAdd = vi.fn();
+  const onOpenCommandPalette = vi.fn();
 
   render(
     <AppShell
@@ -64,13 +65,15 @@ function renderShell(overrides?: Partial<ComponentProps<typeof AppShell>>) {
       description="Resumo mensal e atalhos."
       onNavigate={onNavigate}
       onOpenQuickAdd={onOpenQuickAdd}
+      onOpenCommandPalette={onOpenCommandPalette}
+      uiDensity="compact"
       {...overrides}
     >
       <section>Conteudo</section>
     </AppShell>,
   );
 
-  return { onNavigate, onOpenQuickAdd };
+  return { onNavigate, onOpenQuickAdd, onOpenCommandPalette };
 }
 
 describe("AppShell responsive behavior", () => {
@@ -96,7 +99,7 @@ describe("AppShell responsive behavior", () => {
     const mobileNav = screen.getByRole("navigation", { name: /navegacao mobile/i });
     expect(mobileNav).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /inicio/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /transacoes/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /historico/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cartoes/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /relatorios/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^contas$/i })).not.toBeInTheDocument();
@@ -135,5 +138,17 @@ describe("AppShell responsive behavior", () => {
       expect(screen.getByRole("navigation", { name: /navegacao mobile/i })).toBeInTheDocument();
       expect(onNavigate).toHaveBeenCalledWith("dashboard");
     });
+  });
+
+  it("routes keyboard shortcuts to quick add and command palette", async () => {
+    installMatchMedia(false);
+    const { onOpenQuickAdd, onOpenCommandPalette } = renderShell();
+
+    fireEvent.keyDown(window, { key: "n", ctrlKey: true });
+    expect(onOpenQuickAdd).toHaveBeenCalledTimes(1);
+    expect(onOpenCommandPalette).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(onOpenCommandPalette).toHaveBeenCalledTimes(1);
   });
 });

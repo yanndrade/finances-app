@@ -4,6 +4,7 @@ export type CategorySpending = {
 };
 
 export type ReportPeriod = "day" | "week" | "month" | "custom";
+export type TransactionTypeFilter = "income" | "expense" | "transfer" | "investment";
 
 export type InvestmentView = "daily" | "weekly" | "monthly" | "bimonthly" | "quarterly" | "yearly";
 
@@ -180,6 +181,9 @@ export type TransactionSummary = {
   status: string;
   transfer_id?: string;
   direction?: string;
+  ledger_event_type?: string;
+  ledger_source?: string;
+  ledger_destination?: string;
 };
 
 export type CashTransactionPayload = {
@@ -276,8 +280,10 @@ export type TransactionFilters = {
   reference?: string;
   from: string;
   to: string;
+  type?: TransactionTypeFilter;
   category: string;
   account: string;
+  card: string;
   method: "" | "PIX" | "CASH" | "OTHER";
   person: string;
   text: string;
@@ -290,6 +296,7 @@ export type ReportFilters = {
   to: string;
   category: string;
   account: string;
+  card: string;
   method: "" | "PIX" | "CASH" | "OTHER";
   person: string;
   text: string;
@@ -327,6 +334,15 @@ export type ReportSummary = {
   };
 };
 
+export type BackupSnapshot = {
+  accounts: AccountSummary[];
+  cards: CardSummary[];
+  invoices: InvoiceSummary[];
+  transactions: TransactionSummary[];
+  investment_movements: InvestmentMovementSummary[];
+  report_summary: ReportSummary | null;
+};
+
 export type TransactionUpdatePayload = {
   occurredAt: string;
   type: "income" | "expense";
@@ -360,6 +376,10 @@ export async function fetchDashboardSummary(month: string): Promise<DashboardSum
   return requestJson<DashboardSummary>(`/api/dashboard?month=${month}`);
 }
 
+export async function fetchBackupSnapshot(): Promise<BackupSnapshot> {
+  return requestJson<BackupSnapshot>("/api/backups/export");
+}
+
 export async function fetchAccounts(): Promise<AccountSummary[]> {
   return requestJson<AccountSummary[]>("/api/accounts");
 }
@@ -384,6 +404,7 @@ export async function fetchTransactions(
   filters?: Partial<TransactionFilters>,
 ): Promise<TransactionSummary[]> {
   const searchParams = new URLSearchParams();
+  searchParams.set("ledger", "true");
 
   if (filters?.from) {
     searchParams.set("from", filters.from);
@@ -391,11 +412,17 @@ export async function fetchTransactions(
   if (filters?.to) {
     searchParams.set("to", filters.to);
   }
+  if (filters?.type) {
+    searchParams.set("type", filters.type);
+  }
   if (filters?.category) {
     searchParams.set("category", filters.category);
   }
   if (filters?.account) {
     searchParams.set("account", filters.account);
+  }
+  if (filters?.card) {
+    searchParams.set("card", filters.card);
   }
   if (filters?.method) {
     searchParams.set("method", filters.method);
@@ -434,6 +461,9 @@ export async function fetchReportSummary(
   }
   if (filters.account) {
     searchParams.set("account", filters.account);
+  }
+  if (filters.card) {
+    searchParams.set("card", filters.card);
   }
   if (filters.method) {
     searchParams.set("method", filters.method);
@@ -768,3 +798,8 @@ export function normalizeTimestampForApi(
 
   throw new Error("Data da compra invalida.");
 }
+
+
+
+
+

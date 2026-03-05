@@ -340,6 +340,236 @@ def test_cash_transaction_list_supports_prd_filter_set(tmp_path) -> None:
     ]
 
 
+def test_cash_transaction_list_supports_ledger_projection_mode(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Savings", "savings", 50_00)
+
+    income_response = client.post(
+        "/api/incomes",
+        json={
+            "id": "tx-income",
+            "occurred_at": "2026-03-02T08:01:00Z",
+            "amount": 30_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "salary",
+            "description": "Salario",
+        },
+    )
+    assert income_response.status_code == 201
+
+    expense_response = client.post(
+        "/api/expenses",
+        json={
+            "id": "tx-expense",
+            "occurred_at": "2026-03-02T08:02:00Z",
+            "amount": 15_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Cafe",
+        },
+    )
+    assert expense_response.status_code == 201
+
+    transfer_response = client.post(
+        "/api/transfers",
+        json={
+            "id": "trf-1",
+            "occurred_at": "2026-03-02T08:03:00Z",
+            "from_account_id": "acc-1",
+            "to_account_id": "acc-2",
+            "amount": 10_00,
+            "description": "Reserva",
+        },
+    )
+    assert transfer_response.status_code == 201
+
+    response = client.get("/api/transactions", params={"ledger": "true"})
+    assert response.status_code == 200
+
+    by_id = {item["transaction_id"]: item for item in response.json()}
+
+    assert by_id["tx-income"]["ledger_event_type"] == "income"
+    assert by_id["tx-income"]["ledger_source"] == "category:salary"
+    assert by_id["tx-income"]["ledger_destination"] == "account:acc-1"
+
+    assert by_id["tx-expense"]["ledger_event_type"] == "expense"
+    assert by_id["tx-expense"]["ledger_source"] == "account:acc-1"
+    assert by_id["tx-expense"]["ledger_destination"] == "category:food"
+
+    assert by_id["trf-1:debit"]["ledger_event_type"] == "transfer_out"
+    assert by_id["trf-1:debit"]["ledger_source"] == "account:acc-1"
+    assert by_id["trf-1:debit"]["ledger_destination"] == "transfer:trf-1"
+
+    assert by_id["trf-1:credit"]["ledger_event_type"] == "transfer_in"
+    assert by_id["trf-1:credit"]["ledger_source"] == "transfer:trf-1"
+    assert by_id["trf-1:credit"]["ledger_destination"] == "account:acc-2"
+
+
+def test_transactions_ledger_mode_aggregates_card_purchases_and_investment_movements(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 200_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Blue Card",
+            "limit": 500_00,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-02T10:00:00Z",
+            "amount": 90_00,
+            "installments_count": 3,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Headphones",
+        },
+    )
+
+    investment_contribution_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "inv-1",
+            "occurred_at": "2026-03-02T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "description": "Aporte mensal",
+            "contribution_amount": 40_00,
+            "dividend_amount": 5_00,
+        },
+    )
+    assert investment_contribution_response.status_code == 201
+
+    investment_withdrawal_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "inv-2",
+            "occurred_at": "2026-03-03T09:30:00Z",
+            "type": "withdrawal",
+            "account_id": "acc-1",
+            "description": "Resgate parcial",
+            "cash_amount": 15_00,
+            "invested_amount": 15_00,
+        },
+    )
+    assert investment_withdrawal_response.status_code == 201
+
+    response = client.get("/api/transactions", params={"ledger": "true"})
+    assert response.status_code == 200
+
+    by_id = {item["transaction_id"]: item for item in response.json()}
+
+    assert by_id["purchase-1:card-purchase"] == {
+        "transaction_id": "purchase-1:card-purchase",
+        "occurred_at": "2026-03-02T10:00:00Z",
+        "type": "expense",
+        "amount": 90_00,
+        "account_id": "acc-1",
+        "payment_method": "OTHER",
+        "category_id": "electronics",
+        "description": "Headphones",
+        "person_id": None,
+        "status": "readonly",
+        "ledger_event_type": "card_purchase",
+        "ledger_source": "card_liability:card-1",
+        "ledger_destination": "category:electronics",
+    }
+
+    assert by_id["inv-1:investment"] == {
+        "transaction_id": "inv-1:investment",
+        "occurred_at": "2026-03-02T12:00:00Z",
+        "type": "investment",
+        "amount": 40_00,
+        "account_id": "acc-1",
+        "payment_method": "OTHER",
+        "category_id": "investment_contribution",
+        "description": "Aporte mensal",
+        "person_id": None,
+        "status": "readonly",
+        "ledger_event_type": "investment_contribution",
+        "ledger_source": "account:acc-1",
+        "ledger_destination": "investment_asset:acc-1",
+    }
+
+    assert by_id["inv-2:investment"] == {
+        "transaction_id": "inv-2:investment",
+        "occurred_at": "2026-03-03T09:30:00Z",
+        "type": "investment",
+        "amount": 15_00,
+        "account_id": "acc-1",
+        "payment_method": "OTHER",
+        "category_id": "investment_withdrawal",
+        "description": "Resgate parcial",
+        "person_id": None,
+        "status": "readonly",
+        "ledger_event_type": "investment_withdrawal",
+        "ledger_source": "investment_asset:acc-1",
+        "ledger_destination": "account:acc-1",
+    }
+
+    investment_only_response = client.get(
+        "/api/transactions",
+        params={"ledger": "true", "type": "investment"},
+    )
+    assert investment_only_response.status_code == 200
+    assert {
+        item["transaction_id"] for item in investment_only_response.json()
+    } == {"inv-1:investment", "inv-2:investment"}
+
+
+def test_transactions_endpoint_exposes_ledger_projection_contract_in_openapi(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    openapi_response = client.get("/openapi.json")
+    assert openapi_response.status_code == 200
+    openapi_payload = openapi_response.json()
+
+    transactions_get = openapi_payload["paths"]["/api/transactions"]["get"]
+    parameter_map = {
+        parameter["name"]: parameter for parameter in transactions_get["parameters"]
+    }
+    assert "ledger" in parameter_map
+    assert parameter_map["ledger"]["schema"]["type"] == "boolean"
+    assert "type" in parameter_map
+
+    response_schema = transactions_get["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]
+    assert response_schema["type"] == "array"
+
+    item_ref = response_schema["items"]["$ref"]
+    item_schema_name = item_ref.split("/")[-1]
+    item_schema = openapi_payload["components"]["schemas"][item_schema_name]
+    item_properties = item_schema["properties"]
+
+    assert "ledger_event_type" in item_properties
+    assert "ledger_source" in item_properties
+    assert "ledger_destination" in item_properties
+
+
 def test_cash_transaction_endpoints_require_existing_account_and_utc_timestamp(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
@@ -2123,6 +2353,84 @@ def test_reports_endpoint_respects_custom_subday_range_for_installments(tmp_path
     }
 
 
+def test_backup_export_endpoint_returns_full_unfiltered_snapshot(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 500_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-02-03T10:00:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 120_00,
+            "installments_count": 3,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Headphones",
+        },
+    )
+    movement_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "inv-1",
+            "occurred_at": "2026-01-15T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "description": "Brokerage transfer",
+            "contribution_amount": 50_00,
+            "dividend_amount": 0,
+            "cash_amount": 50_00,
+            "invested_amount": 50_00,
+        },
+    )
+
+    assert movement_response.status_code == 201
+
+    response = client.get("/api/backups/export")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["accounts"] == client.get("/api/accounts").json()
+    assert payload["cards"] == client.get("/api/cards").json()
+    assert payload["invoices"] == client.get("/api/invoices").json()
+    assert payload["investment_movements"] == client.get("/api/investments/movements").json()
+    assert payload["transactions"] == client.get("/api/transactions").json()
+    assert all("ledger_event_type" not in row for row in payload["transactions"])
+    assert payload["report_summary"] is not None
+    assert payload["report_summary"]["period"] == {
+        "type": "custom",
+        "from": "2026-02-03T10:00:00Z",
+        "to": "2026-03-15T12:00:00Z",
+    }
+
+
 def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
     tmp_path,
 ) -> None:
@@ -2546,3 +2854,6 @@ def _create_budget(client: TestClient, payload: dict[str, str | int]) -> None:
     response = client.post("/api/budgets", json=payload)
 
     assert response.status_code in (200, 201)
+
+
+

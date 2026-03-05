@@ -14,28 +14,33 @@ describe("styles", () => {
   it("defines finance theme tokens for semantic states and chart usage", () => {
     const styles = readFileSync(path.resolve(__dirname, "./styles.css"), "utf8");
 
-    expect(styles).toContain("--background: 0 0% 98%");
+    expect(styles).toContain("--background: 210 22% 96%");
     expect(styles).toContain("--surface: 0 0% 100%");
     expect(styles).toContain("--surface-elevated:");
-    expect(styles).toContain("--primary: 276 100% 20%");
-    expect(styles).toContain("--primary-accent: 280 52% 46%");
-    expect(styles).toContain("--primary-soft: 278 100% 87%");
+    expect(styles).toContain("--mica-base:");
+    expect(styles).toContain("--acrylic-surface:");
+    expect(styles).toContain("--smoke-overlay:");
+    expect(styles).toContain("--ledger-dense-background:");
+    expect(styles).toContain("--primary: 212 100% 32%");
+    expect(styles).toContain("--primary-accent: 210 100% 45%");
+    expect(styles).toContain("--primary-soft: 210 86% 90%");
     expect(styles).toContain("--success: 160 84% 39%");
     expect(styles).toContain("--warning: 38 92% 50%");
     expect(styles).toContain("--danger: 343 78% 50%");
     expect(styles).toContain("--finance-income: var(--success)");
     expect(styles).toContain("--finance-expense: var(--danger)");
-    expect(styles).toContain("--finance-transfer: 220 9% 46%");
+    expect(styles).toContain("--finance-transfer: 213 18% 42%");
     expect(styles).toContain("--chart-primary: var(--primary-accent)");
     expect(styles).toContain("--chart-income: var(--success)");
     expect(styles).toContain("--chart-expense: var(--danger)");
-    expect(styles).toContain("--radius: 1rem");
+    expect(styles).toContain("--radius: 0.75rem");
   });
 
   it("uses the chosen typography tokens and numeric alignment utilities", () => {
     const styles = readFileSync(path.resolve(__dirname, "./styles.css"), "utf8");
 
-    expect(styles).toContain('font-family: "Geist Sans", "Inter", "Segoe UI", sans-serif;');
+    expect(styles).toContain('font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", sans-serif;');
+    expect(styles).toContain('"Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", sans-serif');
 
     const moneyValue = cssBlock(styles, ".money-value");
     expect(moneyValue).toContain("font-variant-numeric: tabular-nums;");
@@ -53,5 +58,27 @@ describe("styles", () => {
     expect(chartTooltip).toContain("background: hsl(var(--surface));");
     expect(chartTooltip).toContain("border: 1px solid hsl(var(--border));");
     expect(chartTooltip).toContain("border-radius: 0.75rem;");
+  });
+
+  it("applies fluent materials for desktop shell and dense ledger readability", () => {
+    const styles = readFileSync(path.resolve(__dirname, "./styles.css"), "utf8");
+
+    const appLayout = cssBlock(styles, ".app-layout");
+    expect(appLayout).toContain("background: var(--mica-base);");
+
+    const drawer = cssBlock(styles, ".ledger-detail-drawer");
+    expect(drawer).toContain("background: var(--acrylic-surface);");
+
+    const denseTable = cssBlock(styles, ".table-shell--dense");
+    expect(denseTable).toContain("background: var(--ledger-dense-background);");
+
+    const modalOverlay = cssBlock(styles, ".modal-overlay");
+    expect(modalOverlay).toContain("background: var(--smoke-overlay);");
+
+    const modalContent = cssBlock(styles, ".modal-content");
+    expect(modalContent).toContain("background: var(--acrylic-surface);");
+
+    const toast = cssBlock(styles, ".app-toast");
+    expect(toast).toContain("background: var(--acrylic-surface);");
   });
 });

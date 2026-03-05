@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   AlertCircle,
   ArrowDownRight,
@@ -11,38 +11,52 @@ import {
 } from "lucide-react";
 import { Cell, Pie, PieChart } from "recharts";
 
+import type { QuickAddPreset } from "../../components/quick-add-composer";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Progress } from "../../components/ui/progress";
-import { CATEGORY_OPTIONS } from "../../lib/categories";
 import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
-import type { AccountSummary, DashboardSummary, InvestmentOverview } from "../../lib/api";
+import type {
+  AccountSummary,
+  CardSummary,
+  DashboardSummary,
+  InvestmentOverview,
+  InvoiceSummary,
+  TransactionFilters,
+} from "../../lib/api";
 import { formatCategoryName, formatCurrency } from "../../lib/format";
+import type { UiDensity } from "../../lib/ui-density";
+import { cn } from "../../lib/utils";
 
 type DashboardBentoProps = {
   dashboard: DashboardSummary;
   investmentOverview: InvestmentOverview | null;
   accounts: AccountSummary[];
+  cards: CardSummary[];
+  invoices: InvoiceSummary[];
   isSubmitting: boolean;
   onMarkReimbursementReceived: (transactionId: string) => Promise<void>;
-  onNavigate: (view: "transactions" | "investments") => void;
-  onOpenQuickAdd: () => void;
-  onUpsertBudget: (
-    month: string,
-    categoryId: string,
-    limitInCents: number,
-  ) => Promise<void>;
+  onNavigate: (view: "transactions" | "investments" | "cards" | "settings") => void;
+  onOpenLedgerFiltered: (
+    filters: Partial<TransactionFilters>,
+    month?: string,
+  ) => void;
+  onOpenQuickAdd: (preset?: QuickAddPreset) => void;
+  uiDensity: UiDensity;
 };
 
 export function DashboardBento({
   dashboard,
   investmentOverview,
   accounts: _accounts,
+  cards,
+  invoices,
   isSubmitting,
   onMarkReimbursementReceived,
   onNavigate,
+  onOpenLedgerFiltered,
   onOpenQuickAdd,
-  onUpsertBudget,
+  uiDensity,
 }: DashboardBentoProps) {
   const categoryComposition = dashboard.spending_by_category.slice(0, 5);
   const investmentMeta = investmentOverview?.goal.target ?? dashboard.total_income * 0.1;
@@ -70,36 +84,68 @@ export function DashboardBento({
   const pendingReimbursementsTotal = dashboard.pending_reimbursements_total ?? 0;
   const categoryBudgets = dashboard.category_budgets ?? [];
   const budgetAlerts = dashboard.budget_alerts ?? [];
-  const defaultBudgetCategory = useMemo(() => {
-    if (categoryBudgets.length > 0) {
-      return categoryBudgets[0].category_id;
-    }
-    return CATEGORY_OPTIONS[0]?.value ?? "";
-  }, [categoryBudgets]);
-  const [budgetCategoryId, setBudgetCategoryId] = useState(defaultBudgetCategory);
-  const [budgetLimitRaw, setBudgetLimitRaw] = useState("");
+  const cardNameById = useMemo(() => {
+    return new Map(cards.map((card) => [card.card_id, card.name]));
+  }, [cards]);
+  const upcomingInvoices = useMemo(() => {
+    return invoices
+      .filter((invoice) => invoice.status === "open" || invoice.status === "partial")
+      .sort((a, b) => a.due_date.localeCompare(b.due_date))
+      .slice(0, 5);
+  }, [invoices]);
 
-  async function handleBudgetSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const normalizedCategory = budgetCategoryId.trim();
-    const limitInCents = parseBudgetLimitToCents(budgetLimitRaw);
-    if (!normalizedCategory || limitInCents <= 0) {
+  const primaryBudgetAlert = budgetAlerts[0];
+  function handleOpenBudgetAlerts() {
+    if (primaryBudgetAlert) {
+      onOpenLedgerFiltered(
+        {
+          period: "month",
+          reference: `${primaryBudgetAlert.month}-01`,
+          category: primaryBudgetAlert.category_id,
+          text: formatCategoryName(primaryBudgetAlert.category_id),
+        },
+        primaryBudgetAlert.month,
+      );
       return;
     }
 
-    await onUpsertBudget(dashboard.month, normalizedCategory, limitInCents);
-    setBudgetLimitRaw("");
+    onNavigate("transactions");
+  }
+
+  function handleOpenReviewQueueItem(transaction: DashboardSummary["review_queue"][number]) {
+    const searchText =
+      transaction.description?.trim() || formatCategoryName(transaction.category_id);
+
+    onOpenLedgerFiltered(
+      {
+        period: "month",
+        text: searchText,
+      },
+      dashboard.month,
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+    <div
+      className={cn(
+        "space-y-6",
+        uiDensity === "compact" && "space-y-5",
+        uiDensity === "dense" && "space-y-4",
+      )}
+    >
+      <div
+        className={cn(
+          "grid grid-cols-1 md:grid-cols-4",
+          uiDensity === "dense" ? "gap-4" : "gap-6",
+        )}
+      >
         <KpiCard
           title={"Entradas do m\u00EAs"}
           value={dashboard.total_income}
           trend="up"
           color="text-emerald-600"
           bgColor="bg-emerald-50"
+          uiDensity={uiDensity}
         />
         <KpiCard
           title={"Sa\u00EDdas do m\u00EAs"}
@@ -107,6 +153,7 @@ export function DashboardBento({
           trend="down"
           color="text-rose-600"
           bgColor="bg-rose-50"
+          uiDensity={uiDensity}
         />
         <KpiCard
           title="Saldo consolidado"
@@ -114,11 +161,20 @@ export function DashboardBento({
           icon={<Wallet className="h-5 w-5 text-primary" />}
           color="text-slate-900"
           bgColor="bg-primary/5"
+          uiDensity={uiDensity}
+        />
+        <KpiCard
+          title="Resultado do mes"
+          value={dashboard.net_flow}
+          trend={dashboard.net_flow >= 0 ? "up" : "down"}
+          color={dashboard.net_flow >= 0 ? "text-emerald-700" : "text-rose-700"}
+          bgColor={dashboard.net_flow >= 0 ? "bg-emerald-50" : "bg-rose-50"}
+          uiDensity={uiDensity}
         />
       </div>
 
-      <Card className="rounded-[2rem] border-none bg-white shadow-sm">
-        <CardHeader className="pb-3">
+      <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" && "rounded-[1.6rem]")}>
+        <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="rounded-xl bg-amber-100 p-2">
@@ -131,7 +187,7 @@ export function DashboardBento({
             </span>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className={cn(uiDensity === "dense" ? "space-y-2.5 px-5 pb-5 pt-0" : uiDensity === "compact" ? "space-y-3 px-5 pb-5 pt-0" : "space-y-3")}>
           {pendingReimbursements.length === 0 ? (
             <p className="text-sm italic text-muted-foreground">
               Nenhum valor pendente para receber no momento.
@@ -165,8 +221,55 @@ export function DashboardBento({
         </CardContent>
       </Card>
 
-      <Card className={`rounded-[2rem] border-none bg-white shadow-sm ${chartClassNames.surface}`}>
-        <CardHeader className="pb-3">
+      <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" && "rounded-[1.6rem]")}>
+        <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-indigo-100 p-2">
+                <AlertCircle className="h-5 w-5 text-indigo-700" />
+              </div>
+              <CardTitle className="text-lg font-semibold">Proximos eventos</CardTitle>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onNavigate("cards")}
+              className="rounded-xl text-primary hover:bg-primary/5 hover:text-primary/80"
+            >
+              Abrir cartoes
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className={cn(uiDensity === "dense" ? "space-y-2.5 px-5 pb-5 pt-0" : uiDensity === "compact" ? "space-y-3 px-5 pb-5 pt-0" : "space-y-3")}>
+          {upcomingInvoices.length === 0 ? (
+            <p className="text-sm italic text-muted-foreground">
+              Nenhum vencimento aberto para os proximos dias.
+            </p>
+          ) : (
+            upcomingInvoices.map((invoice) => (
+              <div
+                key={invoice.invoice_id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-indigo-900">
+                    {cardNameById.get(invoice.card_id) ?? invoice.card_id}
+                  </p>
+                  <p className="text-xs text-indigo-700">
+                    vence em {invoice.due_date}
+                  </p>
+                </div>
+                <span className="money-value text-sm font-bold text-indigo-800">
+                  {formatCurrency(invoice.remaining_amount)}
+                </span>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className={cn("finance-card finance-card--strong", chartClassNames.surface, uiDensity === "dense" && "rounded-[1.6rem]")}>
+        <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="rounded-xl bg-rose-100 p-2">
@@ -185,50 +288,25 @@ export function DashboardBento({
                 ? `${budgetAlerts.length} alerta(s)`
                 : "Sem alertas"}
             </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleOpenBudgetAlerts}
+              className="rounded-xl text-primary hover:bg-primary/5 hover:text-primary/80"
+            >
+              Ver categorias em alerta
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onNavigate("settings")}
+              className="rounded-xl text-primary hover:bg-primary/5 hover:text-primary/80"
+            >
+              Ajustar limites em configuracoes
+            </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <form
-            className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,10rem)_auto]"
-            onSubmit={(event) => {
-              void handleBudgetSubmit(event);
-            }}
-          >
-            <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-              Categoria
-              <select
-                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                value={budgetCategoryId}
-                onChange={(event) => setBudgetCategoryId(event.target.value)}
-              >
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-              Limite mensal
-              <input
-                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                inputMode="numeric"
-                onChange={(event) => setBudgetLimitRaw(event.target.value)}
-                placeholder="Ex: 12000"
-                value={budgetLimitRaw}
-              />
-            </label>
-
-            <Button
-              className="h-10 self-end rounded-xl bg-primary px-5 text-primary-foreground hover:bg-primary/90"
-              disabled={isSubmitting}
-              type="submit"
-            >
-              Salvar limite
-            </Button>
-          </form>
-
+        <CardContent className={cn(uiDensity === "dense" ? "space-y-4 px-5 pb-5 pt-0" : uiDensity === "compact" ? "space-y-5 px-5 pb-5 pt-0" : "space-y-5")}>
           {categoryBudgets.length > 0 ? (
             <div className="space-y-3">
               {categoryBudgets.map((budget) => {
@@ -273,9 +351,9 @@ export function DashboardBento({
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <Card className={`overflow-hidden rounded-[2rem] border-none bg-white shadow-sm lg:col-span-4 ${chartClassNames.surface}`}>
-          <CardHeader className="pb-2">
+      <div className={cn("grid grid-cols-1 lg:grid-cols-12", uiDensity === "dense" ? "gap-4" : "gap-6")}>
+        <Card className={cn("finance-card finance-card--strong overflow-hidden lg:col-span-4", chartClassNames.surface, uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-[2rem]")}>
+          <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : "pb-2")}>
             <div className="flex items-center gap-2">
               <div className="rounded-xl bg-primary/10 p-2">
                 <Target className="h-5 w-5 text-primary" />
@@ -283,7 +361,7 @@ export function DashboardBento({
               <CardTitle className="text-lg font-semibold">Meta investimento 10%</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="flex flex-col items-center justify-center py-6 text-center">
+          <CardContent className={cn("flex flex-col items-center justify-center text-center", uiDensity === "dense" ? "px-5 py-5 pt-0" : uiDensity === "compact" ? "px-5 py-6 pt-0" : "py-6")}>
             <div className="relative mb-6 h-40 w-40">
               <PieChart width={160} height={160}>
                 <Pie
@@ -324,7 +402,7 @@ export function DashboardBento({
             </div>
 
             <Button
-              onClick={onOpenQuickAdd}
+              onClick={() => onOpenQuickAdd("investment_contribution")}
               className="h-auto w-full rounded-2xl bg-primary py-6 font-semibold text-primary-foreground hover:bg-primary/90"
             >
               Registrar aporte agora
@@ -339,7 +417,7 @@ export function DashboardBento({
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2rem] border-none bg-white shadow-sm lg:col-span-8">
+        <Card className={cn("finance-card finance-card--strong lg:col-span-8", uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-[2rem]")}>
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -489,7 +567,7 @@ export function DashboardBento({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => onNavigate("transactions")}
+                          onClick={() => handleOpenReviewQueueItem(transaction)}
                           className="rounded-lg text-amber-700 hover:bg-amber-100"
                         >
                           Resolver
@@ -523,6 +601,7 @@ function KpiCard({
   trend,
   color,
   bgColor,
+  uiDensity,
 }: {
   title: string;
   value: number;
@@ -530,10 +609,16 @@ function KpiCard({
   trend?: "up" | "down";
   color: string;
   bgColor: string;
+  uiDensity: UiDensity;
 }) {
   return (
-      <Card className="overflow-hidden rounded-[2.2rem] border-none bg-white shadow-sm">
-      <CardContent className="p-7">
+    <Card
+      className={cn(
+        "finance-card finance-card--strong overflow-hidden rounded-[2.2rem]",
+        uiDensity === "dense" && "rounded-[1.6rem]",
+      )}
+    >
+      <CardContent className={cn(uiDensity === "dense" ? "p-5" : uiDensity === "compact" ? "p-6" : "p-7")}>
         <div className="mb-4 flex items-start justify-between">
           <div className={`rounded-2xl p-3 ${bgColor}`}>
             {icon ||
@@ -556,12 +641,4 @@ function KpiCard({
       </CardContent>
     </Card>
   );
-}
-
-function parseBudgetLimitToCents(rawValue: string): number {
-  const digitsOnly = rawValue.replace(/\D/g, "");
-  if (!digitsOnly) {
-    return 0;
-  }
-  return parseInt(digitsOnly, 10);
 }

@@ -62,24 +62,26 @@ describe("InvestmentsView", () => {
             ],
           },
         }}
-        onCreateMovement={async () => {}}
+        onOpenLedgerFiltered={() => {}}
+        onOpenQuickAdd={() => {}}
         onRangeChange={() => {}}
         onViewChange={() => {}}
         view="monthly"
         fromDate="2026-03-01"
         toDate="2026-03-31"
+        uiDensity="compact"
       />,
     );
 
     expect(screen.getByRole("heading", { name: /evolu..o do patrim.nio/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /aporte/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /dividendos/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /registrar aporte/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /registrar resgate/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /novo aporte/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /novo resgate/i })).toBeInTheDocument();
   });
 
-  it("keeps the selected calendar date when submitting contribution movement", async () => {
-    const onCreateMovement = vi.fn(async () => {});
+  it("opens quick add contribution preset when using investment cta", async () => {
+    const onOpenQuickAdd = vi.fn();
 
     render(
       <InvestmentsView
@@ -88,28 +90,56 @@ describe("InvestmentsView", () => {
         isSubmitting={false}
         movements={[]}
         overview={null}
-        onCreateMovement={onCreateMovement}
+        onOpenLedgerFiltered={() => {}}
+        onOpenQuickAdd={onOpenQuickAdd}
         onRangeChange={() => {}}
         onViewChange={() => {}}
         view="monthly"
         fromDate="2026-03-01"
         toDate="2026-03-31"
+        uiDensity="compact"
       />,
     );
 
-    await userEvent.clear(screen.getAllByLabelText(/data/i)[0]);
-    await userEvent.type(screen.getAllByLabelText(/data/i)[0], "2026-03-10");
-    await userEvent.type(screen.getByLabelText(/valor do aporte/i), "1000");
-    await userEvent.click(screen.getByRole("button", { name: /salvar aporte/i }));
+    await userEvent.click(screen.getByRole("button", { name: /novo aporte/i }));
 
-    expect(onCreateMovement).toHaveBeenCalledWith(
-      expect.objectContaining({
-        occurredAt: "2026-03-10T12:00:00Z",
-      }),
-    );
+    expect(onOpenQuickAdd).toHaveBeenCalledWith("investment_contribution");
   });
 
-  it("shows only non-investment accounts in investment movement forms", () => {
+
+  it("opens the filtered ledger shortcut with the investment type filter", async () => {
+    const onOpenLedgerFiltered = vi.fn();
+
+    render(
+      <InvestmentsView
+        accounts={[buildAccount()]}
+        loading={false}
+        isSubmitting={false}
+        movements={[]}
+        overview={null}
+        onOpenLedgerFiltered={onOpenLedgerFiltered}
+        onOpenQuickAdd={() => {}}
+        onRangeChange={() => {}}
+        onViewChange={() => {}}
+        view="monthly"
+        fromDate="2026-03-01"
+        toDate="2026-03-31"
+        uiDensity="compact"
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /abrir ledger filtrado/i }));
+
+    expect(onOpenLedgerFiltered).toHaveBeenCalledWith(
+      expect.objectContaining({
+        period: "custom",
+        from: "2026-03-01",
+        to: "2026-03-31",
+        type: "investment",
+      }),
+      "2026-03",
+    );
+  });  it("disables investment quick actions when no movement account is available", () => {
     render(
       <InvestmentsView
         accounts={[
@@ -118,30 +148,29 @@ describe("InvestmentsView", () => {
             name: "Conta investimento",
             type: "investment",
           }),
-          buildAccount({
-            account_id: "acc-wallet",
-            name: "Conta principal",
-            type: "wallet",
-          }),
         ]}
         loading={false}
         isSubmitting={false}
         movements={[]}
         overview={null}
-        onCreateMovement={async () => {}}
+        onOpenLedgerFiltered={() => {}}
+        onOpenQuickAdd={() => {}}
         onRangeChange={() => {}}
         onViewChange={() => {}}
         view="monthly"
         fromDate="2026-03-01"
         toDate="2026-03-31"
+        uiDensity="compact"
       />,
     );
 
-    const contributionAccount = screen.getByLabelText(/conta origem/i);
-    const withdrawalAccount = screen.getByLabelText(/conta destino/i);
-
-    expect(contributionAccount).toHaveValue("acc-wallet");
-    expect(withdrawalAccount).toHaveValue("acc-wallet");
-    expect(screen.queryAllByRole("option", { name: /conta investimento/i })).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /novo aporte/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /novo resgate/i })).toBeDisabled();
+    expect(
+      screen.getByText(/cadastre uma conta de caixa para registrar aportes e resgates/i),
+    ).toBeInTheDocument();
   });
 });
+
+
+

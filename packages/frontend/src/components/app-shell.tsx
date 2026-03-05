@@ -3,6 +3,8 @@ import { Plus } from "lucide-react";
 
 import { MOBILE_NAV_ITEMS, Sidebar, isMobileEssentialView, type AppView } from "./sidebar";
 import { Button } from "./ui/button";
+import { cn } from "../lib/utils";
+import type { UiDensity } from "../lib/ui-density";
 
 type AppShellProps = {
   activeView: AppView;
@@ -12,7 +14,9 @@ type AppShellProps = {
   contextPanel?: ReactNode;
   onNavigate: (view: AppView) => void;
   onOpenQuickAdd?: () => void;
+  onOpenCommandPalette?: () => void;
   children: ReactNode;
+  uiDensity: UiDensity;
 };
 
 const MOBILE_QUERY = "(max-width: 900px)";
@@ -25,22 +29,37 @@ export function AppShell({
   contextPanel,
   onNavigate,
   onOpenQuickAdd,
+  onOpenCommandPalette,
   children,
+  uiDensity,
 }: AppShellProps) {
   const isMobile = useMediaQuery(MOBILE_QUERY);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && (event.key === "k" || event.key === "n")) {
+      const isShortcut = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+
+      if (!isShortcut) {
+        return;
+      }
+
+      if (key === "n") {
         event.preventDefault();
         onOpenQuickAdd?.();
+        return;
+      }
+
+      if (key === "k") {
+        event.preventDefault();
+        (onOpenCommandPalette ?? onOpenQuickAdd)?.();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onOpenQuickAdd]);
+  }, [onOpenCommandPalette, onOpenQuickAdd]);
 
   useEffect(() => {
     if (!isMobile || isMobileEssentialView(activeView)) {
@@ -52,7 +71,7 @@ export function AppShell({
 
   if (isMobile) {
     return (
-      <div className="app-layout app-layout--mobile">
+      <div className={`app-layout app-layout--mobile ui-density--${uiDensity}`}>
         <main className="app-main app-main--mobile">
           <header className="page-header page-header--mobile">
             <div>
@@ -100,7 +119,7 @@ export function AppShell({
   }
 
   return (
-    <div className="app-layout app-layout--desktop">
+    <div className={`app-layout app-layout--desktop ui-density--${uiDensity}`}>
       <Sidebar activeView={activeView} onNavigate={onNavigate} />
 
       <div className="app-workspace">
@@ -116,7 +135,14 @@ export function AppShell({
               {onOpenQuickAdd ? (
                 <Button
                   onClick={onOpenQuickAdd}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 font-black tracking-[-0.01em] shadow-md px-5 py-6 rounded-2xl"
+                  className={cn(
+                    "bg-primary text-primary-foreground hover:bg-primary/90 font-black tracking-[-0.01em] shadow-md rounded-2xl",
+                    uiDensity === "dense"
+                      ? "px-4 py-5"
+                      : uiDensity === "compact"
+                        ? "px-5 py-5"
+                        : "px-5 py-6",
+                  )}
                 >
                   <Plus className="mr-2 h-5 w-5" />
                   + Lancar

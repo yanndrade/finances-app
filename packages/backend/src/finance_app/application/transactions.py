@@ -67,6 +67,7 @@ class TransactionProjector(Protocol):
         occurred_to: str,
         category_id: str | None = None,
         account_id: str | None = None,
+        card_id: str | None = None,
         payment_method: str | None = None,
         person_id: str | None = None,
         text: str | None = None,
@@ -76,11 +77,14 @@ class TransactionProjector(Protocol):
         *,
         occurred_from: str | None = None,
         occurred_to: str | None = None,
+        transaction_type: str | None = None,
         category_id: str | None = None,
         account_id: str | None = None,
+        card_id: str | None = None,
         payment_method: str | None = None,
         person_id: str | None = None,
         text: str | None = None,
+        include_ledger: bool = False,
     ) -> list[dict[str, str | int | None]]: ...
 
 
@@ -104,11 +108,14 @@ class TransactionService:
         *,
         occurred_from: str | None = None,
         occurred_to: str | None = None,
+        transaction_type: str | None = None,
         category_id: str | None = None,
         account_id: str | None = None,
+        card_id: str | None = None,
         payment_method: str | None = None,
         person_id: str | None = None,
         text: str | None = None,
+        include_ledger: bool = False,
     ) -> list[dict[str, str | int | None]]:
         self._sync_projections()
 
@@ -122,11 +129,14 @@ class TransactionService:
         return self._projector.list_transactions(
             occurred_from=occurred_from,
             occurred_to=occurred_to,
+            transaction_type=transaction_type,
             category_id=category_id,
             account_id=account_id,
+            card_id=card_id,
             payment_method=payment_method,
             person_id=person_id,
             text=text,
+            include_ledger=include_ledger,
         )
 
     def get_dashboard_summary(self, *, month: str) -> dict[str, object]:
@@ -142,6 +152,7 @@ class TransactionService:
         occurred_to: str | None = None,
         category_id: str | None = None,
         account_id: str | None = None,
+        card_id: str | None = None,
         payment_method: str | None = None,
         person_id: str | None = None,
         text: str | None = None,
@@ -179,6 +190,7 @@ class TransactionService:
             occurred_to=resolved_to,
             category_id=category_id,
             account_id=account_id,
+            card_id=card_id,
             payment_method=payment_method,
             person_id=person_id,
             text=text,
@@ -513,3 +525,6 @@ class TransactionService:
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+

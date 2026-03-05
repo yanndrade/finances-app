@@ -48,6 +48,7 @@ export function formatTransactionType(transactionType: string): string {
     income: "Entrada",
     expense: "Sa\u00EDda",
     transfer: "Transfer\u00EAncia",
+    investment: "Investimento",
   };
 
   return labels[transactionType] ?? transactionType;
@@ -67,6 +68,7 @@ export function formatTransactionStatus(status: string): string {
   const labels: Record<string, string> = {
     active: "Efetivada",
     voided: "Estornada",
+    readonly: "Somente leitura",
   };
 
   return labels[status] ?? status;
@@ -113,6 +115,8 @@ export function formatCategoryName(categoryId: string): string {
     freelance: "Freelance",
     transfer: "Transfer\u00EAncia",
     invoice_payment: "Pagamento de fatura",
+    investment_contribution: "Aporte em investimento",
+    investment_withdrawal: "Resgate de investimento",
     other: "Outros",
   };
 

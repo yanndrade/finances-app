@@ -112,6 +112,15 @@ function installMatchMedia(initialMatches: boolean): MatchMediaController {
 }
 
 function renderComposer(options?: {
+  preset?:
+    | "expense"
+    | "income"
+    | "transfer_internal"
+    | "transfer_invoice_payment"
+    | "investment_contribution"
+    | "investment_withdrawal"
+    | "expense_card";
+  presetInvoiceId?: string;
   invoices?: Array<{
     invoice_id: string;
     card_id: string;
@@ -138,6 +147,8 @@ function renderComposer(options?: {
       accounts={ACCOUNTS}
       cards={CARDS}
       invoices={options?.invoices ?? []}
+      preset={options?.preset}
+      presetInvoiceId={options?.presetInvoiceId}
       onSubmitTransaction={onSubmitTransaction}
       onSubmitTransfer={onSubmitTransfer}
       onSubmitCardPurchase={onSubmitCardPurchase}
@@ -198,7 +209,73 @@ describe("QuickAddComposer", () => {
     expect(screen.getByText(/selecione uma fatura em aberto/i)).toBeInTheDocument();
   });
 
-  it("does not submit when Enter is pressed on a select control", async () => {
+  it("applies transfer invoice payment preset on open", async () => {
+    installMatchMedia(false);
+
+    renderComposer({
+      preset: "transfer_invoice_payment",
+      invoices: [
+        {
+          invoice_id: "invoice-1",
+          card_id: "card-1",
+          reference_month: "2026-03",
+          closing_date: "2026-03-10",
+          due_date: "2026-03-20",
+          total_amount: 10_000,
+          paid_amount: 0,
+          remaining_amount: 10_000,
+          purchase_count: 1,
+          status: "open",
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/modo da transferencia/i)).toHaveValue("invoice_payment");
+    });
+    expect(screen.getByLabelText(/tipo/i)).toHaveValue("transfer");
+    expect(screen.getByLabelText(/fatura/i)).toBeInTheDocument();
+  });
+
+
+  it("keeps the selected invoice when opening the invoice payment preset", async () => {
+    installMatchMedia(false);
+
+    renderComposer({
+      preset: "transfer_invoice_payment",
+      presetInvoiceId: "invoice-2",
+      invoices: [
+        {
+          invoice_id: "invoice-1",
+          card_id: "card-1",
+          reference_month: "2026-03",
+          closing_date: "2026-03-10",
+          due_date: "2026-03-20",
+          total_amount: 10_000,
+          paid_amount: 0,
+          remaining_amount: 10_000,
+          purchase_count: 1,
+          status: "open",
+        },
+        {
+          invoice_id: "invoice-2",
+          card_id: "card-1",
+          reference_month: "2026-04",
+          closing_date: "2026-04-10",
+          due_date: "2026-04-20",
+          total_amount: 20_000,
+          paid_amount: 0,
+          remaining_amount: 20_000,
+          purchase_count: 2,
+          status: "open",
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/fatura/i)).toHaveValue("invoice-2");
+    });
+  });  it("does not submit when Enter is pressed on a select control", async () => {
     installMatchMedia(false);
     const user = userEvent.setup();
     const { onSubmitTransaction } = renderComposer();
@@ -234,3 +311,6 @@ describe("QuickAddComposer", () => {
     });
   });
 });
+
+
+
