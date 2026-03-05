@@ -7,6 +7,9 @@ export default {
   ],
   theme: {
   	extend: {
+      fontFamily: {
+        sans: ['"Geist Sans"', '"Inter"', '"Segoe UI"', "sans-serif"],
+      },
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
@@ -43,15 +46,40 @@ export default {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'
   			},
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          foreground: 'hsl(var(--foreground))',
+        },
+        danger: {
+          DEFAULT: 'hsl(var(--danger))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        surface: {
+          DEFAULT: 'hsl(var(--surface))',
+          elevated: 'hsl(var(--surface-elevated))',
+        },
+        finance: {
+          income: 'hsl(var(--finance-income))',
+          expense: 'hsl(var(--finance-expense))',
+          transfer: 'hsl(var(--finance-transfer))',
+        },
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
   			chart: {
-  				'1': 'hsl(var(--chart-1))',
-  				'2': 'hsl(var(--chart-2))',
-  				'3': 'hsl(var(--chart-3))',
-  				'4': 'hsl(var(--chart-4))',
-  				'5': 'hsl(var(--chart-5))'
+          primary: 'hsl(var(--chart-primary))',
+          income: 'hsl(var(--chart-income))',
+          expense: 'hsl(var(--chart-expense))',
+          transfer: 'hsl(var(--chart-transfer))',
+          '1': 'hsl(var(--chart-primary))',
+          '2': 'hsl(var(--chart-income))',
+          '3': 'hsl(var(--chart-expense))',
+          '4': 'hsl(var(--chart-transfer))',
+          '5': 'hsl(var(--primary-soft))'
   			}
   		},
   		keyframes: {

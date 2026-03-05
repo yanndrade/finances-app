@@ -15,6 +15,7 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Progress } from "../../components/ui/progress";
 import { CATEGORY_OPTIONS } from "../../lib/categories";
+import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
 import type { AccountSummary, DashboardSummary, InvestmentOverview } from "../../lib/api";
 import { formatCategoryName, formatCurrency } from "../../lib/format";
 
@@ -59,11 +60,11 @@ export function DashboardBento({
   const compositionTotal =
     categoryComposition.reduce((sum, category) => sum + category.total, 0) || 1;
   const categoryColors = [
-    "hsl(var(--primary))",
-    "hsl(24 95% 53%)",
-    "hsl(173 58% 39%)",
-    "hsl(221 83% 53%)",
-    "hsl(348 83% 47%)",
+    CHART_THEME.primary,
+    CHART_THEME.income,
+    CHART_THEME.transfer,
+    "hsl(var(--warning))",
+    CHART_THEME.expense,
   ];
   const pendingReimbursements = dashboard.pending_reimbursements ?? [];
   const pendingReimbursementsTotal = dashboard.pending_reimbursements_total ?? 0;
@@ -125,7 +126,7 @@ export function DashboardBento({
               </div>
               <CardTitle className="text-lg font-semibold">Reembolsos pendentes</CardTitle>
             </div>
-            <span className="text-sm font-bold text-amber-700">
+            <span className="money-value text-sm font-bold text-amber-700">
               {formatCurrency(pendingReimbursementsTotal)}
             </span>
           </div>
@@ -164,7 +165,7 @@ export function DashboardBento({
         </CardContent>
       </Card>
 
-      <Card className="rounded-[2rem] border-none bg-white shadow-sm">
+      <Card className={`rounded-[2rem] border-none bg-white shadow-sm ${chartClassNames.surface}`}>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -273,7 +274,7 @@ export function DashboardBento({
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <Card className="overflow-hidden rounded-[2rem] border-none bg-white shadow-sm lg:col-span-4">
+        <Card className={`overflow-hidden rounded-[2rem] border-none bg-white shadow-sm lg:col-span-4 ${chartClassNames.surface}`}>
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <div className="rounded-xl bg-primary/10 p-2">
@@ -304,7 +305,7 @@ export function DashboardBento({
                 </Pie>
               </PieChart>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-bold text-primary">{metaProgress.toFixed(0)}%</span>
+                <span className="money-value text-3xl font-bold text-primary">{metaProgress.toFixed(0)}%</span>
                 <span className="text-xs font-medium text-muted-foreground">do objetivo</span>
               </div>
             </div>
@@ -531,7 +532,7 @@ function KpiCard({
   bgColor: string;
 }) {
   return (
-    <Card className="overflow-hidden rounded-[2.2rem] border-none bg-white shadow-sm">
+      <Card className="overflow-hidden rounded-[2.2rem] border-none bg-white shadow-sm">
       <CardContent className="p-7">
         <div className="mb-4 flex items-start justify-between">
           <div className={`rounded-2xl p-3 ${bgColor}`}>
@@ -550,7 +551,7 @@ function KpiCard({
         </div>
         <div className="space-y-1">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className={`text-2xl font-bold ${color}`}>{formatCurrency(value)}</p>
+          <p className={`money-value text-2xl font-bold ${color}`}>{formatCurrency(value)}</p>
         </div>
       </CardContent>
     </Card>

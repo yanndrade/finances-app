@@ -148,10 +148,10 @@ export function DashboardAction({
                     <strong
                       className={
                         transaction.type === "income"
-                          ? "text-positive"
+                          ? "text-positive money-value"
                           : transaction.type === "expense"
-                            ? "text-negative"
-                            : ""
+                            ? "text-negative money-value"
+                            : "money-value"
                       }
                     >
                       {transaction.type === "income" ? "+" : transaction.type === "expense" ? "-" : ""}

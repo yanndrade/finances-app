@@ -1,16 +1,17 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 import type { AccountSummary, CategorySpending } from "../../lib/api";
+import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
 import { formatCurrency, formatCategoryName } from "../../lib/format";
 
 const CHART_COLORS = [
-  "#8238B3",
-  "#3D0066",
-  "#DDBBFF",
-  "#10B981",
-  "#F59E0B",
-  "#E11D48",
-  "#6B7280",
+  CHART_THEME.primary,
+  "hsl(var(--primary))",
+  "hsl(var(--primary-soft))",
+  CHART_THEME.income,
+  "hsl(var(--warning))",
+  CHART_THEME.expense,
+  CHART_THEME.transfer,
 ];
 
 type DashboardControlProps = {
@@ -45,7 +46,7 @@ export function DashboardControl({
       </div>
 
       <div className="control-grid">
-        <article className="panel-card">
+        <article className={`panel-card ${chartClassNames.surface}`}>
           <p className="eyebrow">Gastos por categoria</p>
           <h3 className="section-title">Este mes</h3>
 
@@ -91,7 +92,7 @@ export function DashboardControl({
                       style={{ background: CHART_COLORS[index % CHART_COLORS.length] }}
                     />
                     <span className="category-legend__name">{entry.name}</span>
-                    <strong className="category-legend__value">
+                    <strong className="category-legend__value money-value">
                       {formatCurrency(entry.value)}
                     </strong>
                   </li>
@@ -120,7 +121,7 @@ export function DashboardControl({
                     <strong>{account.name}</strong>
                     <p>{account.type}</p>
                   </div>
-                  <strong>{formatCurrency(account.current_balance)}</strong>
+                  <strong className="money-value">{formatCurrency(account.current_balance)}</strong>
                 </div>
               ))}
             </div>
@@ -157,7 +158,7 @@ function DonutTooltip({
   const pct = total > 0 ? ((value / total) * 100).toFixed(0) : "0";
 
   return (
-    <div className="sparkline-tooltip">
+    <div className={`sparkline-tooltip ${chartClassNames.tooltip}`}>
       <span>{name}</span>
       <strong>
         {formatCurrency(value)} ({pct}%)
