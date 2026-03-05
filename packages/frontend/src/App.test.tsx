@@ -6,6 +6,8 @@ import type {
   AccountSummary,
   CardSummary,
   DashboardSummary,
+  InvestmentMovementSummary,
+  InvestmentOverview,
   TransactionSummary,
 } from "./lib/api";
 
@@ -88,6 +90,50 @@ function buildDashboard(
   };
 }
 
+function buildInvestmentOverview(
+  overrides: Partial<InvestmentOverview> = {},
+): InvestmentOverview {
+  return {
+    view: "monthly",
+    from: "2026-03-01T00:00:00Z",
+    to: "2026-03-31T23:59:59Z",
+    totals: {
+      contribution_total: 30_00,
+      dividend_total: 5_00,
+      withdrawal_total: 10_00,
+      invested_balance: 25_00,
+      cash_balance: 132_500,
+      wealth: 132_525,
+      dividends_accumulated: 5_00,
+    },
+    goal: {
+      target: 25_000,
+      realized: 35_00,
+      remaining: 21_500,
+      progress_percent: 14,
+    },
+    series: {
+      wealth_evolution: [
+        {
+          bucket: "2026-03",
+          cash_balance: 132_500,
+          invested_balance: 25_00,
+          wealth: 132_525,
+        },
+      ],
+      contribution_dividend_trend: [
+        {
+          bucket: "2026-03",
+          contribution_total: 30_00,
+          dividend_total: 5_00,
+          withdrawal_total: 10_00,
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
 function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
   return {
     card_id: "card-1",
@@ -144,6 +190,8 @@ function installAppFetchMock(initialState?: {
   cards?: CardSummary[];
   transactions?: TransactionSummary[];
   dashboard?: DashboardSummary;
+  investmentOverview?: InvestmentOverview;
+  investmentMovements?: InvestmentMovementSummary[];
   invoices?: InvoiceSummary[];
   invoiceItemsByInvoiceId?: Record<string, InvoiceItemSummary[]>;
 }) {
@@ -151,6 +199,8 @@ function installAppFetchMock(initialState?: {
     accounts: initialState?.accounts ?? [buildAccount()],
     cards: initialState?.cards ?? [buildCard()],
     transactions: initialState?.transactions ?? [buildTransaction()],
+    investmentOverview: initialState?.investmentOverview ?? buildInvestmentOverview(),
+    investmentMovements: initialState?.investmentMovements ?? [],
     invoices: initialState?.invoices ?? [],
     invoiceItemsByInvoiceId: initialState?.invoiceItemsByInvoiceId ?? {},
     dashboard:
@@ -166,6 +216,14 @@ function installAppFetchMock(initialState?: {
 
     if (url.includes("/api/dashboard") && method === "GET") {
       return new Response(JSON.stringify(state.dashboard));
+    }
+
+    if (url.includes("/api/investments/overview") && method === "GET") {
+      return new Response(JSON.stringify(state.investmentOverview));
+    }
+
+    if (url.includes("/api/investments/movements") && method === "GET") {
+      return new Response(JSON.stringify(state.investmentMovements));
     }
 
     if (url.includes("/api/accounts") && method === "GET") {
@@ -276,6 +334,28 @@ function installAppFetchMock(initialState?: {
       state.accounts = [];
       state.cards = [];
       state.transactions = [];
+      state.investmentMovements = [];
+      state.investmentOverview = buildInvestmentOverview({
+        totals: {
+          contribution_total: 0,
+          dividend_total: 0,
+          withdrawal_total: 0,
+          invested_balance: 0,
+          cash_balance: 0,
+          wealth: 0,
+          dividends_accumulated: 0,
+        },
+        goal: {
+          target: 0,
+          realized: 0,
+          remaining: 0,
+          progress_percent: 100,
+        },
+        series: {
+          wealth_evolution: [],
+          contribution_dividend_trend: [],
+        },
+      });
       state.dashboard = buildDashboard({
         total_income: 0,
         total_expense: 0,
@@ -295,6 +375,41 @@ function installAppFetchMock(initialState?: {
       return new Response(
         JSON.stringify({ status: "ok", message: "Application data reset." }),
       );
+    }
+
+    if (url.endsWith("/api/investments/movements") && method === "POST") {
+      const payload = JSON.parse(String(init?.body)) as {
+        id: string;
+        occurred_at: string;
+        type: "contribution" | "withdrawal";
+        account_id: string;
+        description?: string;
+        contribution_amount?: number;
+        dividend_amount?: number;
+        cash_amount?: number;
+        invested_amount?: number;
+      };
+      const movement: InvestmentMovementSummary = {
+        movement_id: payload.id,
+        occurred_at: payload.occurred_at,
+        type: payload.type,
+        account_id: payload.account_id,
+        description: payload.description ?? null,
+        contribution_amount: payload.contribution_amount ?? 0,
+        dividend_amount: payload.dividend_amount ?? 0,
+        cash_amount: payload.cash_amount ?? 0,
+        invested_amount: payload.invested_amount ?? 0,
+        cash_delta:
+          payload.type === "contribution"
+            ? -(payload.cash_amount ?? payload.contribution_amount ?? 0)
+            : payload.cash_amount ?? 0,
+        invested_delta:
+          payload.type === "contribution"
+            ? payload.invested_amount ?? (payload.contribution_amount ?? 0) + (payload.dividend_amount ?? 0)
+            : -(payload.invested_amount ?? 0),
+      };
+      state.investmentMovements = [movement, ...state.investmentMovements];
+      return new Response(JSON.stringify(movement), { status: 201 });
     }
 
     if (url.endsWith("/api/accounts") && method === "POST") {
@@ -602,6 +717,25 @@ describe("App", () => {
     expect(
       await screen.findByRole("region", { name: /historico e filtros/i }),
     ).toBeInTheDocument();
+  });
+
+  it("navigates to investments view and shows advanced analytics", async () => {
+    installAppFetchMock();
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await userEvent.click(screen.getByRole("button", { name: /^investimentos$/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: /evolu..o do patrim.nio/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /di.rio/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /semanal/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /mensal/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /bimestral/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /trimestral/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /anual/i })).toBeInTheDocument();
   });
 
   it("marks a pending reimbursement as received from dashboard", async () => {

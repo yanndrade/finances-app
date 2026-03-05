@@ -1785,3 +1785,172 @@ def test_projector_keeps_dashboard_totals_unbounded_when_preview_is_limited(
     assert summary["total_income"] == 12_00
     assert summary["net_flow"] == 12_00
     assert len(summary["recent_transactions"]) == 10
+
+
+def test_projector_materializes_investment_movements_and_monthly_overview(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-01T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-05T12:00:00Z",
+            payload={
+                "id": "tx-1",
+                "occurred_at": "2026-03-05T12:00:00Z",
+                "type": "expense",
+                "amount": 20_00,
+                "account_id": "acc-1",
+                "payment_method": "CASH",
+                "category_id": "food",
+                "description": "Groceries",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="InvestmentMovementRecorded",
+            timestamp="2026-03-10T12:00:00Z",
+            payload={
+                "id": "inv-1",
+                "occurred_at": "2026-03-10T12:00:00Z",
+                "type": "contribution",
+                "account_id": "acc-1",
+                "description": "Aporte mensal",
+                "contribution_amount": 30_00,
+                "dividend_amount": 5_00,
+                "cash_amount": 30_00,
+                "invested_amount": 35_00,
+                "cash_delta": -30_00,
+                "invested_delta": 35_00,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="InvestmentMovementRecorded",
+            timestamp="2026-03-20T12:00:00Z",
+            payload={
+                "id": "inv-2",
+                "occurred_at": "2026-03-20T12:00:00Z",
+                "type": "withdrawal",
+                "account_id": "acc-1",
+                "description": "Resgate parcial",
+                "contribution_amount": 0,
+                "dividend_amount": 0,
+                "cash_amount": 18_00,
+                "invested_amount": 20_00,
+                "cash_delta": 18_00,
+                "invested_delta": -20_00,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+    movements = projector.list_investment_movements()
+    overview = projector.get_investment_overview(
+        view="monthly",
+        occurred_from="2026-03-01T00:00:00Z",
+        occurred_to="2026-03-31T23:59:59Z",
+    )
+
+    assert applied == 4
+    assert movements == [
+        {
+            "movement_id": "inv-2",
+            "occurred_at": "2026-03-20T12:00:00Z",
+            "type": "withdrawal",
+            "account_id": "acc-1",
+            "description": "Resgate parcial",
+            "contribution_amount": 0,
+            "dividend_amount": 0,
+            "cash_amount": 18_00,
+            "invested_amount": 20_00,
+            "cash_delta": 18_00,
+            "invested_delta": -20_00,
+        },
+        {
+            "movement_id": "inv-1",
+            "occurred_at": "2026-03-10T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "description": "Aporte mensal",
+            "contribution_amount": 30_00,
+            "dividend_amount": 5_00,
+            "cash_amount": 30_00,
+            "invested_amount": 35_00,
+            "cash_delta": -30_00,
+            "invested_delta": 35_00,
+        },
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 68_00,
+        }
+    ]
+    assert overview == {
+        "view": "monthly",
+        "from": "2026-03-01T00:00:00Z",
+        "to": "2026-03-31T23:59:59Z",
+        "totals": {
+            "contribution_total": 30_00,
+            "dividend_total": 5_00,
+            "withdrawal_total": 18_00,
+            "invested_balance": 15_00,
+            "cash_balance": 68_00,
+            "wealth": 83_00,
+            "dividends_accumulated": 5_00,
+        },
+        "goal": {
+            "target": 0,
+            "realized": 35_00,
+            "remaining": 0,
+            "progress_percent": 100,
+        },
+        "series": {
+            "wealth_evolution": [
+                {
+                    "bucket": "2026-03",
+                    "cash_balance": 68_00,
+                    "invested_balance": 15_00,
+                    "wealth": 83_00,
+                }
+            ],
+            "contribution_dividend_trend": [
+                {
+                    "bucket": "2026-03",
+                    "contribution_total": 30_00,
+                    "dividend_total": 5_00,
+                    "withdrawal_total": 18_00,
+                }
+            ],
+        },
+    }

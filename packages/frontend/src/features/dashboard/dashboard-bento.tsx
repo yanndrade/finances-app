@@ -15,15 +15,16 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Progress } from "../../components/ui/progress";
 import { CATEGORY_OPTIONS } from "../../lib/categories";
-import type { AccountSummary, DashboardSummary } from "../../lib/api";
+import type { AccountSummary, DashboardSummary, InvestmentOverview } from "../../lib/api";
 import { formatCategoryName, formatCurrency } from "../../lib/format";
 
 type DashboardBentoProps = {
   dashboard: DashboardSummary;
+  investmentOverview: InvestmentOverview | null;
   accounts: AccountSummary[];
   isSubmitting: boolean;
   onMarkReimbursementReceived: (transactionId: string) => Promise<void>;
-  onNavigate: (view: "transactions") => void;
+  onNavigate: (view: "transactions" | "investments") => void;
   onOpenQuickAdd: () => void;
   onUpsertBudget: (
     month: string,
@@ -34,6 +35,7 @@ type DashboardBentoProps = {
 
 export function DashboardBento({
   dashboard,
+  investmentOverview,
   accounts: _accounts,
   isSubmitting,
   onMarkReimbursementReceived,
@@ -42,12 +44,14 @@ export function DashboardBento({
   onUpsertBudget,
 }: DashboardBentoProps) {
   const categoryComposition = dashboard.spending_by_category.slice(0, 5);
-  const investmentMeta = dashboard.total_income * 0.1;
+  const investmentMeta = investmentOverview?.goal.target ?? dashboard.total_income * 0.1;
   const realizedInvestment =
+    investmentOverview?.goal.realized ??
     dashboard.spending_by_category.find(
       (category) =>
         category.category_id === "investment" || category.category_id === "investimentos",
-    )?.total ?? 0;
+    )?.total ??
+    0;
   const metaProgress =
     investmentMeta > 0 ? Math.min((realizedInvestment / investmentMeta) * 100, 100) : 0;
   const topCategories = dashboard.spending_by_category.slice(0, 3);
@@ -323,6 +327,13 @@ export function DashboardBento({
               className="h-auto w-full rounded-2xl bg-primary py-6 font-semibold text-primary-foreground hover:bg-primary/90"
             >
               Registrar aporte agora
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => onNavigate("investments")}
+              className="mt-2 h-auto w-full rounded-2xl text-primary hover:bg-primary/5"
+            >
+              Ver visão completa
             </Button>
           </CardContent>
         </Card>

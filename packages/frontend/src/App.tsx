@@ -10,10 +10,13 @@ import {
   createCard,
   createCardPurchase,
   createCashTransaction,
+  createInvestmentMovement,
   createTransfer,
   fetchAccounts,
   fetchCards,
   fetchDashboardSummary,
+  fetchInvestmentMovements,
+  fetchInvestmentOverview,
   fetchInvoices,
   fetchTransactions,
   markReimbursementReceived,
@@ -34,6 +37,10 @@ import {
   type CashTransactionPayload,
   type DashboardSummary,
   type InvoicePaymentPayload,
+  type InvestmentMovementPayload,
+  type InvestmentMovementSummary,
+  type InvestmentOverview,
+  type InvestmentView,
   type InvoiceSummary,
   type TransactionFilters,
   type TransactionSummary,
@@ -66,6 +73,11 @@ const SettingsView = lazy(async () => {
   return { default: module.SettingsView };
 });
 
+const InvestmentsView = lazy(async () => {
+  const module = await import("./features/investments/investments-view");
+  return { default: module.InvestmentsView };
+});
+
 const TransactionsView = lazy(async () => {
   const module = await import("./features/transactions/transactions-view");
   return { default: module.TransactionsView };
@@ -91,6 +103,10 @@ const VIEW_META: Record<
   dashboard: {
     title: "Vis\u00E3o geral",
     description: "Resumo mensal e pontos de atencao.",
+  },
+  investments: {
+    title: "Investimentos",
+    description: "Patrimonio, aportes e dividendos.",
   },
   transactions: {
     title: "Transa\u00E7\u00F5es",
@@ -123,6 +139,15 @@ export function App() {
   const [cards, setCards] = useState<CardSummary[]>([]);
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
   const [transactions, setTransactions] = useState<TransactionSummary[]>([]);
+  const [investmentOverview, setInvestmentOverview] = useState<InvestmentOverview | null>(null);
+  const [investmentMovements, setInvestmentMovements] = useState<InvestmentMovementSummary[]>([]);
+  const [investmentView, setInvestmentView] = useState<InvestmentView>("monthly");
+  const [investmentFromDate, setInvestmentFromDate] = useState(() =>
+    monthFirstDay(currentMonth()),
+  );
+  const [investmentToDate, setInvestmentToDate] = useState(() =>
+    monthLastDay(currentMonth()),
+  );
   const [transactionFilters, setTransactionFilters] = useState<TransactionFilters>(
     EMPTY_TRANSACTION_FILTERS,
   );
@@ -157,19 +182,37 @@ export function App() {
     });
   }
 
-  async function refreshData(options?: { month?: string; filters?: TransactionFilters }) {
+  async function refreshData(options?: {
+    month?: string;
+    filters?: TransactionFilters;
+    investmentView?: InvestmentView;
+    investmentFromDate?: string;
+    investmentToDate?: string;
+  }) {
     const month = options?.month ?? selectedMonth;
     const filters = options?.filters ?? transactionFilters;
+    const activeInvestmentView = options?.investmentView ?? investmentView;
+    const activeFromDate = options?.investmentFromDate ?? investmentFromDate;
+    const activeToDate = options?.investmentToDate ?? investmentToDate;
 
     setLoading(true);
 
     try {
-      const [nextCards, nextInvoices, nextDashboard, nextAccounts, nextTransactions] = await Promise.all([
+      const [nextCards, nextInvoices, nextDashboard, nextAccounts, nextTransactions, nextInvestmentOverview, nextInvestmentMovements] = await Promise.all([
         fetchCards(),
         fetchInvoices(),
         fetchDashboardSummary(month),
         fetchAccounts(),
         fetchTransactions(filters),
+        fetchInvestmentOverview({
+          view: activeInvestmentView,
+          from: toIsoFromDate(activeFromDate, false),
+          to: toIsoFromDate(activeToDate, true),
+        }),
+        fetchInvestmentMovements({
+          from: toIsoFromDate(activeFromDate, false),
+          to: toIsoFromDate(activeToDate, true),
+        }),
       ]);
 
       setCards(nextCards);
@@ -177,7 +220,12 @@ export function App() {
       setDashboard(nextDashboard);
       setAccounts(nextAccounts);
       setTransactions(nextTransactions);
+      setInvestmentOverview(nextInvestmentOverview);
+      setInvestmentMovements(nextInvestmentMovements);
       setTransactionFilters(filters);
+      setInvestmentView(activeInvestmentView);
+      setInvestmentFromDate(activeFromDate);
+      setInvestmentToDate(activeToDate);
     } catch (error) {
       showToast("error", getErrorMessage(error));
     } finally {
@@ -346,6 +394,35 @@ export function App() {
     }
   }
 
+  async function handleCreateInvestmentMovement(
+    payload: InvestmentMovementPayload,
+  ): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => createInvestmentMovement(payload),
+      "Movimento de investimento registrado com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel registrar movimento de investimento.");
+    }
+  }
+
+  async function handleInvestmentViewChange(nextView: InvestmentView): Promise<void> {
+    await refreshData({
+      investmentView: nextView,
+    });
+  }
+
+  async function handleInvestmentRangeChange(
+    nextFromDate: string,
+    nextToDate: string,
+  ): Promise<void> {
+    await refreshData({
+      investmentFromDate: nextFromDate,
+      investmentToDate: nextToDate,
+    });
+  }
+
   async function handleResetAllData(): Promise<void> {
     if (!globalThis.confirm("Isso vai apagar todos os dados da aplicacao. Deseja continuar?")) {
       return;
@@ -376,6 +453,7 @@ export function App() {
           <DashboardView
             accounts={accounts}
             dashboard={dashboard}
+            investmentOverview={investmentOverview}
             isSubmitting={isSubmitting}
             loading={loading}
             month={selectedMonth}
@@ -396,6 +474,28 @@ export function App() {
               }
             }}
             transactions={transactions}
+          />
+        ) : null}
+
+        {activeView === "investments" ? (
+          <InvestmentsView
+            accounts={accounts}
+            loading={loading}
+            isSubmitting={isSubmitting}
+            overview={investmentOverview}
+            movements={investmentMovements}
+            view={investmentView}
+            fromDate={investmentFromDate}
+            toDate={investmentToDate}
+            onViewChange={(nextView) => {
+              void handleInvestmentViewChange(nextView);
+            }}
+            onRangeChange={(nextFromDate, nextToDate) => {
+              void handleInvestmentRangeChange(nextFromDate, nextToDate);
+            }}
+            onCreateMovement={async (payload) => {
+              await handleCreateInvestmentMovement(payload);
+            }}
           />
         ) : null}
 
@@ -466,6 +566,9 @@ export function App() {
             onSubmitInvoicePayment={async (payload) => {
               await handlePayInvoice(payload);
             }}
+            onSubmitInvestmentMovement={async (payload) => {
+              await handleCreateInvestmentMovement(payload);
+            }}
             isSubmitting={isSubmitting}
           />
         </Suspense>
@@ -499,6 +602,23 @@ function currentMonth(): string {
   const month = String(now.getMonth() + 1).padStart(2, "0");
 
   return `${now.getFullYear()}-${month}`;
+}
+
+function monthFirstDay(month: string): string {
+  return `${month}-01`;
+}
+
+function monthLastDay(month: string): string {
+  const [yearText, monthText] = month.split("-");
+  const year = parseInt(yearText ?? "1970", 10);
+  const monthValue = parseInt(monthText ?? "1", 10);
+  const lastDay = new Date(year, monthValue, 0).getDate();
+  return `${month}-${String(lastDay).padStart(2, "0")}`;
+}
+
+function toIsoFromDate(value: string, endOfDay: boolean): string {
+  const suffix = endOfDay ? "T23:59:59Z" : "T00:00:00Z";
+  return `${value}${suffix}`;
 }
 
 function getErrorMessage(error: unknown): string {

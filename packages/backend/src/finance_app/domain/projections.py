@@ -274,3 +274,33 @@ class BudgetProjection:
             "usage_percent": self.usage_percent,
             "status": self.status,
         }
+
+
+@dataclass(frozen=True)
+class InvestmentMovementProjection:
+    movement_id: str
+    occurred_at: str
+    type: str
+    account_id: str
+    description: str | None
+    contribution_amount: int
+    dividend_amount: int
+    cash_amount: int
+    invested_amount: int
+    cash_delta: int
+    invested_delta: int
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        return {
+            "movement_id": self.movement_id,
+            "occurred_at": self.occurred_at,
+            "type": self.type,
+            "account_id": self.account_id,
+            "description": self.description,
+            "contribution_amount": self.contribution_amount,
+            "dividend_amount": self.dividend_amount,
+            "cash_amount": self.cash_amount,
+            "invested_amount": self.invested_amount,
+            "cash_delta": self.cash_delta,
+            "invested_delta": self.invested_delta,
+        }

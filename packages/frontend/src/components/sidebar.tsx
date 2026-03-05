@@ -1,5 +1,6 @@
 export type AppView =
   | "dashboard"
+  | "investments"
   | "transactions"
   | "accounts"
   | "cards"
@@ -19,6 +20,11 @@ const NAV_ITEMS: Array<{
     id: "dashboard",
     label: "Vis\u00E3o geral",
     description: "Vis\u00E3o mensal do caixa",
+  },
+  {
+    id: "investments",
+    label: "Investimentos",
+    description: "Aportes, dividendos e patrimonio",
   },
   {
     id: "transactions",

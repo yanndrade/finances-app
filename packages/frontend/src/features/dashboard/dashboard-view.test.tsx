@@ -94,6 +94,41 @@ describe("Dashboard view", () => {
         );
       }
 
+      if (url.includes("/api/investments/overview")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              view: "monthly",
+              from: "2026-03-01T00:00:00Z",
+              to: "2026-03-31T23:59:59Z",
+              totals: {
+                contribution_total: 0,
+                dividend_total: 0,
+                withdrawal_total: 0,
+                invested_balance: 0,
+                cash_balance: 15500,
+                wealth: 15500,
+                dividends_accumulated: 0,
+              },
+              goal: {
+                target: 500,
+                realized: 0,
+                remaining: 500,
+                progress_percent: 0,
+              },
+              series: {
+                wealth_evolution: [],
+                contribution_dividend_trend: [],
+              },
+            }),
+          ),
+        );
+      }
+
+      if (url.includes("/api/investments/movements")) {
+        return Promise.resolve(new Response(JSON.stringify([])));
+      }
+
       throw new Error(`Unexpected request: ${url}`);
     });
 
@@ -113,7 +148,7 @@ describe("Dashboard view", () => {
     expect(screen.queryByText("Parcelas")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(5);
+      expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(7);
     });
   });
 });

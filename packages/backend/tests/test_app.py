@@ -1794,6 +1794,206 @@ def test_budget_endpoints_support_create_update_and_alert_states(tmp_path) -> No
     assert updated_dashboard.json()["budget_alerts"] == []
 
 
+def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_budget(
+        client,
+        {
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 100_00,
+        },
+    )
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-05T12:00:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Groceries",
+        },
+    )
+
+    contribution_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "inv-1",
+            "occurred_at": "2026-03-10T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "description": "Aporte mensal",
+            "contribution_amount": 30_00,
+            "dividend_amount": 5_00,
+        },
+    )
+    withdrawal_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "inv-2",
+            "occurred_at": "2026-03-20T12:00:00Z",
+            "type": "withdrawal",
+            "account_id": "acc-1",
+            "description": "Resgate parcial",
+            "cash_amount": 18_00,
+            "invested_amount": 20_00,
+        },
+    )
+    movements_response = client.get("/api/investments/movements")
+    overview_response = client.get(
+        "/api/investments/overview",
+        params={
+            "view": "monthly",
+            "from": "2026-03-01T00:00:00Z",
+            "to": "2026-03-31T23:59:59Z",
+        },
+    )
+    dashboard_response = client.get("/api/dashboard", params={"month": "2026-03"})
+    accounts_response = client.get("/api/accounts")
+
+    assert contribution_response.status_code == 201
+    assert contribution_response.json() == {
+        "movement_id": "inv-1",
+        "occurred_at": "2026-03-10T12:00:00Z",
+        "type": "contribution",
+        "account_id": "acc-1",
+        "description": "Aporte mensal",
+        "contribution_amount": 30_00,
+        "dividend_amount": 5_00,
+        "cash_amount": 30_00,
+        "invested_amount": 35_00,
+        "cash_delta": -30_00,
+        "invested_delta": 35_00,
+    }
+    assert withdrawal_response.status_code == 201
+    assert withdrawal_response.json() == {
+        "movement_id": "inv-2",
+        "occurred_at": "2026-03-20T12:00:00Z",
+        "type": "withdrawal",
+        "account_id": "acc-1",
+        "description": "Resgate parcial",
+        "contribution_amount": 0,
+        "dividend_amount": 0,
+        "cash_amount": 18_00,
+        "invested_amount": 20_00,
+        "cash_delta": 18_00,
+        "invested_delta": -20_00,
+    }
+    assert movements_response.status_code == 200
+    assert movements_response.json() == [
+        {
+            "movement_id": "inv-2",
+            "occurred_at": "2026-03-20T12:00:00Z",
+            "type": "withdrawal",
+            "account_id": "acc-1",
+            "description": "Resgate parcial",
+            "contribution_amount": 0,
+            "dividend_amount": 0,
+            "cash_amount": 18_00,
+            "invested_amount": 20_00,
+            "cash_delta": 18_00,
+            "invested_delta": -20_00,
+        },
+        {
+            "movement_id": "inv-1",
+            "occurred_at": "2026-03-10T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "description": "Aporte mensal",
+            "contribution_amount": 30_00,
+            "dividend_amount": 5_00,
+            "cash_amount": 30_00,
+            "invested_amount": 35_00,
+            "cash_delta": -30_00,
+            "invested_delta": 35_00,
+        },
+    ]
+    assert overview_response.status_code == 200
+    assert overview_response.json() == {
+        "view": "monthly",
+        "from": "2026-03-01T00:00:00Z",
+        "to": "2026-03-31T23:59:59Z",
+        "totals": {
+            "contribution_total": 30_00,
+            "dividend_total": 5_00,
+            "withdrawal_total": 18_00,
+            "invested_balance": 15_00,
+            "cash_balance": 68_00,
+            "wealth": 83_00,
+            "dividends_accumulated": 5_00,
+        },
+        "goal": {
+            "target": 0,
+            "realized": 35_00,
+            "remaining": 0,
+            "progress_percent": 100,
+        },
+        "series": {
+            "wealth_evolution": [
+                {
+                    "bucket": "2026-03",
+                    "cash_balance": 68_00,
+                    "invested_balance": 15_00,
+                    "wealth": 83_00,
+                }
+            ],
+            "contribution_dividend_trend": [
+                {
+                    "bucket": "2026-03",
+                    "contribution_total": 30_00,
+                    "dividend_total": 5_00,
+                    "withdrawal_total": 18_00,
+                }
+            ],
+        },
+    }
+    assert dashboard_response.status_code == 200
+    assert dashboard_response.json()["category_budgets"] == [
+        {
+            "category_id": "food",
+            "month": "2026-03",
+            "limit": 100_00,
+            "spent": 20_00,
+            "usage_percent": 20,
+            "status": "ok",
+        }
+    ]
+    assert dashboard_response.json()["budget_alerts"] == []
+    assert accounts_response.status_code == 200
+    assert accounts_response.json()[0]["current_balance"] == 68_00
+
+
+def test_investment_endpoints_reject_contribution_from_investment_account(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Broker", "investment", 100_00)
+
+    response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "inv-1",
+            "occurred_at": "2026-03-10T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "contribution_amount": 30_00,
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
@@ -2011,3 +2211,9 @@ def _create_recurring_rule(client: TestClient, payload: dict[str, str | int]) ->
     response = client.post("/api/recurring-rules", json=payload)
 
     assert response.status_code == 201
+
+
+def _create_budget(client: TestClient, payload: dict[str, str | int]) -> None:
+    response = client.post("/api/budgets", json=payload)
+
+    assert response.status_code in (200, 201)
