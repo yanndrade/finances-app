@@ -1,3 +1,14 @@
+import {
+  BarChart3,
+  CreditCard,
+  Home,
+  LineChart,
+  ReceiptText,
+  Settings2,
+  Wallet2,
+  type LucideIcon,
+} from "lucide-react";
+
 export type AppView =
   | "dashboard"
   | "reports"
@@ -7,47 +18,71 @@ export type AppView =
   | "cards"
   | "settings";
 
+type NavigationItem = {
+  id: AppView;
+  label: string;
+  shortLabel: string;
+  description: string;
+  icon: LucideIcon;
+};
+
 type SidebarProps = {
   activeView: AppView;
   onNavigate: (view: AppView) => void;
 };
 
-const NAV_ITEMS: Array<{
-  id: AppView;
-  label: string;
-  description: string;
-}> = [
+export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
   {
     id: "dashboard",
-    label: "Vis\u00E3o geral",
-    description: "Vis\u00E3o mensal do caixa",
+    label: "Visao geral",
+    shortLabel: "Inicio",
+    description: "Visao mensal do caixa",
+    icon: Home,
+  },
+  {
+    id: "transactions",
+    label: "Transacoes",
+    shortLabel: "Transacoes",
+    description: "Filtros, edicao e estorno",
+    icon: ReceiptText,
+  },
+  {
+    id: "cards",
+    label: "Cartoes",
+    shortLabel: "Cartoes",
+    description: "Cadastro e ciclo de pagamento",
+    icon: CreditCard,
   },
   {
     id: "reports",
-    label: "Relatórios",
-    description: "Períodos, categorias e parcelas futuras",
+    label: "Relatorios",
+    shortLabel: "Relatorios",
+    description: "Periodos, categorias e parcelas futuras",
+    icon: BarChart3,
   },
   {
     id: "investments",
     label: "Investimentos",
+    shortLabel: "Investimentos",
     description: "Aportes, dividendos e patrimonio",
-  },
-  {
-    id: "transactions",
-    label: "Transa\u00E7\u00F5es",
-    description: "Filtros, edi\u00E7\u00E3o e estorno",
+    icon: LineChart,
   },
   {
     id: "accounts",
     label: "Contas",
-    description: "Saldo, cria\u00E7\u00E3o e ajustes",
-  },
-  {
-    id: "cards",
-    label: "Cart\u00F5es",
-    description: "Cadastro e ciclo de pagamento",
+    shortLabel: "Contas",
+    description: "Saldo, criacao e ajustes",
+    icon: Wallet2,
   },
 ];
+
+export const MOBILE_NAV_ITEMS: NavigationItem[] = DESKTOP_NAV_ITEMS.filter((item) =>
+  item.id === "dashboard" || item.id === "transactions" || item.id === "cards",
+);
+
+export function isMobileEssentialView(view: AppView): boolean {
+  return MOBILE_NAV_ITEMS.some((item) => item.id === view);
+}
 
 export function Sidebar({ activeView, onNavigate }: SidebarProps) {
   return (
@@ -55,24 +90,31 @@ export function Sidebar({ activeView, onNavigate }: SidebarProps) {
       <div className="brand-block">
         <p className="eyebrow">Finances</p>
         <strong className="brand-title">Controle pessoal</strong>
-        <p className="sidebar-copy">{"Desktop focado em caixa, contas e movimenta\u00E7\u00F5es."}</p>
+        <p className="sidebar-copy">Desktop focado em caixa, contas e movimentacoes.</p>
       </div>
       <ul className="nav-list">
-        {NAV_ITEMS.map((item) => (
-          <li key={item.id}>
-            <button
-              aria-pressed={item.id === activeView}
-              className={`nav-item${item.id === activeView ? " is-active" : ""}`}
-              onClick={() => onNavigate(item.id)}
-              type="button"
-            >
-              <span className="nav-item__label">{item.label}</span>
-              <span aria-hidden="true" className="nav-item__description">
-                {item.description}
-              </span>
-            </button>
-          </li>
-        ))}
+        {DESKTOP_NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <li key={item.id}>
+              <button
+                aria-pressed={item.id === activeView}
+                className={`nav-item${item.id === activeView ? " is-active" : ""}`}
+                onClick={() => onNavigate(item.id)}
+                type="button"
+              >
+                <span className="nav-item__headline">
+                  <Icon aria-hidden="true" className="nav-item__icon" />
+                  <span className="nav-item__label">{item.label}</span>
+                </span>
+                <span aria-hidden="true" className="nav-item__description">
+                  {item.description}
+                </span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
       <div className="sidebar-footer">
         <button
@@ -81,9 +123,12 @@ export function Sidebar({ activeView, onNavigate }: SidebarProps) {
           onClick={() => onNavigate("settings")}
           type="button"
         >
-          <span className="nav-item__label">{"Configura\u00E7\u00F5es"}</span>
+          <span className="nav-item__headline">
+            <Settings2 aria-hidden="true" className="nav-item__icon" />
+            <span className="nav-item__label">Configuracoes</span>
+          </span>
           <span aria-hidden="true" className="nav-item__description">
-            {"Desenvolvimento e prefer\u00EAncias"}
+            Desenvolvimento e preferencias
           </span>
         </button>
       </div>
