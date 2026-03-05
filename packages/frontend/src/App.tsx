@@ -489,10 +489,30 @@ export function App() {
   }
 
   const activeMeta = VIEW_META[activeView];
+  const contextPanel = (
+    <div className="shell-context">
+      <p className="eyebrow">Desktop context</p>
+      <h2 className="shell-context__title">Painel contextual</h2>
+      <p className="section-copy">
+        Espaco reservado para formularios rapidos e acoes locais sem trocar de tela.
+      </p>
+      <button
+        className="primary-button"
+        onClick={() => setIsQuickAddOpen(true)}
+        type="button"
+      >
+        Abrir registro rapido
+      </button>
+      <p className="shell-context__meta">
+        Tela ativa: {activeMeta.title}
+      </p>
+    </div>
+  );
 
   return (
     <AppShell
       activeView={activeView}
+      contextPanel={contextPanel}
       description={activeMeta.description}
       onNavigate={setActiveView}
       onOpenQuickAdd={() => setIsQuickAddOpen(true)}

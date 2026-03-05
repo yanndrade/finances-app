@@ -1012,7 +1012,7 @@ describe("App", () => {
     await screen.findByRole("heading", { level: 1, name: /vis/i });
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
 
-    await userEvent.click(screen.getByRole("button", { name: /\+ adicionar conta/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /\+ adicionar conta/i }));
     await userEvent.type(screen.getByLabelText(/nome da conta/i), "Reserva");
     await userEvent.selectOptions(screen.getByLabelText(/tipo da conta/i), "savings");
     const balanceInput = screen.getByDisplayValue("0,00");
@@ -1181,7 +1181,7 @@ describe("App", () => {
     await screen.findByRole("heading", { level: 1, name: /vis/i });
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
 
-    await userEvent.click(screen.getByRole("button", { name: /\+ adicionar conta/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /\+ adicionar conta/i }));
     await userEvent.type(screen.getByLabelText(/nome da conta/i), "Reserva toast");
     await userEvent.selectOptions(screen.getByLabelText(/tipo da conta/i), "savings");
     const balanceInput = screen.getByDisplayValue("0,00");
@@ -1399,4 +1399,3 @@ function allocateMockInvoices({
     });
   });
 }
-
