@@ -47,6 +47,15 @@ type QuickAddValidationErrors = Partial<
 
 const MOBILE_QUERY = "(max-width: 900px)";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ENTER_SUBMIT_INPUT_TYPES = new Set([
+  "text",
+  "search",
+  "email",
+  "password",
+  "tel",
+  "url",
+  "number",
+]);
 
 type QuickAddComposerProps = {
   isOpen: boolean;
@@ -291,7 +300,12 @@ export function QuickAddComposer({
     }
 
     const target = event.target as HTMLElement;
-    if (target.tagName === "BUTTON" || target.tagName === "TEXTAREA") {
+    if (
+      !(target instanceof HTMLInputElement) ||
+      !ENTER_SUBMIT_INPUT_TYPES.has(target.type) ||
+      target.disabled ||
+      target.readOnly
+    ) {
       return;
     }
 

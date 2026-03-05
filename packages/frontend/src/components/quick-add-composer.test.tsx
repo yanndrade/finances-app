@@ -198,6 +198,21 @@ describe("QuickAddComposer", () => {
     expect(screen.getByText(/selecione uma fatura em aberto/i)).toBeInTheDocument();
   });
 
+  it("does not submit when Enter is pressed on a select control", async () => {
+    installMatchMedia(false);
+    const user = userEvent.setup();
+    const { onSubmitTransaction } = renderComposer();
+
+    await user.type(screen.getByPlaceholderText("0,00"), "2500");
+
+    const typeSelect = screen.getByLabelText(/tipo/i);
+    typeSelect.focus();
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(onSubmitTransaction).not.toHaveBeenCalled();
+  });
+
   it("submits card purchases with Enter on the description field", async () => {
     installMatchMedia(false);
     const user = userEvent.setup();
