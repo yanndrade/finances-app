@@ -625,7 +625,7 @@ class Projector:
                 )
                 movements_after_from: Sequence[InvestmentMovementRecord] = (
                     session.query(InvestmentMovementRecord)
-                    .filter(InvestmentMovementRecord.occurred_at > occurred_from)
+                    .filter(InvestmentMovementRecord.occurred_at >= occurred_from)
                     .all()
                 )
                 movement_rows_all: Sequence[InvestmentMovementRecord] = (
@@ -654,7 +654,7 @@ class Projector:
                 tx_after_from: Sequence[TransactionProjectionRecord] = (
                     session.query(TransactionProjectionRecord)
                     .filter(TransactionProjectionRecord.status == "active")
-                    .filter(TransactionProjectionRecord.occurred_at > occurred_from)
+                    .filter(TransactionProjectionRecord.occurred_at >= occurred_from)
                     .all()
                 )
                 tx_in_range: Sequence[TransactionProjectionRecord] = (
@@ -755,6 +755,8 @@ class Projector:
                 }
             )
 
+        range_end_cash_balance = running_cash
+        range_end_invested_balance = running_invested
         monthly_income_total = self._income_total_for_range(
             income_by_month=income_by_month,
             occurred_from=occurred_from,
@@ -771,9 +773,9 @@ class Projector:
                 "contribution_total": contribution_total,
                 "dividend_total": dividend_total,
                 "withdrawal_total": withdrawal_total,
-                "invested_balance": current_invested_balance,
-                "cash_balance": current_cash_balance,
-                "wealth": current_cash_balance + current_invested_balance,
+                "invested_balance": range_end_invested_balance,
+                "cash_balance": range_end_cash_balance,
+                "wealth": range_end_cash_balance + range_end_invested_balance,
                 "dividends_accumulated": current_dividends_accumulated,
             },
             "goal": {

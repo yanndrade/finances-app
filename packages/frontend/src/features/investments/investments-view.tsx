@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { Button } from "../../components/ui/button";
@@ -35,6 +35,10 @@ const VIEW_OPTIONS: Array<{ label: string; value: InvestmentView }> = [
   { label: "Anual", value: "yearly" },
 ];
 
+function movementAccountIdOrEmpty(accounts: AccountSummary[]): string {
+  return accounts.find((account) => account.type !== "investment")?.account_id ?? "";
+}
+
 export function InvestmentsView({
   accounts,
   loading,
@@ -48,18 +52,42 @@ export function InvestmentsView({
   onRangeChange,
   onCreateMovement,
 }: InvestmentsViewProps) {
+  const movementAccounts = useMemo(
+    () => accounts.filter((account) => account.type !== "investment"),
+    [accounts],
+  );
   const [showContribution, setShowContribution] = useState(true);
   const [showDividend, setShowDividend] = useState(true);
   const [contributionAmount, setContributionAmount] = useState("");
   const [contributionDividendAmount, setContributionDividendAmount] = useState("");
-  const [contributionAccountId, setContributionAccountId] = useState(accounts[0]?.account_id ?? "");
+  const [contributionAccountId, setContributionAccountId] = useState(() =>
+    movementAccountIdOrEmpty(accounts),
+  );
   const [contributionDate, setContributionDate] = useState(fromDate);
   const [contributionDescription, setContributionDescription] = useState("");
   const [withdrawalCashAmount, setWithdrawalCashAmount] = useState("");
   const [withdrawalInvestedAmount, setWithdrawalInvestedAmount] = useState("");
-  const [withdrawalAccountId, setWithdrawalAccountId] = useState(accounts[0]?.account_id ?? "");
+  const [withdrawalAccountId, setWithdrawalAccountId] = useState(() =>
+    movementAccountIdOrEmpty(accounts),
+  );
   const [withdrawalDate, setWithdrawalDate] = useState(toDate);
   const [withdrawalDescription, setWithdrawalDescription] = useState("");
+
+  useEffect(() => {
+    const firstAccountId = movementAccounts[0]?.account_id ?? "";
+    if (movementAccounts.some((account) => account.account_id === contributionAccountId)) {
+      return;
+    }
+    setContributionAccountId(firstAccountId);
+  }, [movementAccounts, contributionAccountId]);
+
+  useEffect(() => {
+    const firstAccountId = movementAccounts[0]?.account_id ?? "";
+    if (movementAccounts.some((account) => account.account_id === withdrawalAccountId)) {
+      return;
+    }
+    setWithdrawalAccountId(firstAccountId);
+  }, [movementAccounts, withdrawalAccountId]);
 
   const wealthData = useMemo(
     () =>
@@ -244,7 +272,7 @@ export function InvestmentsView({
                     value={contributionAccountId}
                     onChange={(event) => setContributionAccountId(event.target.value)}
                   >
-                    {accounts.map((account) => (
+                    {movementAccounts.map((account) => (
                       <option key={account.account_id} value={account.account_id}>
                         {account.name}
                       </option>
@@ -298,7 +326,7 @@ export function InvestmentsView({
                   />
                 )}
               />
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || movementAccounts.length === 0}>
                 Salvar aporte
               </Button>
             </form>
@@ -319,7 +347,7 @@ export function InvestmentsView({
                     value={withdrawalAccountId}
                     onChange={(event) => setWithdrawalAccountId(event.target.value)}
                   >
-                    {accounts.map((account) => (
+                    {movementAccounts.map((account) => (
                       <option key={account.account_id} value={account.account_id}>
                         {account.name}
                       </option>
@@ -373,7 +401,7 @@ export function InvestmentsView({
                   />
                 )}
               />
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || movementAccounts.length === 0}>
                 Salvar resgate
               </Button>
             </form>
@@ -448,5 +476,9 @@ function parseAmountInCents(raw: string): number {
 }
 
 function toIsoAtMidday(dateValue: string): string {
-  return new Date(`${dateValue}T12:00:00`).toISOString().replace(".000", "");
+  const normalizedDate = dateValue.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+    return `${normalizedDate}T12:00:00Z`;
+  }
+  return new Date(`${normalizedDate}T12:00:00`).toISOString().replace(".000", "");
 }

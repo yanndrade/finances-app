@@ -1954,3 +1954,110 @@ def test_projector_materializes_investment_movements_and_monthly_overview(
             ],
         },
     }
+
+
+def test_projector_investment_overview_uses_from_boundary_once_and_returns_range_end_totals(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-01T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="InvestmentMovementRecorded",
+            timestamp="2026-03-10T00:00:00Z",
+            payload={
+                "id": "inv-1",
+                "occurred_at": "2026-03-10T00:00:00Z",
+                "type": "contribution",
+                "account_id": "acc-1",
+                "description": "Aporte na fronteira",
+                "contribution_amount": 10_00,
+                "dividend_amount": 0,
+                "cash_amount": 10_00,
+                "invested_amount": 10_00,
+                "cash_delta": -10_00,
+                "invested_delta": 10_00,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-20T12:00:00Z",
+            payload={
+                "id": "tx-1",
+                "occurred_at": "2026-03-20T12:00:00Z",
+                "type": "expense",
+                "amount": 5_00,
+                "account_id": "acc-1",
+                "payment_method": "CASH",
+                "category_id": "food",
+                "description": "Outside requested range",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="InvestmentMovementRecorded",
+            timestamp="2026-03-25T12:00:00Z",
+            payload={
+                "id": "inv-2",
+                "occurred_at": "2026-03-25T12:00:00Z",
+                "type": "withdrawal",
+                "account_id": "acc-1",
+                "description": "Outside requested range",
+                "contribution_amount": 0,
+                "dividend_amount": 0,
+                "cash_amount": 4_00,
+                "invested_amount": 4_00,
+                "cash_delta": 4_00,
+                "invested_delta": -4_00,
+            },
+            version=1,
+        )
+    )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    projector.run()
+
+    overview = projector.get_investment_overview(
+        view="monthly",
+        occurred_from="2026-03-10T00:00:00Z",
+        occurred_to="2026-03-15T23:59:59Z",
+    )
+
+    assert overview["totals"]["cash_balance"] == 90_00
+    assert overview["totals"]["invested_balance"] == 10_00
+    assert overview["totals"]["wealth"] == 100_00
+    assert overview["series"]["wealth_evolution"] == [
+        {
+            "bucket": "2026-03",
+            "cash_balance": 90_00,
+            "invested_balance": 10_00,
+            "wealth": 100_00,
+        }
+    ]

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import type { AccountSummary } from "../../lib/api";
 import { InvestmentsView } from "./investments-view";
@@ -75,5 +76,72 @@ describe("InvestmentsView", () => {
     expect(screen.getByRole("checkbox", { name: /dividendos/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /registrar aporte/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /registrar resgate/i })).toBeInTheDocument();
+  });
+
+  it("keeps the selected calendar date when submitting contribution movement", async () => {
+    const onCreateMovement = vi.fn(async () => {});
+
+    render(
+      <InvestmentsView
+        accounts={[buildAccount()]}
+        loading={false}
+        isSubmitting={false}
+        movements={[]}
+        overview={null}
+        onCreateMovement={onCreateMovement}
+        onRangeChange={() => {}}
+        onViewChange={() => {}}
+        view="monthly"
+        fromDate="2026-03-01"
+        toDate="2026-03-31"
+      />,
+    );
+
+    await userEvent.clear(screen.getAllByLabelText(/data/i)[0]);
+    await userEvent.type(screen.getAllByLabelText(/data/i)[0], "2026-03-10");
+    await userEvent.type(screen.getByLabelText(/valor do aporte/i), "1000");
+    await userEvent.click(screen.getByRole("button", { name: /salvar aporte/i }));
+
+    expect(onCreateMovement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        occurredAt: "2026-03-10T12:00:00Z",
+      }),
+    );
+  });
+
+  it("shows only non-investment accounts in investment movement forms", () => {
+    render(
+      <InvestmentsView
+        accounts={[
+          buildAccount({
+            account_id: "acc-invest",
+            name: "Conta investimento",
+            type: "investment",
+          }),
+          buildAccount({
+            account_id: "acc-wallet",
+            name: "Conta principal",
+            type: "wallet",
+          }),
+        ]}
+        loading={false}
+        isSubmitting={false}
+        movements={[]}
+        overview={null}
+        onCreateMovement={async () => {}}
+        onRangeChange={() => {}}
+        onViewChange={() => {}}
+        view="monthly"
+        fromDate="2026-03-01"
+        toDate="2026-03-31"
+      />,
+    );
+
+    const contributionAccount = screen.getByLabelText(/conta origem/i);
+    const withdrawalAccount = screen.getByLabelText(/conta destino/i);
+
+    expect(contributionAccount).toHaveValue("acc-wallet");
+    expect(withdrawalAccount).toHaveValue("acc-wallet");
+    expect(screen.queryAllByRole("option", { name: /conta investimento/i })).toHaveLength(0);
   });
 });
