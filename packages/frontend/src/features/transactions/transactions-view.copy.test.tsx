@@ -283,6 +283,11 @@ describe("TransactionsView copy", () => {
 
     expect(screen.getByRole("cell", { name: "Investimento" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Somente leitura" })).toBeInTheDocument();
+    const investmentRow = screen.getByText("Aporte mensal").closest("tr");
+    expect(investmentRow).not.toBeNull();
+    expect(within(investmentRow as HTMLTableRowElement).queryByRole("button", { name: /^editar$/i })).not.toBeInTheDocument();
+    expect(within(investmentRow as HTMLTableRowElement).queryByRole("button", { name: /^estornar$/i })).not.toBeInTheDocument();
+    expect(within(investmentRow as HTMLTableRowElement).getByText("Sem acoes")).toBeInTheDocument();
 
     await userEvent.selectOptions(
       screen.getByRole("combobox", { name: /tipo do filtro/i }),
@@ -294,5 +299,8 @@ describe("TransactionsView copy", () => {
     await userEvent.click(screen.getByText("Aporte mensal"));
     expect(await screen.findAllByText("Conta principal")).not.toHaveLength(0);
     expect(screen.getAllByText("Patrimonio investido")).not.toHaveLength(0);
+    expect(
+      screen.getByText(/lancamento somente leitura\. edicao e estorno nao estao disponiveis\./i),
+    ).toBeInTheDocument();
   });
 });

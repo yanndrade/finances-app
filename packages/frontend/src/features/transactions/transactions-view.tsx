@@ -345,6 +345,17 @@ export function TransactionsView({
     });
   }
 
+  function canEditTransaction(transaction: TransactionSummary): boolean {
+    return (
+      transaction.status === "active" &&
+      (transaction.type === "income" || transaction.type === "expense")
+    );
+  }
+
+  function canVoidTransaction(transaction: TransactionSummary): boolean {
+    return transaction.status === "active";
+  }
+
   function handleStartSplit() {
     if (selectedTransaction === null) {
       return;
@@ -931,6 +942,8 @@ export function TransactionsView({
                 const categoryPresentation = resolveCategoryPresentation(transaction, transactionSplits, categoryRules);
                 const sourceLabel = resolveLedgerEndpointLabel(transaction, "source", accounts);
                 const destinationLabel = resolveLedgerEndpointLabel(transaction, "destination", accounts);
+                const canEdit = canEditTransaction(transaction);
+                const canVoid = canVoidTransaction(transaction);
                 return (
                   <tr
                     key={transaction.transaction_id}
@@ -953,31 +966,37 @@ export function TransactionsView({
                     </td>
                     <td>{formatCurrency(transaction.amount)}</td>
                     <td>
-                      <div className="inline-actions">
-                        <button
-                          className="ghost-button"
-                          disabled={transaction.status !== "active"}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openEditForm(transaction);
-                            setSelectedTransactionId(null);
-                          }}
-                          type="button"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          className="ghost-button ghost-button--danger"
-                          disabled={transaction.status !== "active"}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void onVoidTransaction(transaction.transaction_id);
-                          }}
-                          type="button"
-                        >
-                          Estornar
-                        </button>
-                      </div>
+                      {canEdit || canVoid ? (
+                        <div className="inline-actions">
+                          {canEdit ? (
+                            <button
+                              className="ghost-button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openEditForm(transaction);
+                                setSelectedTransactionId(null);
+                              }}
+                              type="button"
+                            >
+                              Editar
+                            </button>
+                          ) : null}
+                          {canVoid ? (
+                            <button
+                              className="ghost-button ghost-button--danger"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void onVoidTransaction(transaction.transaction_id);
+                              }}
+                              type="button"
+                            >
+                              Estornar
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="field-hint">Sem acoes</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -1167,30 +1186,38 @@ export function TransactionsView({
               {ruleFeedback ? <p className="success-banner">{ruleFeedback}</p> : null}
             </div>
 
-            <div className="inline-actions">
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => {
-                  openEditForm(selectedTransaction);
-                  setSelectedTransactionId(null);
-                }}
-                disabled={selectedTransaction.status !== "active"}
-              >
-                Editar transacao
-              </button>
-              <button
-                className="ghost-button ghost-button--danger"
-                type="button"
-                onClick={() => {
-                  void onVoidTransaction(selectedTransaction.transaction_id);
-                  setSelectedTransactionId(null);
-                }}
-                disabled={selectedTransaction.status !== "active"}
-              >
-                Estornar transacao
-              </button>
-            </div>
+            {canEditTransaction(selectedTransaction) || canVoidTransaction(selectedTransaction) ? (
+              <div className="inline-actions">
+                {canEditTransaction(selectedTransaction) ? (
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => {
+                      openEditForm(selectedTransaction);
+                      setSelectedTransactionId(null);
+                    }}
+                  >
+                    Editar transacao
+                  </button>
+                ) : null}
+                {canVoidTransaction(selectedTransaction) ? (
+                  <button
+                    className="ghost-button ghost-button--danger"
+                    type="button"
+                    onClick={() => {
+                      void onVoidTransaction(selectedTransaction.transaction_id);
+                      setSelectedTransactionId(null);
+                    }}
+                  >
+                    Estornar transacao
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <p className="field-hint">
+                Lancamento somente leitura. Edicao e estorno nao estao disponiveis.
+              </p>
+            )}
           </SheetContent>
         ) : null}
       </Sheet>
@@ -1553,7 +1580,6 @@ function DetailItem({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
 
 
 

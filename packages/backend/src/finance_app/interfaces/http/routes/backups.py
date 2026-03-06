@@ -21,17 +21,22 @@ def build_backups_router(
     def export_backup() -> dict[str, object]:
         accounts = account_service.list_accounts()
         cards = card_service.list_cards()
+        card_purchases = card_purchase_service.list_card_purchases()
         invoices = card_purchase_service.list_invoices()
         transactions = transaction_service.list_transactions()
         investment_movements = investment_service.list_movements()
 
         report_summary: dict[str, object] | None = None
-        if transactions:
-            occurred_at_values = [str(row["occurred_at"]) for row in transactions]
+        report_range_candidates = [
+            str(row["occurred_at"]) for row in transactions
+        ] + [
+            str(row["purchase_date"]) for row in card_purchases
+        ]
+        if report_range_candidates:
             report_summary = transaction_service.get_report_summary(
                 period="custom",
-                occurred_from=min(occurred_at_values),
-                occurred_to=max(occurred_at_values),
+                occurred_from=min(report_range_candidates),
+                occurred_to=max(report_range_candidates),
             )
 
         return {

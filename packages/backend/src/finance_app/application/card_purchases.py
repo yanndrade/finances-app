@@ -113,6 +113,14 @@ class CardPurchaseService:
             )
         return purchase
 
+    def list_card_purchases(
+        self,
+        *,
+        card_id: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        self._sync_projections()
+        return self._projector.list_card_purchases(card_id=card_id)
+
     def list_invoices(
         self,
         *,

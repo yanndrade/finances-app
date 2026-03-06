@@ -812,6 +812,175 @@ def test_projector_distributes_installments_into_future_invoice_cycles(tmp_path:
     ]
 
 
+def test_projector_tracks_card_purchase_reimbursements_by_installment_month(tmp_path: Path) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-02T12:00:02Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-02T12:02:00Z",
+                "amount": 90_00,
+                "installments_count": 3,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Lunch",
+                "person_id": "friend",
+            },
+            version=1,
+        )
+    )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    projector.run()
+
+    march_dashboard = projector.get_dashboard_summary(month="2026-03")
+    assert march_dashboard["pending_reimbursements_total"] == 30_00
+    assert march_dashboard["pending_reimbursements"] == [
+        {
+            "transaction_id": "purchase-1:1",
+            "person_id": "friend",
+            "amount": 30_00,
+            "status": "pending",
+            "account_id": "acc-1",
+            "occurred_at": "2026-03-10T00:00:00Z",
+            "received_at": None,
+            "receipt_transaction_id": None,
+        }
+    ]
+
+    april_dashboard = projector.get_dashboard_summary(month="2026-04")
+    assert april_dashboard["pending_reimbursements_total"] == 30_00
+    assert april_dashboard["pending_reimbursements"] == [
+        {
+            "transaction_id": "purchase-1:2",
+            "person_id": "friend",
+            "amount": 30_00,
+            "status": "pending",
+            "account_id": "acc-1",
+            "occurred_at": "2026-04-10T00:00:00Z",
+            "received_at": None,
+            "receipt_transaction_id": None,
+        }
+    ]
+
+
+def test_projector_anchors_card_reimbursement_to_reference_month_not_due_month(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 1,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-02T12:00:02Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-02T12:02:00Z",
+                "amount": 90_00,
+                "installments_count": 3,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Lunch",
+                "person_id": "friend",
+            },
+            version=1,
+        )
+    )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    projector.run()
+
+    march_dashboard = projector.get_dashboard_summary(month="2026-03")
+    assert march_dashboard["pending_reimbursements_total"] == 30_00
+    assert march_dashboard["pending_reimbursements"] == [
+        {
+            "transaction_id": "purchase-1:1",
+            "person_id": "friend",
+            "amount": 30_00,
+            "status": "pending",
+            "account_id": "acc-1",
+            "occurred_at": "2026-03-10T00:00:00Z",
+            "received_at": None,
+            "receipt_transaction_id": None,
+        }
+    ]
+
+
 def test_projector_applies_invoice_payments_to_invoice_status_and_cash_balance(
     tmp_path: Path,
 ) -> None:

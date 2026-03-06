@@ -155,6 +155,7 @@ class ReimbursementProjectionRecord(ProjectionBase):
     __tablename__ = "reimbursements"
 
     transaction_id: Mapped[str] = mapped_column(String, primary_key=True)
+    source_transaction_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     person_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, index=True, default="pending")
@@ -1101,6 +1102,7 @@ class Projector:
                 pending_reimbursement_rows: Sequence[ReimbursementProjectionRecord] = (
                     session.query(ReimbursementProjectionRecord)
                     .filter(ReimbursementProjectionRecord.status == "pending")
+                    .filter(ReimbursementProjectionRecord.occurred_at.like(f"{month}-%"))
                     .order_by(ReimbursementProjectionRecord.occurred_at.desc())
                     .all()
                 )
@@ -1533,9 +1535,8 @@ class Projector:
             session,
             purchase_id=purchase_id,
             person_id=_optional_string(payload.get("person_id")),
-            amount=int(payload["amount"]),
             account_id=card.payment_account_id,
-            purchase_date=str(payload["purchase_date"]),
+            allocations=visible_allocations,
         )
 
         for allocation in visible_allocations:
@@ -1985,6 +1986,7 @@ class Projector:
             session.add(
                 ReimbursementProjectionRecord(
                     transaction_id=transaction_id,
+                    source_transaction_id=transaction_id,
                     person_id=person_id,
                     amount=amount,
                     status="pending",
@@ -2003,6 +2005,7 @@ class Projector:
         existing.amount = amount
         existing.account_id = account_id
         existing.occurred_at = occurred_at
+        existing.source_transaction_id = transaction_id
 
     def _sync_reimbursement_from_card_purchase(
         self,
@@ -2010,36 +2013,60 @@ class Projector:
         *,
         purchase_id: str,
         person_id: str | None,
-        amount: int,
         account_id: str,
-        purchase_date: str,
+        allocations: Sequence[PurchaseInstallmentAllocation],
     ) -> None:
+        existing_rows = (
+            session.query(ReimbursementProjectionRecord)
+            .filter(ReimbursementProjectionRecord.source_transaction_id == purchase_id)
+            .all()
+        )
+
         if person_id is None or person_id.strip() == "":
+            for existing in existing_rows:
+                if existing.status != "received":
+                    session.delete(existing)
             return
 
-        existing = session.get(ReimbursementProjectionRecord, purchase_id)
-        if existing is None:
-            session.add(
-                ReimbursementProjectionRecord(
-                    transaction_id=purchase_id,
-                    person_id=person_id,
-                    amount=amount,
-                    status="pending",
-                    account_id=account_id,
-                    occurred_at=purchase_date,
-                    received_at=None,
-                    receipt_transaction_id=None,
+        active_ids = {
+            f"{purchase_id}:{allocation.installment_number}"
+            for allocation in allocations
+            if allocation.amount > 0
+        }
+        for existing in existing_rows:
+            if existing.transaction_id not in active_ids and existing.status != "received":
+                session.delete(existing)
+
+        for allocation in allocations:
+            if allocation.amount <= 0:
+                continue
+
+            reimbursement_id = f"{purchase_id}:{allocation.installment_number}"
+            existing = session.get(ReimbursementProjectionRecord, reimbursement_id)
+            if existing is None:
+                session.add(
+                    ReimbursementProjectionRecord(
+                        transaction_id=reimbursement_id,
+                        source_transaction_id=purchase_id,
+                        person_id=person_id,
+                        amount=allocation.amount,
+                        status="pending",
+                        account_id=account_id,
+                        occurred_at=f"{allocation.closing_date}T00:00:00Z",
+                        received_at=None,
+                        receipt_transaction_id=None,
+                    )
                 )
-            )
-            return
+                continue
 
-        if existing.status == "received":
-            return
+            if existing.status == "received":
+                continue
 
-        existing.person_id = person_id
-        existing.amount = amount
-        existing.account_id = account_id
-        existing.occurred_at = purchase_date
+            existing.source_transaction_id = purchase_id
+            existing.person_id = person_id
+            existing.amount = allocation.amount
+            existing.account_id = account_id
+            existing.occurred_at = f"{allocation.closing_date}T00:00:00Z"
 
     def _ensure_month_pendings(self, session: Session, *, month: str) -> None:
         rows: Sequence[RecurringRuleProjectionRecord] = (
@@ -2303,7 +2330,7 @@ class Projector:
             query = query.join(
                 ReimbursementProjectionRecord,
                 and_(
-                    ReimbursementProjectionRecord.transaction_id
+                    ReimbursementProjectionRecord.source_transaction_id
                     == CardPurchaseInstallmentRecord.purchase_id,
                     ReimbursementProjectionRecord.person_id == person_id,
                 ),
@@ -2370,7 +2397,7 @@ class Projector:
             query = query.join(
                 ReimbursementProjectionRecord,
                 and_(
-                    ReimbursementProjectionRecord.transaction_id
+                    ReimbursementProjectionRecord.source_transaction_id
                     == CardPurchaseProjectionRecord.purchase_id,
                     ReimbursementProjectionRecord.person_id == person_id,
                 ),
@@ -2698,6 +2725,7 @@ class Projector:
             return True
         expected_reimbursement_columns = {
             "transaction_id",
+            "source_transaction_id",
             "person_id",
             "amount",
             "status",
@@ -2921,10 +2949,6 @@ def _optional_string(value: object | None) -> str | None:
         return None
 
     return str(value)
-
-
-
-
 
 
 
