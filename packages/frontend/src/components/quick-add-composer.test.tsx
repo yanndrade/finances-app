@@ -313,5 +313,29 @@ describe("QuickAddComposer", () => {
       );
     });
   });
-});
 
+  it("hides the account field for card expenses and still submits", async () => {
+    installMatchMedia(false);
+    const user = userEvent.setup();
+    const { onSubmitCardPurchase } = renderComposer();
+
+    await user.type(screen.getByPlaceholderText("0,00"), "21264");
+    await user.type(screen.getByLabelText(/^descricao$/i), "Ventilador");
+    await user.selectOptions(screen.getByLabelText(/modo de pagamento/i), "CARD");
+
+    expect(screen.queryByLabelText(/^conta$/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^cartao$/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^lancar$/i }));
+
+    await waitFor(() => {
+      expect(onSubmitCardPurchase).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amountInCents: 21264,
+          description: "Ventilador",
+          cardId: "card-1",
+        }),
+      );
+    });
+  });
+});

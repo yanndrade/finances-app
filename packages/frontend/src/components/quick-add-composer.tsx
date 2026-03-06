@@ -63,6 +63,8 @@ const ENTER_SUBMIT_INPUT_TYPES = new Set([
   "url",
   "number",
 ]);
+const QUICK_ADD_SELECT_CLASS_NAME =
+  "h-11 w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-base leading-tight focus-visible:bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm";
 
 type QuickAddComposerProps = {
   isOpen: boolean;
@@ -128,6 +130,7 @@ export function QuickAddComposer({
   const [cardId, setCardId] = useState("");
 
   const categoryOptions = getCategoryOptions(categoryId);
+  const isCardExpense = entryType === "expense" && expensePaymentMode === "CARD";
   const openInvoices = useMemo(
     () => invoices.filter((invoice) => invoice.status.toLowerCase() !== "paid"),
     [invoices],
@@ -280,7 +283,6 @@ export function QuickAddComposer({
       .string()
       .regex(DATE_PATTERN, "Informe uma data valida.")
       .safeParse(date);
-    const accountResult = z.string().min(1, "Selecione uma conta.").safeParse(accountId);
 
     if (!amountResult.success) {
       nextErrors.amount = amountResult.error.issues[0]?.message;
@@ -288,8 +290,11 @@ export function QuickAddComposer({
     if (!dateResult.success) {
       nextErrors.date = dateResult.error.issues[0]?.message;
     }
-    if (!accountResult.success) {
-      nextErrors.accountId = accountResult.error.issues[0]?.message;
+    if (!isCardExpense) {
+      const accountResult = z.string().min(1, "Selecione uma conta.").safeParse(accountId);
+      if (!accountResult.success) {
+        nextErrors.accountId = accountResult.error.issues[0]?.message;
+      }
     }
 
     if (entryType === "transfer" && transferMode === "internal") {
@@ -484,7 +489,7 @@ export function QuickAddComposer({
           <select
             id="quick-add-type"
             aria-label="Tipo"
-            className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
+            className={QUICK_ADD_SELECT_CLASS_NAME}
             onChange={(event) =>
               dispatchQuickAdd({
                 type: "entryTypeChanged",
@@ -547,7 +552,7 @@ export function QuickAddComposer({
             <select
               id="quick-add-payment-mode"
               aria-label="Modo de pagamento"
-              className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
               onChange={(event) =>
                 dispatchQuickAdd({
                   type: "expensePaymentModeChanged",
@@ -570,7 +575,7 @@ export function QuickAddComposer({
             <select
               id="quick-add-transfer-mode"
               aria-label="Modo da transferencia"
-              className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
               onChange={(event) =>
                 dispatchQuickAdd({
                   type: "transferModeChanged",
@@ -590,7 +595,7 @@ export function QuickAddComposer({
             <select
               id="quick-add-investment-mode"
               aria-label="Tipo do movimento"
-              className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
               onChange={(event) =>
                 dispatchQuickAdd({
                   type: "investmentModeChanged",
@@ -605,12 +610,12 @@ export function QuickAddComposer({
         ) : null}
 
         {entryType === "expense" || entryType === "income" ? (
-          <div className="col-span-2 space-y-2 md:col-span-1">
+          <div className={isCardExpense ? "col-span-2 space-y-2" : "col-span-2 space-y-2 md:col-span-1"}>
             <Label htmlFor="quick-add-category">Categoria</Label>
             <select
               id="quick-add-category"
               aria-label="Categoria"
-              className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
               onChange={(event) => setCategoryId(event.target.value)}
               value={categoryId}
             >
@@ -660,41 +665,43 @@ export function QuickAddComposer({
           </div>
         ) : null}
 
-        <div className="col-span-2 space-y-2 md:col-span-1">
-          <Label htmlFor="quick-add-account">
-            {entryType === "transfer" && transferMode === "invoice_payment"
-              ? "Conta que vai pagar a fatura"
-              : entryType === "transfer"
-                ? "Conta origem"
-                : "Conta"}
-          </Label>
-          <select
-            id="quick-add-account"
-            aria-label={
-              entryType === "transfer" && transferMode === "invoice_payment"
+        {isCardExpense ? null : (
+          <div className="col-span-2 space-y-2 md:col-span-1">
+            <Label htmlFor="quick-add-account">
+              {entryType === "transfer" && transferMode === "invoice_payment"
                 ? "Conta que vai pagar a fatura"
                 : entryType === "transfer"
                   ? "Conta origem"
-                  : "Conta"
-            }
-            className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
-            onChange={(event) => {
-              dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
-              dispatchQuickAdd({
-                type: "validationErrorsPatched",
-                errors: { accountId: undefined },
-              });
-            }}
-            value={accountId}
-          >
-            {accounts.map((account) => (
-              <option key={account.account_id} value={account.account_id}>
-                {account.name}
-              </option>
-            ))}
-          </select>
-          <FieldError message={validationErrors.accountId} />
-        </div>
+                  : "Conta"}
+            </Label>
+            <select
+              id="quick-add-account"
+              aria-label={
+                entryType === "transfer" && transferMode === "invoice_payment"
+                  ? "Conta que vai pagar a fatura"
+                  : entryType === "transfer"
+                    ? "Conta origem"
+                    : "Conta"
+              }
+              className={QUICK_ADD_SELECT_CLASS_NAME}
+              onChange={(event) => {
+                dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
+                dispatchQuickAdd({
+                  type: "validationErrorsPatched",
+                  errors: { accountId: undefined },
+                });
+              }}
+              value={accountId}
+            >
+              {accounts.map((account) => (
+                <option key={account.account_id} value={account.account_id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+            <FieldError message={validationErrors.accountId} />
+          </div>
+        )}
 
         {entryType === "transfer" && transferMode === "internal" ? (
           <div className="col-span-2 space-y-2 md:col-span-1">
@@ -702,7 +709,7 @@ export function QuickAddComposer({
             <select
               id="quick-add-destination-account"
               aria-label="Conta destino"
-              className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
               onChange={(event) => {
                 dispatchQuickAdd({ type: "toAccountChanged", accountId: event.target.value });
                 dispatchQuickAdd({
@@ -735,7 +742,7 @@ export function QuickAddComposer({
               <select
                 id="quick-add-invoice"
                 aria-label="Fatura"
-                className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
+                className={QUICK_ADD_SELECT_CLASS_NAME}
                 onChange={(event) => {
                   dispatchQuickAdd({ type: "invoiceChanged", invoiceId: event.target.value });
                   dispatchQuickAdd({
@@ -762,14 +769,14 @@ export function QuickAddComposer({
           </>
         ) : null}
 
-        {entryType === "expense" && expensePaymentMode === "CARD" ? (
+        {isCardExpense ? (
           <>
             <div className="col-span-2 space-y-2 md:col-span-1">
               <Label htmlFor="quick-add-card">Cartao</Label>
               <select
                 id="quick-add-card"
                 aria-label="Cartao"
-                className="h-11 w-full rounded-md border border-input bg-muted/50 px-3"
+                className={QUICK_ADD_SELECT_CLASS_NAME}
                 onChange={(event) => {
                   setCardId(event.target.value);
                   dispatchQuickAdd({
@@ -928,4 +935,3 @@ function useMediaQuery(query: string): boolean {
 
   return matches;
 }
-
