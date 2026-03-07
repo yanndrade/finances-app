@@ -35,11 +35,11 @@ export function DashboardAction({
       : recentTransactions.filter((t) => t.type === quickFilter).slice(0, 8);
 
   return (
-    <section aria-label="Acoes pendentes" className="dashboard-section">
+    <section aria-label="Ações pendentes" className="dashboard-section">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Acao</p>
-          <h2 className="section-title">O que precisa de atencao</h2>
+          <p className="eyebrow">Ação</p>
+          <h2 className="section-title">O que precisa de atenção</h2>
         </div>
       </div>
 
@@ -50,7 +50,7 @@ export function DashboardAction({
               <p className="eyebrow">Para revisar</p>
               <h3 className="section-title">
                 {reviewQueue.length > 0
-                  ? `${reviewQueue.length} transac${reviewQueue.length === 1 ? "ao" : "oes"}`
+                  ? `${reviewQueue.length} transaç${reviewQueue.length === 1 ? "ão" : "ões"}`
                   : "Tudo em dia"}
               </h3>
             </div>
@@ -58,9 +58,9 @@ export function DashboardAction({
 
           {reviewQueue.length === 0 ? (
             <div className="empty-state empty-state--guided">
-              <p>Nenhuma transacao precisa de revisao.</p>
+              <p>Nenhuma transação precisa de revisão.</p>
               <p className="empty-state__hint">
-                Transacoes sem descricao ou categoria aparecerao aqui.
+                Transações sem descrição ou categoria aparecerão aqui.
               </p>
             </div>
           ) : (
@@ -89,8 +89,8 @@ export function DashboardAction({
         <article className="panel-card">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Transacoes</p>
-              <h3 className="section-title">Ultimas movimentacoes</h3>
+              <p className="eyebrow">Transações</p>
+              <h3 className="section-title">Últimas movimentações</h3>
             </div>
           </div>
 
@@ -99,8 +99,8 @@ export function DashboardAction({
               [
                 { key: "all", label: "Todas" },
                 { key: "income", label: "Entradas" },
-                { key: "expense", label: "Saidas" },
-                { key: "transfer", label: "Transferencias" },
+                { key: "expense", label: "Saídas" },
+                { key: "transfer", label: "Transferências" },
               ] as const
             ).map((filter) => (
               <button
@@ -116,16 +116,16 @@ export function DashboardAction({
 
           {filteredTransactions.length === 0 ? (
             <div className="empty-state empty-state--guided">
-              <p>Nenhuma transacao encontrada.</p>
+              <p>Nenhuma transação encontrada.</p>
               <p className="empty-state__hint">
-                Comece adicionando suas primeiras transacoes.
+                Comece adicionando suas primeiras transações.
               </p>
               <button
                 className="secondary-button"
                 onClick={() => onNavigate("movements")}
                 type="button"
               >
-                Adicionar transacao
+                Adicionar transação
               </button>
             </div>
           ) : (
@@ -166,7 +166,7 @@ export function DashboardAction({
                 onClick={() => onNavigate("transactions")}
                 type="button"
               >
-                Ver historico completo
+                Ver histórico completo
               </button>
             </div>
           )}
@@ -217,7 +217,7 @@ function ReviewItem({
       </div>
       <div className="review-item__actions">
         <input
-          aria-label="Descricao da transacao"
+          aria-label="Descrição da transação"
           className="review-item__input"
           onChange={(e) => {
             setDescription(e.target.value);
@@ -226,7 +226,7 @@ function ReviewItem({
           onKeyDown={(e) => {
             if (e.key === "Enter") handleSave();
           }}
-          placeholder="Adicionar descricao..."
+          placeholder="Adicionar descrição..."
           type="text"
           value={description}
         />

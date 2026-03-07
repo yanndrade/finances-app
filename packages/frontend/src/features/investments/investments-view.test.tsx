@@ -16,119 +16,109 @@ function buildAccount(overrides: Partial<AccountSummary> = {}): AccountSummary {
   };
 }
 
-describe("InvestmentsView", () => {
-  it("renders wealth evolution and contribution/dividend controls", () => {
-    render(
-      <InvestmentsView
-        accounts={[buildAccount()]}
-        loading={false}
-        isSubmitting={false}
-        movements={[]}
-        overview={{
-          view: "monthly",
-          from: "2026-03-01T00:00:00Z",
-          to: "2026-03-31T23:59:59Z",
-          totals: {
-            contribution_total: 30_00,
-            dividend_total: 5_00,
-            withdrawal_total: 18_00,
-            invested_balance: 15_00,
-            cash_balance: 68_00,
-            wealth: 83_00,
-            dividends_accumulated: 5_00,
-          },
-          goal: {
-            target: 0,
-            realized: 35_00,
-            remaining: 0,
-            progress_percent: 100,
-          },
-          series: {
-            wealth_evolution: [
-              {
-                bucket: "2026-03",
-                cash_balance: 68_00,
-                invested_balance: 15_00,
-                wealth: 83_00,
-              },
-            ],
-            contribution_dividend_trend: [
-              {
-                bucket: "2026-03",
-                contribution_total: 30_00,
-                dividend_total: 5_00,
-                withdrawal_total: 18_00,
-              },
-            ],
-          },
-        }}
-        onOpenLedgerFiltered={() => {}}
-        onOpenQuickAdd={() => {}}
-        onRangeChange={() => {}}
-        onViewChange={() => {}}
-        view="monthly"
-        fromDate="2026-03-01"
-        toDate="2026-03-31"
-        uiDensity="compact"
-      />,
-    );
+function renderInvestmentsView(options?: {
+  accounts?: AccountSummary[];
+  onOpenLedgerFiltered?: ReturnType<typeof vi.fn>;
+  onOpenQuickAdd?: ReturnType<typeof vi.fn>;
+}) {
+  const onOpenLedgerFiltered = options?.onOpenLedgerFiltered ?? vi.fn();
+  const onOpenQuickAdd = options?.onOpenQuickAdd ?? vi.fn();
 
-    expect(screen.getByRole("heading", { name: /evolu..o do patrim.nio/i })).toBeInTheDocument();
+  render(
+    <InvestmentsView
+      accounts={options?.accounts ?? [buildAccount()]}
+      loading={false}
+      isSubmitting={false}
+      movements={[]}
+      overview={{
+        view: "monthly",
+        from: "2026-03-01T00:00:00Z",
+        to: "2026-03-31T23:59:59Z",
+        totals: {
+          contribution_total: 30_00,
+          dividend_total: 5_00,
+          withdrawal_total: 18_00,
+          invested_balance: 15_00,
+          cash_balance: 68_00,
+          wealth: 83_00,
+          dividends_accumulated: 5_00,
+        },
+        goal: {
+          target: 0,
+          realized: 35_00,
+          remaining: 0,
+          progress_percent: 100,
+        },
+        series: {
+          wealth_evolution: [
+            {
+              bucket: "2026-03",
+              cash_balance: 68_00,
+              invested_balance: 15_00,
+              wealth: 83_00,
+            },
+          ],
+          contribution_dividend_trend: [
+            {
+              bucket: "2026-03",
+              contribution_total: 30_00,
+              dividend_total: 5_00,
+              withdrawal_total: 18_00,
+            },
+          ],
+        },
+      }}
+      onOpenLedgerFiltered={onOpenLedgerFiltered}
+      onOpenQuickAdd={onOpenQuickAdd}
+      onRangeChange={() => {}}
+      onViewChange={() => {}}
+      view="monthly"
+      fromDate="2026-03-01"
+      toDate="2026-03-31"
+      uiDensity="compact"
+    />,
+  );
+
+  return { onOpenLedgerFiltered, onOpenQuickAdd };
+}
+
+describe("InvestmentsView", () => {
+  it("uses internal tabs to separate panel, charts and movements", async () => {
+    const user = userEvent.setup();
+
+    renderInvestmentsView();
+
+    expect(screen.getByRole("tab", { name: /painel/i })).toHaveAttribute("data-state", "active");
+    expect(screen.getByText(/composicao patrimonial/i)).toBeInTheDocument();
+    expect(screen.queryByText(/evolucao do patrimonio/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /evolucao/i }));
+
+    expect(screen.getByText(/evolucao do patrimonio/i)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /aporte/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /dividendos/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /novo aporte/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /novo resgate/i })).toBeInTheDocument();
   });
 
-  it("opens quick add contribution preset when using investment cta", async () => {
+  it("opens contribution quick add from the movements tab", async () => {
+    const user = userEvent.setup();
     const onOpenQuickAdd = vi.fn();
 
-    render(
-      <InvestmentsView
-        accounts={[buildAccount()]}
-        loading={false}
-        isSubmitting={false}
-        movements={[]}
-        overview={null}
-        onOpenLedgerFiltered={() => {}}
-        onOpenQuickAdd={onOpenQuickAdd}
-        onRangeChange={() => {}}
-        onViewChange={() => {}}
-        view="monthly"
-        fromDate="2026-03-01"
-        toDate="2026-03-31"
-        uiDensity="compact"
-      />,
-    );
+    renderInvestmentsView({ onOpenQuickAdd });
 
-    await userEvent.click(screen.getByRole("button", { name: /novo aporte/i }));
+    await user.click(screen.getByRole("tab", { name: /movimentos/i }));
+    await user.click(screen.getByRole("button", { name: /novo aporte/i }));
 
     expect(onOpenQuickAdd).toHaveBeenCalledWith("investment_contribution");
   });
 
-
-  it("opens the filtered ledger shortcut with the investment type filter", async () => {
+  it("opens the filtered ledger shortcut from the movements tab", async () => {
+    const user = userEvent.setup();
     const onOpenLedgerFiltered = vi.fn();
 
-    render(
-      <InvestmentsView
-        accounts={[buildAccount()]}
-        loading={false}
-        isSubmitting={false}
-        movements={[]}
-        overview={null}
-        onOpenLedgerFiltered={onOpenLedgerFiltered}
-        onOpenQuickAdd={() => {}}
-        onRangeChange={() => {}}
-        onViewChange={() => {}}
-        view="monthly"
-        fromDate="2026-03-01"
-        toDate="2026-03-31"
-        uiDensity="compact"
-      />,
-    );
+    renderInvestmentsView({ onOpenLedgerFiltered });
 
-    await userEvent.click(screen.getByRole("button", { name: /abrir ledger filtrado/i }));
+    await user.click(screen.getByRole("tab", { name: /movimentos/i }));
+    await user.click(screen.getByRole("button", { name: /ver movimentos no historico/i }));
 
     expect(onOpenLedgerFiltered).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -139,30 +129,22 @@ describe("InvestmentsView", () => {
       }),
       "2026-03",
     );
-  });  it("disables investment quick actions when no movement account is available", () => {
-    render(
-      <InvestmentsView
-        accounts={[
-          buildAccount({
-            account_id: "acc-invest",
-            name: "Conta investimento",
-            type: "investment",
-          }),
-        ]}
-        loading={false}
-        isSubmitting={false}
-        movements={[]}
-        overview={null}
-        onOpenLedgerFiltered={() => {}}
-        onOpenQuickAdd={() => {}}
-        onRangeChange={() => {}}
-        onViewChange={() => {}}
-        view="monthly"
-        fromDate="2026-03-01"
-        toDate="2026-03-31"
-        uiDensity="compact"
-      />,
-    );
+  });
+
+  it("disables movement actions when no cash account is available", async () => {
+    const user = userEvent.setup();
+
+    renderInvestmentsView({
+      accounts: [
+        buildAccount({
+          account_id: "acc-invest",
+          name: "Conta investimento",
+          type: "investment",
+        }),
+      ],
+    });
+
+    await user.click(screen.getByRole("tab", { name: /movimentos/i }));
 
     expect(screen.getByRole("button", { name: /novo aporte/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /novo resgate/i })).toBeDisabled();
@@ -171,6 +153,3 @@ describe("InvestmentsView", () => {
     ).toBeInTheDocument();
   });
 });
-
-
-

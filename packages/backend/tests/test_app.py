@@ -916,8 +916,15 @@ def test_dashboard_endpoint_returns_monthly_summary_from_projections(tmp_path) -
         "total_expense": 20_00,
         "net_flow": 30_00,
         "current_balance": 155_00,
+        "fixed_expenses_total": 0,
+        "installment_total": 0,
+        "invoices_due_total": 0,
+        "free_to_spend": 30_00,
         "pending_reimbursements_total": 0,
         "pending_reimbursements": [],
+        "monthly_commitments": [],
+        "monthly_fixed_expenses": [],
+        "monthly_installments": [],
         "recent_transactions": [
             {
                 "transaction_id": "trf-1:debit",
@@ -983,16 +990,16 @@ def test_dashboard_endpoint_returns_monthly_summary_from_projections(tmp_path) -
             "total_expense": 0,
             "net_flow": 0,
         },
-            "daily_balance_series": [
-                {
-                    "date": "2026-03-02",
-                    "balance": 30_00,
-                }
-            ],
-            "review_queue": [],
-            "category_budgets": [],
-            "budget_alerts": [],
-        }
+        "daily_balance_series": [
+            {
+                "date": "2026-03-02",
+                "balance": 30_00,
+            }
+        ],
+        "review_queue": [],
+        "category_budgets": [],
+        "budget_alerts": [],
+    }
 
 
 def test_reimbursements_are_pending_until_marked_received(tmp_path) -> None:
@@ -1565,20 +1572,27 @@ def test_dev_reset_endpoint_clears_accounts_transfers_and_card_purchases(tmp_pat
         "total_expense": 0,
         "net_flow": 0,
         "current_balance": 0,
+        "fixed_expenses_total": 0,
+        "installment_total": 0,
+        "invoices_due_total": 0,
+        "free_to_spend": 0,
         "pending_reimbursements_total": 0,
         "pending_reimbursements": [],
+        "monthly_commitments": [],
+        "monthly_fixed_expenses": [],
+        "monthly_installments": [],
         "recent_transactions": [],
         "spending_by_category": [],
-            "previous_month": {
-                "total_income": 0,
-                "total_expense": 0,
-                "net_flow": 0,
-            },
-            "daily_balance_series": [],
-            "review_queue": [],
-            "category_budgets": [],
-            "budget_alerts": [],
-        }
+        "previous_month": {
+            "total_income": 0,
+            "total_expense": 0,
+            "net_flow": 0,
+        },
+        "daily_balance_series": [],
+        "review_queue": [],
+        "category_budgets": [],
+        "budget_alerts": [],
+    }
 
 
 def test_cards_endpoints_support_create_list_and_update(tmp_path) -> None:
@@ -1974,11 +1988,27 @@ def test_card_purchase_endpoint_supports_installments_and_monthly_budget_project
         },
     ]
     assert dashboard_response.status_code == 200
-    assert dashboard_response.json()["total_expense"] == 0
+    assert dashboard_response.json()["total_expense"] == 33_33
+    assert dashboard_response.json()["installment_total"] == 33_33
+    assert dashboard_response.json()["invoices_due_total"] == 33_33
     assert dashboard_response.json()["spending_by_category"] == [
         {
             "category_id": "electronics",
             "total": 33_33,
+        }
+    ]
+    assert dashboard_response.json()["monthly_installments"] == [
+        {
+            "installment_id": "purchase-1:2",
+            "purchase_id": "purchase-1",
+            "title": "Headphones",
+            "category_id": "electronics",
+            "amount": 33_33,
+            "card_id": "card-1",
+            "installment_number": 2,
+            "installments_count": 3,
+            "due_date": "2026-05-20",
+            "reference_month": "2026-05",
         }
     ]
 

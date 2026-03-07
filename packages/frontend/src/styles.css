@@ -139,7 +139,9 @@ button {
 
 .app-layout--desktop {
   display: grid;
-  grid-template-columns: 310px 1fr;
+  grid-template-columns: 282px 1fr;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -156,6 +158,9 @@ button {
 
 .app-workspace {
   min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-footer {
@@ -272,9 +277,12 @@ button {
 }
 
 .app-main {
-  width: min(100%, 1480px);
+  width: min(100%, 1720px);
   margin: 0 auto;
-  padding: 2rem 2.25rem 2.5rem;
+  padding: 1.5rem 2rem 2rem;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .page-header {
@@ -282,12 +290,12 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1.5rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
 }
 
 .page-title {
   margin: 0.2rem 0 0.45rem;
-  font-size: clamp(2.2rem, 3.4vw, 3.35rem);
+  font-size: clamp(2rem, 3vw, 2.5rem);
   font-weight: 900;
   line-height: 0.98;
   letter-spacing: -0.05em;
@@ -307,7 +315,8 @@ button {
 }
 
 .page-content-shell {
-  max-width: 1120px;
+  width: 100%;
+  max-width: none;
 }
 
 .page-body--with-context {
@@ -322,7 +331,7 @@ button {
 .page-content,
 .screen-stack {
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .context-panel {
@@ -459,8 +468,8 @@ button {
 }
 
 .section-title {
-  margin: 0.25rem 0 0.35rem;
-  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  margin: 0.2rem 0 0.35rem;
+  font-size: clamp(1.2rem, 1.8vw, 1.5rem);
   font-weight: 900;
   line-height: 1.1;
   letter-spacing: -0.04em;
@@ -725,7 +734,7 @@ button {
 }
 
 .stat-card__value {
-  font-size: clamp(1.4rem, 2vw, 2rem);
+  font-size: clamp(1.3rem, 1.8vw, 1.6rem);
   line-height: 1.05;
 }
 
@@ -2323,8 +2332,8 @@ select:focus,
 }
 
 .ui-density--compact .app-main {
-  width: min(100%, 1540px);
-  padding: 1.65rem 1.85rem 2rem;
+  width: min(100%, 1760px);
+  padding: 1.45rem 1.65rem 1.85rem;
 }
 
 .ui-density--compact .page-header {
@@ -2376,8 +2385,8 @@ select:focus,
 }
 
 .ui-density--dense .app-main {
-  width: min(100%, 1600px);
-  padding: 1.25rem 1.35rem 1.65rem;
+  width: min(100%, 1820px);
+  padding: 1.05rem 1.2rem 1.4rem;
 }
 
 .ui-density--dense .page-header {
@@ -2426,3 +2435,38 @@ select:focus,
 .ui-density--dense .section-title {
   font-size: clamp(1.2rem, 1.5vw, 1.45rem);
 }
+
+
+@media (min-width: 1536px) {
+
+  .reports-workbench {
+    display: grid;
+    grid-template-columns: minmax(18rem, 21rem) minmax(0, 1fr);
+    align-items: start;
+    gap: 1.25rem;
+  }
+
+  .reports-workbench > * {
+    min-width: 0;
+  }
+
+  .reports-filter-rail {
+    position: sticky;
+    top: 1.5rem;
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+    margin-bottom: 0;
+  }
+
+  .reports-tabs-panel {
+    margin-top: 0;
+    min-width: 0;
+  }
+
+  .reports-workbench .tabs-list {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+

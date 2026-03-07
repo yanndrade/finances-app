@@ -33,6 +33,7 @@ from finance_app.domain.projections import (
     BalanceStateProjection,
     BudgetProjection,
     CardProjection,
+    CardInstallmentProjection,
     CardPurchaseProjection,
     InvestmentMovementProjection,
     InvoiceItemProjection,
@@ -54,7 +55,9 @@ class EventCursorRecord(ProjectionBase):
     __tablename__ = "event_cursor"
 
     singleton_id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    last_applied_event_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_applied_event_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
 
 
 class AccountProjectionRecord(ProjectionBase):
@@ -155,14 +158,20 @@ class ReimbursementProjectionRecord(ProjectionBase):
     __tablename__ = "reimbursements"
 
     transaction_id: Mapped[str] = mapped_column(String, primary_key=True)
-    source_transaction_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    source_transaction_id: Mapped[str] = mapped_column(
+        String, nullable=False, index=True
+    )
     person_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(String, nullable=False, index=True, default="pending")
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, index=True, default="pending"
+    )
     account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     occurred_at: Mapped[str] = mapped_column(String, nullable=False, index=True)
     received_at: Mapped[str | None] = mapped_column(String, nullable=True)
-    receipt_transaction_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    receipt_transaction_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
 
 
 class RecurringRuleProjectionRecord(ProjectionBase):
@@ -192,8 +201,12 @@ class PendingProjectionRecord(ProjectionBase):
     payment_method: Mapped[str] = mapped_column(String, nullable=False)
     category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
-    status: Mapped[str] = mapped_column(String, nullable=False, index=True, default="pending")
-    transaction_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, index=True, default="pending"
+    )
+    transaction_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
     confirmed_at: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
@@ -245,7 +258,9 @@ class Projector:
             with self._session_factory.begin() as session:
                 cursor = session.get(EventCursorRecord, 1)
                 if cursor is None:
-                    session.add(EventCursorRecord(singleton_id=1, last_applied_event_id=0))
+                    session.add(
+                        EventCursorRecord(singleton_id=1, last_applied_event_id=0)
+                    )
 
     def run(self) -> int:
         with self._lock:
@@ -317,6 +332,26 @@ class Projector:
                     .all()
                 )
 
+                card_ids = [row.card_id for row in rows]
+
+                future_installment_totals: dict[str, int] = {}
+                if card_ids:
+                    current_month = datetime.now().strftime("%Y-%m")
+                    future_installments = (
+                        session.query(CardPurchaseInstallmentRecord)
+                        .filter(CardPurchaseInstallmentRecord.card_id.in_(card_ids))
+                        .filter(
+                            CardPurchaseInstallmentRecord.reference_month
+                            > current_month
+                        )
+                        .all()
+                    )
+                    for installment in future_installments:
+                        future_installment_totals[installment.card_id] = (
+                            future_installment_totals.get(installment.card_id, 0)
+                            + installment.amount
+                        )
+
         return [
             CardProjection(
                 card_id=row.card_id,
@@ -326,6 +361,7 @@ class Projector:
                 due_day=row.due_day,
                 payment_account_id=row.payment_account_id,
                 is_active=row.is_active,
+                future_installment_total=future_installment_totals.get(row.card_id, 0),
             ).to_dict()
             for row in rows
         ]
@@ -340,15 +376,14 @@ class Projector:
             with self._session_factory() as session:
                 query = session.query(CardPurchaseProjectionRecord)
                 if card_id is not None:
-                    query = query.filter(CardPurchaseProjectionRecord.card_id == card_id)
-
-                rows = (
-                    query.order_by(
-                        CardPurchaseProjectionRecord.purchase_date.desc(),
-                        CardPurchaseProjectionRecord.purchase_id.desc(),
+                    query = query.filter(
+                        CardPurchaseProjectionRecord.card_id == card_id
                     )
-                    .all()
-                )
+
+                rows = query.order_by(
+                    CardPurchaseProjectionRecord.purchase_date.desc(),
+                    CardPurchaseProjectionRecord.purchase_id.desc(),
+                ).all()
 
         return [
             CardPurchaseProjection(
@@ -379,13 +414,10 @@ class Projector:
                 if card_id is not None:
                     query = query.filter(InvoiceProjectionRecord.card_id == card_id)
 
-                rows = (
-                    query.order_by(
-                        InvoiceProjectionRecord.reference_month.desc(),
-                        InvoiceProjectionRecord.invoice_id.desc(),
-                    )
-                    .all()
-                )
+                rows = query.order_by(
+                    InvoiceProjectionRecord.reference_month.desc(),
+                    InvoiceProjectionRecord.invoice_id.desc(),
+                ).all()
 
         return [
             InvoiceProjection(
@@ -450,6 +482,63 @@ class Projector:
             for row in rows
         ]
 
+    def list_card_installments(
+        self,
+        *,
+        card_id: str | None = None,
+        reference_month_from: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                query = session.query(CardPurchaseInstallmentRecord)
+                if card_id is not None:
+                    query = query.filter(
+                        CardPurchaseInstallmentRecord.card_id == card_id
+                    )
+                if reference_month_from is not None:
+                    query = query.filter(
+                        CardPurchaseInstallmentRecord.reference_month
+                        >= reference_month_from
+                    )
+
+                rows = query.order_by(
+                    CardPurchaseInstallmentRecord.reference_month.asc(),
+                    CardPurchaseInstallmentRecord.installment_number.asc(),
+                    CardPurchaseInstallmentRecord.installment_id.asc(),
+                ).all()
+
+                descriptions = {
+                    row.purchase_id: row.description
+                    for row in (
+                        session.query(CardPurchaseProjectionRecord)
+                        .filter(
+                            CardPurchaseProjectionRecord.purchase_id.in_(
+                                [item.purchase_id for item in rows]
+                            )
+                        )
+                        .all()
+                    )
+                }
+
+        return [
+            CardInstallmentProjection(
+                installment_id=row.installment_id,
+                purchase_id=row.purchase_id,
+                card_id=row.card_id,
+                purchase_date=row.purchase_date,
+                due_date=row.due_date,
+                reference_month=row.reference_month,
+                category_id=row.category_id,
+                description=descriptions.get(row.purchase_id),
+                installment_number=row.installment_number,
+                installments_count=row.installments_count,
+                amount=row.amount,
+                invoice_id=row.invoice_id,
+            ).to_dict()
+            for row in rows
+        ]
+
     def list_balance_states(self) -> list[dict[str, str | int]]:
         with self._lock:
             self.bootstrap()
@@ -482,7 +571,8 @@ class Projector:
         text: str | None = None,
         include_ledger: bool = False,
     ) -> list[dict[str, str | int | None]]:
-        card_purchase_ledger_rows: list[dict[str, str | int | None]] = []
+        purchase_ledger_rows: list[dict[str, str | int | None]] = []
+        installment_ledger_rows: list[dict[str, str | int | None]] = []
         investment_ledger_rows: list[dict[str, str | int | None]] = []
 
         with self._lock:
@@ -491,9 +581,13 @@ class Projector:
                 query = session.query(TransactionProjectionRecord)
 
                 if occurred_from is not None:
-                    query = query.filter(TransactionProjectionRecord.occurred_at >= occurred_from)
+                    query = query.filter(
+                        TransactionProjectionRecord.occurred_at >= occurred_from
+                    )
                 if occurred_to is not None:
-                    query = query.filter(TransactionProjectionRecord.occurred_at <= occurred_to)
+                    query = query.filter(
+                        TransactionProjectionRecord.occurred_at <= occurred_to
+                    )
                 query = self._apply_transaction_filters(
                     query,
                     transaction_type=transaction_type,
@@ -505,16 +599,25 @@ class Projector:
                     text=text,
                 )
 
-                rows = (
-                    query.order_by(
-                        TransactionProjectionRecord.occurred_at.desc(),
-                        TransactionProjectionRecord.transaction_id.desc(),
-                    )
-                    .all()
-                )
+                rows = query.order_by(
+                    TransactionProjectionRecord.occurred_at.desc(),
+                    TransactionProjectionRecord.transaction_id.desc(),
+                ).all()
 
                 if include_ledger:
-                    card_purchase_ledger_rows = self._list_card_purchases_for_ledger(
+                    purchase_ledger_rows = self._list_card_purchases_for_ledger(
+                        session,
+                        occurred_from=occurred_from,
+                        occurred_to=occurred_to,
+                        transaction_type=transaction_type,
+                        category_id=category_id,
+                        account_id=account_id,
+                        card_id=card_id,
+                        payment_method=payment_method,
+                        person_id=person_id,
+                        text=text,
+                    )
+                    installment_ledger_rows = self._list_installments_for_ledger(
                         session,
                         occurred_from=occurred_from,
                         occurred_to=occurred_to,
@@ -560,7 +663,12 @@ class Projector:
         if not include_ledger:
             return transactions
 
-        ledger_transactions = transactions + card_purchase_ledger_rows + investment_ledger_rows
+        ledger_transactions = (
+            transactions
+            + purchase_ledger_rows
+            + installment_ledger_rows
+            + investment_ledger_rows
+        )
         for item in ledger_transactions:
             if item.get("ledger_event_type") is not None:
                 continue
@@ -595,6 +703,12 @@ class Projector:
         with self._lock:
             self.bootstrap()
             with self._session_factory() as session:
+                for month in self._bucket_keys_for_range(
+                    view="monthly",
+                    occurred_from=occurred_from,
+                    occurred_to=occurred_to,
+                ):
+                    self._ensure_month_pendings(session, month=month)
                 transaction_query = (
                     session.query(TransactionProjectionRecord)
                     .filter(TransactionProjectionRecord.status == "active")
@@ -614,8 +728,7 @@ class Projector:
                     transaction_query.order_by(
                         TransactionProjectionRecord.occurred_at.asc(),
                         TransactionProjectionRecord.transaction_id.asc(),
-                    )
-                    .all()
+                    ).all()
                 )
                 period_installment_rows = self._list_installments_for_report(
                     session,
@@ -638,6 +751,93 @@ class Projector:
                     person_id=person_id,
                     text=text,
                 )
+                fixed_due_timestamp = func.printf(
+                    "%sT23:59:59Z", PendingProjectionRecord.due_date
+                )
+                fixed_query = session.query(PendingProjectionRecord).filter(
+                    PendingProjectionRecord.transaction_id.is_not(None)
+                )
+                fixed_query = fixed_query.filter(fixed_due_timestamp >= occurred_from)
+                fixed_query = fixed_query.filter(fixed_due_timestamp <= occurred_to)
+                if category_id is not None:
+                    fixed_query = fixed_query.filter(
+                        PendingProjectionRecord.category_id == category_id
+                    )
+                if account_id is not None:
+                    fixed_query = fixed_query.filter(
+                        PendingProjectionRecord.account_id == account_id
+                    )
+                if payment_method is not None:
+                    fixed_query = fixed_query.filter(
+                        PendingProjectionRecord.payment_method == payment_method
+                    )
+                if person_id is not None or card_id is not None:
+                    fixed_query = fixed_query.filter(
+                        PendingProjectionRecord.pending_id == "__none__"
+                    )
+                if text is not None:
+                    search = f"%{text}%"
+                    fixed_query = fixed_query.filter(
+                        or_(
+                            PendingProjectionRecord.name.ilike(search),
+                            PendingProjectionRecord.description.ilike(search),
+                            PendingProjectionRecord.category_id.ilike(search),
+                        )
+                    )
+                confirmed_fixed_rows: Sequence[PendingProjectionRecord] = (
+                    fixed_query.order_by(PendingProjectionRecord.due_date.asc()).all()
+                )
+                balance_total = session.query(
+                    func.coalesce(func.sum(BalanceStateRecord.current_balance), 0)
+                ).scalar()
+                projection_month = occurred_to[:7]
+                pending_fixed_projection_rows: Sequence[PendingProjectionRecord] = (
+                    session.query(PendingProjectionRecord)
+                    .filter(PendingProjectionRecord.month == projection_month)
+                    .filter(PendingProjectionRecord.transaction_id.is_(None))
+                    .order_by(PendingProjectionRecord.due_date.asc())
+                    .all()
+                )
+                invoice_projection_rows: Sequence[InvoiceProjectionRecord] = (
+                    session.query(InvoiceProjectionRecord)
+                    .filter(
+                        InvoiceProjectionRecord.due_date.like(f"{projection_month}-%")
+                    )
+                    .order_by(InvoiceProjectionRecord.due_date.asc())
+                    .all()
+                )
+                evolution_months = self._rolling_month_keys(projection_month, 6)
+                expense_evolution: list[dict[str, str | int]] = []
+                for month_key in evolution_months:
+                    month_transaction_rows: Sequence[TransactionProjectionRecord] = (
+                        session.query(TransactionProjectionRecord)
+                        .filter(TransactionProjectionRecord.status == "active")
+                        .filter(
+                            TransactionProjectionRecord.occurred_at.like(
+                                f"{month_key}-%"
+                            )
+                        )
+                        .all()
+                    )
+                    month_installment_rows: Sequence[CardPurchaseInstallmentRecord] = (
+                        session.query(CardPurchaseInstallmentRecord)
+                        .filter(
+                            CardPurchaseInstallmentRecord.reference_month == month_key
+                        )
+                        .all()
+                    )
+                    month_expense_total = sum(
+                        row.amount
+                        for row in month_transaction_rows
+                        if row.type == "expense"
+                        and row.category_id != "invoice_payment"
+                    ) + sum(row.amount for row in month_installment_rows)
+                    expense_evolution.append(
+                        {
+                            "month": month_key,
+                            "expense_total": month_expense_total,
+                        }
+                    )
 
         income_total = sum(
             row.amount for row in transaction_rows if row.type == "income"
@@ -652,6 +852,19 @@ class Projector:
         )
         expense_total = expense_from_transactions + period_installment_impact_total
         net_total = income_total - expense_total
+        fixed_transaction_ids = {
+            str(row.transaction_id)
+            for row in confirmed_fixed_rows
+            if row.transaction_id is not None
+        }
+        fixed_total = sum(row.amount for row in confirmed_fixed_rows)
+        variable_total = sum(
+            row.amount
+            for row in transaction_rows
+            if row.type == "expense"
+            and row.category_id != "invoice_payment"
+            and row.transaction_id not in fixed_transaction_ids
+        )
 
         category_totals: dict[str, int] = {}
         for row in transaction_rows:
@@ -690,14 +903,55 @@ class Projector:
             )
         future_installment_months = [
             {"month": month, "total": total}
-            for month, total in sorted(future_by_month.items(), key=lambda item: item[0])
+            for month, total in sorted(
+                future_by_month.items(), key=lambda item: item[0]
+            )
         ]
+        card_totals: dict[str, int] = {}
+        for row in period_installment_rows:
+            card_totals[row.card_id] = card_totals.get(row.card_id, 0) + row.amount
+        card_breakdown = [
+            {"card_id": card_id_key, "total": total}
+            for card_id_key, total in sorted(
+                card_totals.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            )
+        ]
+        pending_fixed_total = sum(row.amount for row in pending_fixed_projection_rows)
+        invoice_due_total = sum(
+            row.remaining_amount
+            for row in invoice_projection_rows
+            if row.status in {"open", "partial"}
+        )
+        planned_income_total = 0
+        projected_end_balance = (
+            int(balance_total or 0)
+            + planned_income_total
+            - pending_fixed_total
+            - invoice_due_total
+        )
 
         return {
             "totals": {
                 "income_total": income_total,
                 "expense_total": expense_total,
                 "net_total": net_total,
+            },
+            "expense_mix": {
+                "fixed_total": fixed_total,
+                "variable_total": variable_total,
+                "installment_total": period_installment_impact_total,
+            },
+            "card_breakdown": card_breakdown,
+            "expense_evolution": expense_evolution,
+            "month_projection": {
+                "current_balance": int(balance_total or 0),
+                "projected_end_balance": projected_end_balance,
+                "pending_fixed_total": pending_fixed_total,
+                "invoice_due_total": invoice_due_total,
+                "planned_income_total": planned_income_total,
+                "installment_impact_total": period_installment_impact_total,
             },
             "category_breakdown": category_breakdown,
             "weekly_trend": weekly_trend,
@@ -723,15 +977,14 @@ class Projector:
                 if status is not None:
                     query = query.filter(ReimbursementProjectionRecord.status == status)
                 if person_id is not None:
-                    query = query.filter(ReimbursementProjectionRecord.person_id == person_id)
-
-                rows = (
-                    query.order_by(
-                        ReimbursementProjectionRecord.occurred_at.desc(),
-                        ReimbursementProjectionRecord.transaction_id.desc(),
+                    query = query.filter(
+                        ReimbursementProjectionRecord.person_id == person_id
                     )
-                    .all()
-                )
+
+                rows = query.order_by(
+                    ReimbursementProjectionRecord.occurred_at.desc(),
+                    ReimbursementProjectionRecord.transaction_id.desc(),
+                ).all()
 
         return [
             ReimbursementProjection(
@@ -758,17 +1011,18 @@ class Projector:
             with self._session_factory() as session:
                 query = session.query(InvestmentMovementRecord)
                 if occurred_from is not None:
-                    query = query.filter(InvestmentMovementRecord.occurred_at >= occurred_from)
-                if occurred_to is not None:
-                    query = query.filter(InvestmentMovementRecord.occurred_at <= occurred_to)
-
-                rows = (
-                    query.order_by(
-                        InvestmentMovementRecord.occurred_at.desc(),
-                        InvestmentMovementRecord.movement_id.desc(),
+                    query = query.filter(
+                        InvestmentMovementRecord.occurred_at >= occurred_from
                     )
-                    .all()
-                )
+                if occurred_to is not None:
+                    query = query.filter(
+                        InvestmentMovementRecord.occurred_at <= occurred_to
+                    )
+
+                rows = query.order_by(
+                    InvestmentMovementRecord.occurred_at.desc(),
+                    InvestmentMovementRecord.movement_id.desc(),
+                ).all()
 
         return [
             InvestmentMovementProjection(
@@ -812,18 +1066,21 @@ class Projector:
                     .filter(InvestmentMovementRecord.occurred_at >= occurred_from)
                     .all()
                 )
-                movement_rows_all: Sequence[InvestmentMovementRecord] = (
-                    session.query(InvestmentMovementRecord).all()
-                )
+                movement_rows_all: Sequence[InvestmentMovementRecord] = session.query(
+                    InvestmentMovementRecord
+                ).all()
                 account_type_by_id = {
                     row.account_id: row.type
                     for row in session.query(AccountProjectionRecord).all()
                 }
                 current_cash_balance = int(
-                    session.query(func.coalesce(func.sum(BalanceStateRecord.current_balance), 0))
+                    session.query(
+                        func.coalesce(func.sum(BalanceStateRecord.current_balance), 0)
+                    )
                     .join(
                         AccountProjectionRecord,
-                        AccountProjectionRecord.account_id == BalanceStateRecord.account_id,
+                        AccountProjectionRecord.account_id
+                        == BalanceStateRecord.account_id,
                     )
                     .filter(AccountProjectionRecord.type != "investment")
                     .scalar()
@@ -870,7 +1127,9 @@ class Projector:
                     - movement_cash_after_from
                     - cash_after_from_from_transactions
                 )
-                invested_baseline = current_invested_balance - movement_invested_after_from
+                invested_baseline = (
+                    current_invested_balance - movement_invested_after_from
+                )
 
                 income_by_month = self._income_totals_by_month(session=session)
 
@@ -884,9 +1143,7 @@ class Projector:
             occurred_from=occurred_from,
             occurred_to=occurred_to,
         )
-        transaction_cash_by_bucket = {
-            key: 0 for key in bucket_keys
-        }
+        transaction_cash_by_bucket = {key: 0 for key in bucket_keys}
         for row in tx_in_range:
             if account_type_by_id.get(row.account_id) == "investment":
                 continue
@@ -920,7 +1177,9 @@ class Projector:
         wealth_series: list[dict[str, int | str]] = []
         trend_series: list[dict[str, int | str]] = []
         for bucket in bucket_keys:
-            running_cash += transaction_cash_by_bucket[bucket] + movement_cash_by_bucket[bucket]
+            running_cash += (
+                transaction_cash_by_bucket[bucket] + movement_cash_by_bucket[bucket]
+            )
             running_invested += movement_invested_by_bucket[bucket]
             wealth_series.append(
                 {
@@ -967,7 +1226,9 @@ class Projector:
                 "realized": realized,
                 "remaining": max(target - realized, 0),
                 "progress_percent": (
-                    100 if target <= 0 else min(int(round((realized * 100) / target)), 100)
+                    100
+                    if target <= 0
+                    else min(int(round((realized * 100) / target)), 100)
                 ),
             },
             "series": {
@@ -986,7 +1247,9 @@ class Projector:
             with self._session_factory() as session:
                 query = session.query(RecurringRuleProjectionRecord)
                 if is_active is not None:
-                    query = query.filter(RecurringRuleProjectionRecord.is_active == is_active)
+                    query = query.filter(
+                        RecurringRuleProjectionRecord.is_active == is_active
+                    )
 
                 rows = query.order_by(RecurringRuleProjectionRecord.rule_id.asc()).all()
 
@@ -1057,6 +1320,7 @@ class Projector:
         with self._lock:
             self.bootstrap()
             with self._session_factory() as session:
+                self._ensure_month_pendings(session, month=month)
                 month_rows: Sequence[TransactionProjectionRecord] = (
                     session.query(TransactionProjectionRecord)
                     .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
@@ -1068,16 +1332,17 @@ class Projector:
                     .all()
                 )
                 recent_rows = month_rows[:10]
-                balance_total = (
-                    session.query(func.coalesce(func.sum(BalanceStateRecord.current_balance), 0))
-                    .scalar()
-                )
+                balance_total = session.query(
+                    func.coalesce(func.sum(BalanceStateRecord.current_balance), 0)
+                ).scalar()
 
                 # Previous month data for delta comparison
                 prev_month = self._previous_month_key(month)
                 prev_rows: Sequence[TransactionProjectionRecord] = (
                     session.query(TransactionProjectionRecord)
-                    .filter(TransactionProjectionRecord.occurred_at.like(f"{prev_month}-%"))
+                    .filter(
+                        TransactionProjectionRecord.occurred_at.like(f"{prev_month}-%")
+                    )
                     .filter(TransactionProjectionRecord.status == "active")
                     .all()
                 )
@@ -1099,10 +1364,42 @@ class Projector:
                     )
                     .all()
                 )
+                installment_descriptions = {
+                    row.purchase_id: row.description
+                    for row in (
+                        session.query(CardPurchaseProjectionRecord)
+                        .filter(
+                            CardPurchaseProjectionRecord.purchase_id.in_(
+                                [item.purchase_id for item in installment_rows]
+                            )
+                        )
+                        .all()
+                    )
+                }
+                pending_rows: Sequence[PendingProjectionRecord] = (
+                    session.query(PendingProjectionRecord)
+                    .filter(PendingProjectionRecord.month == month)
+                    .order_by(
+                        PendingProjectionRecord.due_date.asc(),
+                        PendingProjectionRecord.pending_id.asc(),
+                    )
+                    .all()
+                )
+                invoice_rows: Sequence[InvoiceProjectionRecord] = (
+                    session.query(InvoiceProjectionRecord)
+                    .filter(InvoiceProjectionRecord.due_date.like(f"{month}-%"))
+                    .order_by(
+                        InvoiceProjectionRecord.due_date.asc(),
+                        InvoiceProjectionRecord.invoice_id.asc(),
+                    )
+                    .all()
+                )
                 pending_reimbursement_rows: Sequence[ReimbursementProjectionRecord] = (
                     session.query(ReimbursementProjectionRecord)
                     .filter(ReimbursementProjectionRecord.status == "pending")
-                    .filter(ReimbursementProjectionRecord.occurred_at.like(f"{month}-%"))
+                    .filter(
+                        ReimbursementProjectionRecord.occurred_at.like(f"{month}-%")
+                    )
                     .order_by(ReimbursementProjectionRecord.occurred_at.desc())
                     .all()
                 )
@@ -1125,17 +1422,19 @@ class Projector:
             ).to_dict()
             for row in recent_rows
         ]
-        total_income = sum(
-            row.amount for row in month_rows if row.type == "income"
+        total_income = sum(row.amount for row in month_rows if row.type == "income")
+        expense_from_transactions = sum(
+            row.amount
+            for row in month_rows
+            if row.type == "expense" and row.category_id != "invoice_payment"
         )
-        total_expense = sum(
-            row.amount for row in month_rows if row.type == "expense"
-        )
+        installment_total = sum(row.amount for row in installment_rows)
+        total_expense = expense_from_transactions + installment_total
 
         # Spending by category (expenses only, excluding transfers)
         category_totals: dict[str, int] = {}
         for row in month_rows:
-            if row.type == "expense":
+            if row.type == "expense" and row.category_id != "invoice_payment":
                 category_totals[row.category_id] = (
                     category_totals.get(row.category_id, 0) + row.amount
                 )
@@ -1144,7 +1443,10 @@ class Projector:
                 category_totals.get(row.category_id, 0) + row.amount
             )
         spending_by_category = sorted(
-            [{"category_id": cat, "total": total} for cat, total in category_totals.items()],
+            [
+                {"category_id": cat, "total": total}
+                for cat, total in category_totals.items()
+            ],
             key=lambda item: item["total"],
             reverse=True,
         )
@@ -1198,9 +1500,82 @@ class Projector:
             ).to_dict()
             for row in pending_reimbursement_rows
         ]
+        monthly_fixed_expenses = [
+            {
+                "pending_id": row.pending_id,
+                "rule_id": row.rule_id,
+                "title": row.name,
+                "category_id": row.category_id,
+                "amount": row.amount,
+                "due_date": row.due_date,
+                "status": row.status,
+                "account_id": row.account_id,
+                "payment_method": row.payment_method,
+                "transaction_id": row.transaction_id,
+            }
+            for row in pending_rows
+        ]
+        monthly_installments = [
+            {
+                "installment_id": row.installment_id,
+                "purchase_id": row.purchase_id,
+                "title": installment_descriptions.get(row.purchase_id),
+                "category_id": row.category_id,
+                "amount": row.amount,
+                "card_id": row.card_id,
+                "installment_number": row.installment_number,
+                "installments_count": row.installments_count,
+                "due_date": row.due_date,
+                "reference_month": row.reference_month,
+            }
+            for row in installment_rows
+        ]
+        monthly_commitments = [
+            {
+                "commitment_id": row.pending_id,
+                "kind": "recurring",
+                "title": row.name,
+                "category_id": row.category_id,
+                "amount": row.amount,
+                "due_date": row.due_date,
+                "status": row.status,
+                "account_id": row.account_id,
+                "card_id": None,
+                "payment_method": row.payment_method,
+                "source": "recorrente",
+            }
+            for row in pending_rows
+        ] + [
+            {
+                "commitment_id": row.invoice_id,
+                "kind": "invoice",
+                "title": row.card_id,
+                "category_id": None,
+                "amount": row.remaining_amount,
+                "due_date": row.due_date,
+                "status": row.status,
+                "account_id": None,
+                "card_id": row.card_id,
+                "payment_method": "INVOICE",
+                "source": "fatura",
+            }
+            for row in invoice_rows
+            if row.remaining_amount > 0
+        ]
         budget_alerts = [
             budget for budget in category_budgets if str(budget["status"]) != "ok"
         ]
+        fixed_expenses_total = sum(row.amount for row in pending_rows)
+        invoices_due_total = sum(
+            row.remaining_amount
+            for row in invoice_rows
+            if row.status in {"open", "partial"}
+        )
+        free_to_spend = (
+            total_income
+            - total_expense
+            - sum(row.amount for row in pending_rows if row.status != "confirmed")
+        )
 
         return {
             "month": month,
@@ -1208,10 +1583,17 @@ class Projector:
             "total_expense": total_expense,
             "net_flow": total_income - total_expense,
             "current_balance": int(balance_total or 0),
+            "fixed_expenses_total": fixed_expenses_total,
+            "installment_total": installment_total,
+            "invoices_due_total": invoices_due_total,
+            "free_to_spend": free_to_spend,
             "pending_reimbursements_total": sum(
                 reimbursement["amount"] for reimbursement in pending_reimbursements
             ),
             "pending_reimbursements": pending_reimbursements,
+            "monthly_commitments": monthly_commitments,
+            "monthly_fixed_expenses": monthly_fixed_expenses,
+            "monthly_installments": monthly_installments,
             "recent_transactions": recent_transactions,
             "spending_by_category": spending_by_category,
             "previous_month": {
@@ -1309,9 +1691,7 @@ class Projector:
     ) -> str:
         purchase = datetime.fromisoformat(purchase_date.replace("Z", "+00:00"))
         month_index = (
-            purchase.year * 12
-            + (purchase.month - 1)
-            + max(installment_number - 1, 0)
+            purchase.year * 12 + (purchase.month - 1) + max(installment_number - 1, 0)
         )
         year = month_index // 12
         month = (month_index % 12) + 1
@@ -1511,7 +1891,9 @@ class Projector:
             closing_day=card.closing_day,
             due_day=card.due_day,
         )
-        visible_allocations = [allocation for allocation in allocations if allocation.amount > 0]
+        visible_allocations = [
+            allocation for allocation in allocations if allocation.amount > 0
+        ]
         first_allocation = visible_allocations[0]
         reference_month = first_allocation.reference_month
         invoice_id = f"{card_id}:{reference_month}"
@@ -2034,7 +2416,10 @@ class Projector:
             if allocation.amount > 0
         }
         for existing in existing_rows:
-            if existing.transaction_id not in active_ids and existing.status != "received":
+            if (
+                existing.transaction_id not in active_ids
+                and existing.status != "received"
+            ):
                 session.delete(existing)
 
         for allocation in allocations:
@@ -2242,6 +2627,19 @@ class Projector:
             return f"{value.year:04d}-Q{quarter}"
         return f"{value.year:04d}"
 
+    def _rolling_month_keys(self, end_month: str, count: int) -> list[str]:
+        year, month = end_month.split("-")
+        current = date(int(year), int(month), 1)
+        keys: list[str] = []
+        for _ in range(max(count, 0)):
+            keys.append(f"{current.year:04d}-{current.month:02d}")
+            if current.month == 1:
+                current = date(current.year - 1, 12, 1)
+            else:
+                current = date(current.year, current.month - 1, 1)
+        keys.reverse()
+        return keys
+
     def _parse_utc(self, value: str) -> datetime:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
@@ -2266,9 +2664,7 @@ class Projector:
         if card_id is not None:
             query = query.filter(
                 TransactionProjectionRecord.category_id == "invoice_payment"
-            ).filter(
-                TransactionProjectionRecord.description.ilike(f"%{card_id}%")
-            )
+            ).filter(TransactionProjectionRecord.description.ilike(f"%{card_id}%"))
         if payment_method is not None:
             query = query.filter(
                 TransactionProjectionRecord.payment_method == payment_method
@@ -2314,7 +2710,9 @@ class Projector:
         if due_after_timestamp is not None:
             query = query.filter(due_timestamp > due_after_timestamp)
         if category_id is not None:
-            query = query.filter(CardPurchaseInstallmentRecord.category_id == category_id)
+            query = query.filter(
+                CardPurchaseInstallmentRecord.category_id == category_id
+            )
         if card_id is not None:
             query = query.filter(CardPurchaseInstallmentRecord.card_id == card_id)
 
@@ -2322,9 +2720,7 @@ class Projector:
             query = query.join(
                 CardProjectionRecord,
                 CardProjectionRecord.card_id == CardPurchaseInstallmentRecord.card_id,
-            ).filter(
-                CardProjectionRecord.payment_account_id == account_id
-            )
+            ).filter(CardProjectionRecord.payment_account_id == account_id)
 
         if person_id is not None:
             query = query.join(
@@ -2349,13 +2745,122 @@ class Projector:
                 )
             )
 
-        return (
-            query.order_by(
-                CardPurchaseInstallmentRecord.due_date.asc(),
-                CardPurchaseInstallmentRecord.installment_id.asc(),
-            )
-            .all()
+        return query.order_by(
+            CardPurchaseInstallmentRecord.due_date.asc(),
+            CardPurchaseInstallmentRecord.installment_id.asc(),
+        ).all()
+
+    def _list_installments_for_ledger(
+        self,
+        session: Session,
+        *,
+        occurred_from: str | None = None,
+        occurred_to: str | None = None,
+        transaction_type: str | None = None,
+        category_id: str | None = None,
+        account_id: str | None = None,
+        card_id: str | None = None,
+        payment_method: str | None = None,
+        person_id: str | None = None,
+        text: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        if transaction_type is not None and transaction_type != "expense":
+            return []
+        if payment_method is not None and payment_method != "OTHER":
+            return []
+
+        due_timestamp = func.printf(
+            "%sT12:00:00Z", CardPurchaseInstallmentRecord.due_date
         )
+        query = (
+            session.query(
+                CardPurchaseInstallmentRecord,
+                CardProjectionRecord.payment_account_id,
+                CardPurchaseProjectionRecord.description,
+                ReimbursementProjectionRecord.person_id,
+            )
+            .join(
+                CardProjectionRecord,
+                CardProjectionRecord.card_id == CardPurchaseInstallmentRecord.card_id,
+            )
+            .join(
+                CardPurchaseProjectionRecord,
+                CardPurchaseProjectionRecord.purchase_id
+                == CardPurchaseInstallmentRecord.purchase_id,
+            )
+            .outerjoin(
+                ReimbursementProjectionRecord,
+                ReimbursementProjectionRecord.source_transaction_id
+                == CardPurchaseInstallmentRecord.purchase_id,
+            )
+        )
+
+        if occurred_from is not None:
+            query = query.filter(due_timestamp >= occurred_from)
+        if occurred_to is not None:
+            query = query.filter(due_timestamp <= occurred_to)
+        if category_id is not None:
+            query = query.filter(
+                CardPurchaseInstallmentRecord.category_id == category_id
+            )
+        if card_id is not None:
+            query = query.filter(CardPurchaseInstallmentRecord.card_id == card_id)
+        if account_id is not None:
+            query = query.filter(CardProjectionRecord.payment_account_id == account_id)
+        if person_id is not None:
+            query = query.filter(ReimbursementProjectionRecord.person_id == person_id)
+        if text is not None:
+            search = f"%{text}%"
+            query = query.filter(
+                or_(
+                    CardPurchaseProjectionRecord.description.ilike(search),
+                    CardPurchaseInstallmentRecord.category_id.ilike(search),
+                    CardPurchaseInstallmentRecord.card_id.ilike(search),
+                )
+            )
+
+        rows = query.order_by(
+            CardPurchaseInstallmentRecord.due_date.desc(),
+            CardPurchaseInstallmentRecord.installment_id.desc(),
+        ).all()
+
+        ledger_rows: list[dict[str, str | int | None]] = []
+        for (
+            installment_row,
+            payment_account_id,
+            description,
+            reimbursement_person_id,
+        ) in rows:
+            label = description or "Compra no cartao"
+            if installment_row.installments_count > 1:
+                label = (
+                    f"{label} - Parcela "
+                    f"{installment_row.installment_number}/{installment_row.installments_count}"
+                )
+
+            ledger_rows.append(
+                {
+                    "transaction_id": f"{installment_row.installment_id}:card-installment",
+                    "occurred_at": f"{installment_row.due_date}T12:00:00Z",
+                    "type": "expense",
+                    "amount": installment_row.amount,
+                    "account_id": payment_account_id,
+                    "payment_method": "OTHER",
+                    "category_id": installment_row.category_id,
+                    "description": label,
+                    "person_id": reimbursement_person_id,
+                    "status": "readonly",
+                    "ledger_event_type": (
+                        "card_installment"
+                        if installment_row.installments_count > 1
+                        else "card_purchase"
+                    ),
+                    "ledger_source": f"card_liability:{installment_row.card_id}",
+                    "ledger_destination": f"category:{installment_row.category_id}",
+                }
+            )
+
+        return ledger_rows
 
     def _list_card_purchases_for_ledger(
         self,
@@ -2384,11 +2889,17 @@ class Projector:
             CardProjectionRecord.card_id == CardPurchaseProjectionRecord.card_id,
         )
         if occurred_from is not None:
-            query = query.filter(CardPurchaseProjectionRecord.purchase_date >= occurred_from)
+            query = query.filter(
+                CardPurchaseProjectionRecord.purchase_date >= occurred_from
+            )
         if occurred_to is not None:
-            query = query.filter(CardPurchaseProjectionRecord.purchase_date <= occurred_to)
+            query = query.filter(
+                CardPurchaseProjectionRecord.purchase_date <= occurred_to
+            )
         if category_id is not None:
-            query = query.filter(CardPurchaseProjectionRecord.category_id == category_id)
+            query = query.filter(
+                CardPurchaseProjectionRecord.category_id == category_id
+            )
         if card_id is not None:
             query = query.filter(CardPurchaseProjectionRecord.card_id == card_id)
         if account_id is not None:
@@ -2412,13 +2923,10 @@ class Projector:
                 )
             )
 
-        rows = (
-            query.order_by(
-                CardPurchaseProjectionRecord.purchase_date.desc(),
-                CardPurchaseProjectionRecord.purchase_id.desc(),
-            )
-            .all()
-        )
+        rows = query.order_by(
+            CardPurchaseProjectionRecord.purchase_date.desc(),
+            CardPurchaseProjectionRecord.purchase_id.desc(),
+        ).all()
 
         ledger_rows: list[dict[str, str | int | None]] = []
         for purchase_row, payment_account_id in rows:
@@ -2490,13 +2998,10 @@ class Projector:
                 )
             )
 
-        rows = (
-            query.order_by(
-                InvestmentMovementRecord.occurred_at.desc(),
-                InvestmentMovementRecord.movement_id.desc(),
-            )
-            .all()
-        )
+        rows = query.order_by(
+            InvestmentMovementRecord.occurred_at.desc(),
+            InvestmentMovementRecord.movement_id.desc(),
+        ).all()
 
         ledger_rows: list[dict[str, str | int | None]] = []
         for row in rows:
@@ -2570,9 +3075,13 @@ class Projector:
             if bucket not in trend_map:
                 continue
             if row.type == "income":
-                trend_map[bucket]["income_total"] = int(trend_map[bucket]["income_total"]) + row.amount
+                trend_map[bucket]["income_total"] = (
+                    int(trend_map[bucket]["income_total"]) + row.amount
+                )
             else:
-                trend_map[bucket]["expense_total"] = int(trend_map[bucket]["expense_total"]) + row.amount
+                trend_map[bucket]["expense_total"] = (
+                    int(trend_map[bucket]["expense_total"]) + row.amount
+                )
 
         for row in period_installment_rows:
             installment_bucket = self._bucket_key_for_date(
@@ -2588,8 +3097,8 @@ class Projector:
         result: list[dict[str, str | int]] = []
         for key in weekly_keys:
             current = trend_map[key]
-            current["net_total"] = (
-                int(current["income_total"]) - int(current["expense_total"])
+            current["net_total"] = int(current["income_total"]) - int(
+                current["expense_total"]
             )
             result.append(current)
         return result
@@ -2653,7 +3162,9 @@ class Projector:
         if "card_purchase_installments" not in table_names:
             return True
 
-        installment_columns = self._safe_column_names(inspector, "card_purchase_installments")
+        installment_columns = self._safe_column_names(
+            inspector, "card_purchase_installments"
+        )
         if installment_columns is None:
             return True
         expected_installment_columns = {
@@ -2874,6 +3385,7 @@ class Projector:
         transaction: dict[str, str | int | None],
     ) -> tuple[str, str, str]:
         transaction_type = str(transaction.get("type") or "")
+        transaction_id = str(transaction.get("transaction_id") or "")
         account_id = str(transaction.get("account_id") or "")
         category_id = str(transaction.get("category_id") or "")
         transfer_id = _optional_string(transaction.get("transfer_id"))
@@ -2882,7 +3394,9 @@ class Projector:
         person_id = _optional_string(transaction.get("person_id"))
 
         if transaction_type == "transfer":
-            ledger_transfer_id = transfer_id or str(transaction.get("transaction_id") or "unknown")
+            ledger_transfer_id = transfer_id or str(
+                transaction.get("transaction_id") or "unknown"
+            )
             if direction == "credit":
                 return (
                     "transfer_in",
@@ -2908,6 +3422,12 @@ class Projector:
                     "invoice_payment",
                     f"account:{account_id}",
                     f"card_liability:{invoice_id}",
+                )
+            if transaction_id.endswith(":expense"):
+                return (
+                    "recurring_expense",
+                    f"account:{account_id}",
+                    f"category:{category_id}",
                 )
             return ("expense", f"account:{account_id}", f"category:{category_id}")
 
@@ -2949,9 +3469,3 @@ def _optional_string(value: object | None) -> str | None:
         return None
 
     return str(value)
-
-
-
-
-
-

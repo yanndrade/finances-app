@@ -8,6 +8,24 @@ import {
   SheetTitle,
 } from "../../components/ui/sheet";
 
+import { 
+  AlertCircle, 
+  ArrowDown, 
+  ArrowUp, 
+  Calendar, 
+  ChevronDown, 
+  ChevronUp, 
+  Filter, 
+  Info, 
+  Search, 
+  SlidersHorizontal, 
+  TriangleAlert 
+} from "lucide-react";
+
+import { TransactionDetailDrawer } from "./transaction-detail-drawer";
+import { EmptyState } from "../../components/ui/empty-state";
+import { MoneyValue } from "../../components/ui/money-value";
+
 import type {
   AccountSummary,
   CardSummary,
@@ -16,7 +34,6 @@ import type {
   TransactionTypeFilter,
   TransactionUpdatePayload,
 } from "../../lib/api";
-import type { CategoryRule } from "../../lib/category-rules";
 import { getCategoryOptions } from "../../lib/categories";
 import {
   formatCategoryName,
@@ -32,14 +49,11 @@ import type { UiDensity } from "../../lib/ui-density";
 
 type TransactionsViewProps = {
   accounts: AccountSummary[];
-  categoryRules: CategoryRule[];
   cards: CardSummary[];
   transactions: TransactionSummary[];
   filters: TransactionFilters;
   isSubmitting: boolean;
   onApplyFilters: (filters: TransactionFilters) => Promise<void>;
-  onDensityChange: (density: UiDensity) => void;
-  onUpsertCategoryRule: (pattern: string, categoryId: string) => boolean;
   onUpdateTransaction: (
     transactionId: string,
     payload: TransactionUpdatePayload,
@@ -80,6 +94,16 @@ type LedgerSortColumn =
 type LedgerSortDirection = "asc" | "desc";
 
 type TypeFilter = "all" | TransactionTypeFilter;
+type TransactionPreset =
+  | "month"
+  | "fixed"
+  | "cards"
+  | "installments"
+  | "transfers"
+  | "investments"
+  | "reimbursements"
+  | "uncategorized"
+  | "review";
 
 type SplitDraftLine = {
   id: string;
@@ -94,14 +118,11 @@ type SplitLine = {
 
 export function TransactionsView({
   accounts,
-  categoryRules,
   cards,
   transactions,
   filters,
   isSubmitting,
   onApplyFilters,
-  onDensityChange,
-  onUpsertCategoryRule,
   onUpdateTransaction,
   onVoidTransaction,
   uiDensity,
@@ -109,6 +130,10 @@ export function TransactionsView({
   const [filterForm, setFilterForm] = useState<RequiredTransactionFilters>(() =>
     normalizeTransactionFilters(filters),
   );
+  const [activePreset, setActivePreset] = useState<TransactionPreset>(() =>
+    normalizeTransactionPreset(filters.preset),
+  );
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(() => filters.type ?? "all");
   const [sortColumn, setSortColumn] = useState<LedgerSortColumn>("occurredAt");
   const [sortDirection, setSortDirection] = useState<LedgerSortDirection>("desc");
@@ -119,13 +144,11 @@ export function TransactionsView({
   const [splitDraft, setSplitDraft] = useState<SplitDraftLine[] | null>(null);
   const [splitFeedback, setSplitFeedback] = useState<string | null>(null);
   const [splitError, setSplitError] = useState<string | null>(null);
-  const [rulePattern, setRulePattern] = useState("");
-  const [ruleCategoryId, setRuleCategoryId] = useState("");
-  const [ruleFeedback, setRuleFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     setFilterForm(normalizeTransactionFilters(filters));
     setTypeFilter(filters.type ?? "all");
+    setActivePreset(normalizeTransactionPreset(filters.preset));
   }, [filters]);
 
   const selectedTransaction = useMemo(() => {
@@ -140,26 +163,19 @@ export function TransactionsView({
     if (selectedTransaction === null) {
       setSplitDraft(null);
       setSplitError(null);
-      setRuleFeedback(null);
-      setRulePattern("");
-      setRuleCategoryId("");
       return;
     }
 
-    const firstWord = (selectedTransaction.description ?? "").trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-    const existingRule = findMatchingRule(selectedTransaction, categoryRules);
     setSplitDraft(null);
     setSplitFeedback(null);
     setSplitError(null);
-    setRuleFeedback(null);
-    setRulePattern(existingRule?.pattern ?? firstWord);
-    setRuleCategoryId(existingRule?.categoryId ?? selectedTransaction.category_id);
-  }, [categoryRules, selectedTransaction]);
+  }, [selectedTransaction]);
 
   async function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await onApplyFilters({
       ...filterForm,
+      preset: activePreset,
       type: typeFilter === "all" ? undefined : typeFilter,
     });
   }
@@ -192,6 +208,10 @@ export function TransactionsView({
     const normalizedPersonFilter = filterForm.person.trim().toLowerCase();
 
     return transactions.filter((transaction) => {
+      if (!matchesTransactionPreset(transaction, activePreset)) {
+        return false;
+      }
+
       if (typeFilter !== "all" && transaction.type !== typeFilter) {
         return false;
       }
@@ -211,7 +231,7 @@ export function TransactionsView({
         return false;
       }
 
-      const categoryPresentation = resolveCategoryPresentation(transaction, transactionSplits, categoryRules);
+      const categoryPresentation = resolveCategoryPresentation(transaction, transactionSplits);
       if (normalizedCategoryFilter !== "") {
         const rawCategory = formatCategoryName(transaction.category_id).toLowerCase();
         const resolvedCategory = categoryPresentation.label.toLowerCase();
@@ -254,7 +274,6 @@ export function TransactionsView({
   }, [
     accounts,
     cards,
-    categoryRules,
     filterForm.account,
     filterForm.card,
     filterForm.category,
@@ -264,6 +283,7 @@ export function TransactionsView({
     transactions,
     transactionSplits,
     typeFilter,
+    activePreset,
   ]);
 
   const visibleTransactions = useMemo(() => {
@@ -275,12 +295,10 @@ export function TransactionsView({
         sortDirection,
         accounts,
         transactionSplits,
-        categoryRules,
       ),
     );
   }, [
     accounts,
-    categoryRules,
     filteredTransactions,
     sortColumn,
     sortDirection,
@@ -299,7 +317,11 @@ export function TransactionsView({
       return sum;
     }, 0);
     const expenseTotal = effectiveTransactions.reduce((sum, transaction) => {
-      if (transaction.type === "expense") {
+      if (
+        transaction.type === "expense" &&
+        transaction.ledger_event_type !== "invoice_payment" &&
+        transaction.ledger_event_type !== "card_purchase"
+      ) {
         return sum + transaction.amount;
       }
       if (transaction.type === "investment" && transaction.ledger_event_type === "investment_contribution") {
@@ -406,51 +428,58 @@ export function TransactionsView({
     }));
     setSplitDraft(null);
     setSplitError(null);
-    setSplitFeedback("Split salvo para esta transacao.");
+    setSplitFeedback("Split salvo para esta transação.");
     setSelectedTransactionId(null);
   }
-
-  function handleSaveRule() {
-    if (selectedTransaction === null) {
-      return;
-    }
-
-    const normalizedPattern = rulePattern.trim().toLowerCase();
-    if (normalizedPattern === "" || ruleCategoryId === "") {
-      return;
-    }
-
-    const wasSaved = onUpsertCategoryRule(normalizedPattern, ruleCategoryId);
-    if (!wasSaved) {
-      return;
-    }
-
-    setRuleFeedback("Regra salva e aplicada no historico.");
-    setSelectedTransactionId(null);
-  }
-
-  const selectedTransactionSplit = selectedTransaction
-    ? transactionSplits[selectedTransaction.transaction_id] ?? null
-    : null;
 
   return (
-    <section aria-label="Historico e filtros" className="panel-card">
+    <section aria-label="Histórico e filtros" className="panel-card">
       <div className="ledger-header">
         <div>
-          <p className="eyebrow">Ledger</p>
-          <h2 className="section-title">Historico unificado</h2>
-          <p className="section-copy">Linha do tempo do dinheiro com filtros e acoes rapidas.</p>
+          <p className="eyebrow">Operacional</p>
+          <h2 className="section-title">Histórico de Transações</h2>
+          <p className="section-copy">Painel de controle com presets e filtros inteligentes.</p>
         </div>
         <div className="ledger-kpi-grid" role="group" aria-label="Kpis do recorte">
           <LedgerKpi label="Entradas" tone="positive" value={sliceKpis.incomeTotal} />
-          <LedgerKpi label="Saidas" tone="negative" value={sliceKpis.expenseTotal} />
+          <LedgerKpi label="Saídas" tone="negative" value={sliceKpis.expenseTotal} />
           <LedgerKpi label="Resultado" tone="default" value={sliceKpis.resultTotal} />
         </div>
       </div>
 
+      <div className="inline-actions" aria-label="Presets do histórico">
+        <button className={activePreset === "month" ? "primary-button" : "ghost-button"} onClick={() => setActivePreset("month")} type="button">
+          Tudo do mês
+        </button>
+        <button className={activePreset === "fixed" ? "primary-button" : "ghost-button"} onClick={() => setActivePreset("fixed")} type="button">
+          Gastos fixos
+        </button>
+        <button className={activePreset === "cards" ? "primary-button" : "ghost-button"} onClick={() => setActivePreset("cards")} type="button">
+          Cartão de crédito
+        </button>
+        <button className={activePreset === "installments" ? "primary-button" : "ghost-button"} onClick={() => setActivePreset("installments")} type="button">
+          Parcelas do mês
+        </button>
+        <button className={activePreset === "transfers" ? "primary-button" : "ghost-button"} onClick={() => setActivePreset("transfers")} type="button">
+          Transferências
+        </button>
+        <button className={activePreset === "investments" ? "primary-button" : "ghost-button"} onClick={() => setActivePreset("investments")} type="button">
+          Investimentos
+        </button>
+        <button className={activePreset === "reimbursements" ? "primary-button" : "ghost-button"} onClick={() => setActivePreset("reimbursements")} type="button">
+          Reembolsos
+        </button>
+        <button className={activePreset === "uncategorized" ? "primary-button" : "ghost-button"} onClick={() => setActivePreset("uncategorized")} type="button">
+          Não categorizados
+        </button>
+        <button className={activePreset === "review" ? "primary-button" : "ghost-button"} onClick={() => setActivePreset("review")} type="button">
+          Pendentes de revisão
+        </button>
+      </div>
+
       <form className="filters-grid" onSubmit={handleFilterSubmit}>
         <label>
-          Periodo
+          Período
           <select
             onChange={(event) =>
               setFilterForm((current) => ({
@@ -494,7 +523,7 @@ export function TransactionsView({
               />
             </label>
             <label>
-              Ate
+              Até
               <input
                 onChange={(event) =>
                   setFilterForm((current) => ({
@@ -523,46 +552,7 @@ export function TransactionsView({
           </label>
         )}
         <label>
-          Conta do filtro
-          <select
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                account: event.target.value,
-              }))
-            }
-            value={filterForm.account}
-          >
-            <option value="">Todas</option>
-            {accounts.map((account) => (
-              <option key={account.account_id} value={account.account_id}>
-                {account.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Cartao do filtro
-          <select
-            aria-label="Cartao do filtro"
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                card: event.target.value,
-              }))
-            }
-            value={filterForm.card}
-          >
-            <option value="">Todos</option>
-            {cards.map((card) => (
-              <option key={card.card_id} value={card.card_id}>
-                {card.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Tipo do filtro
+          Tipo
           <select
             aria-label="Tipo do filtro"
             onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
@@ -570,64 +560,16 @@ export function TransactionsView({
           >
             <option value="all">Todos</option>
             <option value="income">Entradas</option>
-            <option value="expense">Saidas</option>
-            <option value="transfer">Transferencias</option>
+            <option value="expense">Saídas</option>
+            <option value="transfer">Transferências</option>
             <option value="investment">Investimentos</option>
           </select>
         </label>
-        <label>
-          Densidade da tabela
-          <select
-            aria-label="Densidade da tabela"
-            onChange={(event) => onDensityChange(event.target.value as UiDensity)}
-            value={uiDensity}
-          >
-            <option value="comfort">Conforto</option>
-            <option value="compact">Compacto</option>
-            <option value="dense">Denso</option>
-          </select>
-        </label>
-        <label>
-          Metodo do filtro
-          <select
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                method: event.target.value as TransactionFilters["method"],
-              }))
-            }
-            value={filterForm.method}
-          >
-            <option value="">Todos</option>
-            <option value="PIX">PIX</option>
-            <option value="CASH">Dinheiro</option>
-            <option value="OTHER">Outro</option>
-          </select>
-        </label>
-        <label>
-          Categoria do filtro
-          <input
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                category: event.target.value,
-              }))
-            }
-            value={filterForm.category}
-          />
-        </label>
-        <label>
-          Pessoa do filtro
-          <input
-            onChange={(event) =>
-              setFilterForm((current) => ({
-                ...current,
-                person: event.target.value,
-              }))
-            }
-            value={filterForm.person}
-          />
-        </label>
+        <div className="inline-actions">
+          <button className="ghost-button" onClick={() => setShowAdvancedFilters((current) => !current)} type="button">
+            {showAdvancedFilters ? "Ocultar filtros avançados" : "Mostrar filtros avançados"}
+          </button>
+        </div>
         <div className="inline-actions">
           <button className="primary-button" disabled={isSubmitting} type="submit">
             Aplicar filtros
@@ -635,21 +577,106 @@ export function TransactionsView({
         </div>
       </form>
 
+      {showAdvancedFilters ? (
+        <div className="filters-grid">
+          <label>
+            Conta
+            <select
+              onChange={(event) =>
+                setFilterForm((current) => ({
+                  ...current,
+                  account: event.target.value,
+                }))
+              }
+              value={filterForm.account}
+            >
+              <option value="">Todas</option>
+              {accounts.map((account) => (
+                <option key={account.account_id} value={account.account_id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Cartão
+            <select
+              aria-label="Cartao do filtro"
+              onChange={(event) =>
+                setFilterForm((current) => ({
+                  ...current,
+                  card: event.target.value,
+                }))
+              }
+              value={filterForm.card}
+            >
+              <option value="">Todos</option>
+              {cards.map((card) => (
+                <option key={card.card_id} value={card.card_id}>
+                  {card.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Método
+            <select
+              onChange={(event) =>
+                setFilterForm((current) => ({
+                  ...current,
+                  method: event.target.value as TransactionFilters["method"],
+                }))
+              }
+              value={filterForm.method}
+            >
+              <option value="">Todos</option>
+              <option value="PIX">PIX</option>
+              <option value="CASH">Dinheiro</option>
+              <option value="OTHER">Outro</option>
+            </select>
+          </label>
+          <label>
+            Categoria
+            <input
+              onChange={(event) =>
+                setFilterForm((current) => ({
+                  ...current,
+                  category: event.target.value,
+                }))
+              }
+              value={filterForm.category}
+            />
+          </label>
+          <label>
+            Pessoa
+            <input
+              onChange={(event) =>
+                setFilterForm((current) => ({
+                  ...current,
+                  person: event.target.value,
+                }))
+              }
+              value={filterForm.person}
+            />
+          </label>
+        </div>
+      ) : null}
+
       {splitFeedback ? <p className="success-banner">{splitFeedback}</p> : null}
 
       {editingTransactionId !== null && editForm !== null ? (
         <form className="panel-card panel-card--nested" onSubmit={handleEditSubmit}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Edicao</p>
-              <h3 className="section-title">Editar transacao</h3>
+              <p className="eyebrow">Edição</p>
+              <h3 className="section-title">Editar transação</h3>
             </div>
           </div>
           <div className="form-grid">
             <label>
-              Data da transacao
+              Data da transação
               <input
-                aria-label="Data da transacao"
+                aria-label="Data da transação"
                 onChange={(event) =>
                   setEditForm((current) =>
                     current === null
@@ -666,9 +693,9 @@ export function TransactionsView({
               />
             </label>
             <label>
-              Tipo da transacao
+              Tipo da transação
               <select
-                aria-label="Tipo da transacao"
+                aria-label="Tipo da transação"
                 onChange={(event) =>
                   setEditForm((current) =>
                     current === null
@@ -681,14 +708,14 @@ export function TransactionsView({
                 }
                 value={editForm.type}
               >
-                <option value="expense">Saida</option>
+                <option value="expense">Saída</option>
                 <option value="income">Entrada</option>
               </select>
             </label>
             <label>
-              Conta da transacao
+              Conta da transação
               <select
-                aria-label="Conta da transacao"
+                aria-label="Conta da transação"
                 onChange={(event) =>
                   setEditForm((current) =>
                     current === null
@@ -709,7 +736,7 @@ export function TransactionsView({
               </select>
             </label>
             <label>
-              Metodo da transacao
+              Método da transação
               <select
                 aria-label={"M\u00E9todo da transa\u00E7\u00E3o"}
                 onChange={(event) =>
@@ -730,9 +757,9 @@ export function TransactionsView({
               </select>
             </label>
             <label>
-              Descricao da transacao
+              Descrição da transação
               <input
-                aria-label="Descricao da transacao"
+                aria-label="Descrição da transação"
                 onChange={(event) =>
                   setEditForm((current) =>
                     current === null
@@ -748,9 +775,9 @@ export function TransactionsView({
               />
             </label>
             <label>
-              Valor da transacao
+              Valor da transação
               <input
-                aria-label="Valor da transacao"
+                aria-label="Valor da transação"
                 inputMode="decimal"
                 min="0.01"
                 onChange={(event) =>
@@ -769,9 +796,9 @@ export function TransactionsView({
               />
             </label>
             <label>
-              Categoria da transacao
+              Categoria da transação
               <select
-                aria-label="Categoria da transacao"
+                aria-label="Categoria da transação"
                 onChange={(event) =>
                   setEditForm((current) =>
                     current === null
@@ -793,9 +820,9 @@ export function TransactionsView({
               </select>
             </label>
             <label>
-              Pessoa da transacao
+              Pessoa da transação
               <input
-                aria-label="Pessoa da transacao"
+                aria-label="Pessoa da transação"
                 onChange={(event) =>
                   setEditForm((current) =>
                     current === null
@@ -812,7 +839,7 @@ export function TransactionsView({
           </div>
           <div className="inline-actions">
             <button className="primary-button" disabled={isSubmitting} type="submit">
-              Salvar alteracoes
+              Salvar alterações
             </button>
             <button
               className="ghost-button"
@@ -829,7 +856,12 @@ export function TransactionsView({
       ) : null}
 
       {visibleTransactions.length === 0 ? (
-        <div className="empty-state">Nenhuma transacao registrada.</div>
+        <EmptyState 
+          icon={Calendar} 
+          title="Nenhuma transação encontrada" 
+          description="Ajuste os filtros ou o período para visualizar outros lançamentos."
+          className="py-20"
+        />
       ) : (
         <div className={`table-shell table-shell--${uiDensity}`}>
           <table className="data-table">
@@ -846,7 +878,7 @@ export function TransactionsView({
                 </th>
                 <th aria-sort={getAriaSort(sortColumn, sortDirection, "description")}>
                   <SortHeaderButton
-                    label="Descricao"
+                    label="Descrição"
                     column="description"
                     activeColumn={sortColumn}
                     direction={sortDirection}
@@ -862,45 +894,51 @@ export function TransactionsView({
                     onSort={handleSort}
                   />
                 </th>
-                <th aria-sort={getAriaSort(sortColumn, sortDirection, "account")}>
-                  <SortHeaderButton
-                    label="Conta"
-                    column="account"
-                    activeColumn={sortColumn}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
-                </th>
-                <th aria-sort={getAriaSort(sortColumn, sortDirection, "source")}>
-                  <SortHeaderButton
-                    label="Origem"
-                    column="source"
-                    activeColumn={sortColumn}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
-                </th>
-                <th aria-sort={getAriaSort(sortColumn, sortDirection, "destination")}>
-                  <SortHeaderButton
-                    label="Destino"
-                    column="destination"
-                    activeColumn={sortColumn}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
-                </th>
-                <th aria-sort={getAriaSort(sortColumn, sortDirection, "method")}>
-                  <SortHeaderButton
-                    label="Metodo"
-                    column="method"
-                    activeColumn={sortColumn}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
-                </th>
+                {uiDensity === "comfort" && (
+                  <>
+                    <th aria-sort={getAriaSort(sortColumn, sortDirection, "account")}>
+                      <SortHeaderButton
+                        label="Conta"
+                        column="account"
+                        activeColumn={sortColumn}
+                        direction={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
+                    <th aria-sort={getAriaSort(sortColumn, sortDirection, "source")}>
+                      <SortHeaderButton
+                        label="Origem"
+                        column="source"
+                        activeColumn={sortColumn}
+                        direction={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
+                    <th aria-sort={getAriaSort(sortColumn, sortDirection, "destination")}>
+                      <SortHeaderButton
+                        label="Destino"
+                        column="destination"
+                        activeColumn={sortColumn}
+                        direction={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
+                  </>
+                )}
+                {uiDensity !== "dense" && (
+                  <th aria-sort={getAriaSort(sortColumn, sortDirection, "method")}>
+                    <SortHeaderButton
+                      label="Método"
+                      column="method"
+                      activeColumn={sortColumn}
+                      direction={sortDirection}
+                      onSort={handleSort}
+                    />
+                  </th>
+                )}
                 <th aria-sort={getAriaSort(sortColumn, sortDirection, "person")}>
                   <SortHeaderButton
-                    label="Pessoa/Reembolso"
+                    label="Pessoa"
                     column="person"
                     activeColumn={sortColumn}
                     direction={sortDirection}
@@ -934,12 +972,12 @@ export function TransactionsView({
                     onSort={handleSort}
                   />
                 </th>
-                <th>Acoes</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
               {visibleTransactions.map((transaction) => {
-                const categoryPresentation = resolveCategoryPresentation(transaction, transactionSplits, categoryRules);
+                const categoryPresentation = resolveCategoryPresentation(transaction, transactionSplits);
                 const sourceLabel = resolveLedgerEndpointLabel(transaction, "source", accounts);
                 const destinationLabel = resolveLedgerEndpointLabel(transaction, "destination", accounts);
                 const canEdit = canEditTransaction(transaction);
@@ -953,10 +991,16 @@ export function TransactionsView({
                     <td>{formatDateTime(transaction.occurred_at)}</td>
                     <td>{transaction.description ?? transaction.category_id}</td>
                     <td>{categoryPresentation.label}</td>
-                    <td>{resolveAccountName(transaction.account_id, accounts)}</td>
-                    <td>{sourceLabel}</td>
-                    <td>{destinationLabel}</td>
-                    <td>{formatPaymentMethod(transaction.payment_method)}</td>
+                    {uiDensity === "comfort" && (
+                      <>
+                        <td>{resolveAccountName(transaction.account_id, accounts)}</td>
+                        <td>{sourceLabel}</td>
+                        <td>{destinationLabel}</td>
+                      </>
+                    )}
+                    {uiDensity !== "dense" && (
+                      <td>{formatPaymentMethod(transaction.payment_method)}</td>
+                    )}
                     <td>{transaction.person_id?.trim() || "--"}</td>
                     <td>{formatTransactionType(transaction.type)}</td>
                     <td>
@@ -964,7 +1008,12 @@ export function TransactionsView({
                         {formatTransactionStatus(transaction.status)}
                       </span>
                     </td>
-                    <td>{formatCurrency(transaction.amount)}</td>
+                    <td>
+                      <MoneyValue 
+                        value={transaction.amount} 
+                        neutral={transaction.type === "transfer"} 
+                      />
+                    </td>
                     <td>
                       {canEdit || canVoid ? (
                         <div className="inline-actions">
@@ -995,7 +1044,7 @@ export function TransactionsView({
                           ) : null}
                         </div>
                       ) : (
-                        <span className="field-hint">Sem acoes</span>
+                        <span className="field-hint">Sem ações</span>
                       )}
                     </td>
                   </tr>
@@ -1006,223 +1055,84 @@ export function TransactionsView({
         </div>
       )}
 
-      <Sheet
-        open={selectedTransaction !== null}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) {
-            setSelectedTransactionId(null);
-          }
+      <TransactionDetailDrawer
+        transaction={selectedTransaction}
+        accounts={accounts}
+        cards={cards} // I need to make sure cards is available or fetched
+        isOpen={selectedTransaction !== null}
+        onClose={() => setSelectedTransactionId(null)}
+        onEdit={(t: TransactionSummary) => {
+          openEditForm(t);
+          setSelectedTransactionId(null);
         }}
-      >
-        {selectedTransaction !== null ? (
-          <SheetContent side="right" className="ledger-detail-drawer w-full sm:max-w-[620px]">
-            <SheetHeader>
-              <SheetTitle>Detalhes da transacao</SheetTitle>
-              <SheetDescription>
-                Visualize e ajuste rapidamente sem sair do Historico.
-              </SheetDescription>
-            </SheetHeader>
-
-            <div className="grid grid-cols-2 gap-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-              <DetailItem label="Descricao" value={selectedTransaction.description ?? selectedTransaction.category_id} />
-              <DetailItem
-                label="Categoria"
-                value={resolveCategoryPresentation(selectedTransaction, transactionSplits, categoryRules).label}
-              />
-              <DetailItem label="Conta" value={resolveAccountName(selectedTransaction.account_id, accounts)} />
-              <DetailItem
-                label="Origem"
-                value={resolveLedgerEndpointLabel(selectedTransaction, "source", accounts)}
-              />
-              <DetailItem
-                label="Destino"
-                value={resolveLedgerEndpointLabel(selectedTransaction, "destination", accounts)}
-              />
-              <DetailItem label="Forma de pagamento" value={formatPaymentMethod(selectedTransaction.payment_method)} />
-              <DetailItem label="Pessoa/Reembolso" value={selectedTransaction.person_id?.trim() || "--"} />
-              <DetailItem label="Tipo" value={formatTransactionType(selectedTransaction.type)} />
-              <DetailItem label="Status" value={formatTransactionStatus(selectedTransaction.status)} />
-              <DetailItem label="Data" value={formatDateTime(selectedTransaction.occurred_at)} />
-              <DetailItem label="Valor" value={formatCurrency(selectedTransaction.amount)} />
-            </div>
-
-            <div className="panel-card panel-card--nested">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Split</p>
-                  <h3 className="section-title">Divisao de categorias</h3>
-                </div>
-                <button className="secondary-button" onClick={handleStartSplit} type="button">
-                  Iniciar split
-                </button>
-              </div>
-              {selectedTransactionSplit !== null ? (
-                <p className="field-hint">Split atual com {selectedTransactionSplit.length} divisao(oes).</p>
-              ) : null}
-              {splitFeedback ? <p className="success-banner">{splitFeedback}</p> : null}
-              {splitError ? <p className="error-banner">{splitError}</p> : null}
-              {splitDraft !== null ? (
-                <>
-                  <div className="form-grid">
-                    {splitDraft.map((line, index) => (
-                      <Fragment key={line.id}>
-                        <label>
-                          Categoria da divisao {index + 1}
-                          <select
-                            aria-label={`Categoria da divisao ${index + 1}`}
-                            onChange={(event) =>
-                              setSplitDraft((current) =>
-                                current === null
-                                  ? null
-                                  : current.map((currentLine) =>
-                                      currentLine.id === line.id
-                                        ? {
-                                            ...currentLine,
-                                            categoryId: event.target.value,
-                                          }
-                                        : currentLine,
-                                    ),
-                              )
-                            }
-                            value={line.categoryId}
-                          >
-                            {getCategoryOptions(line.categoryId).map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Valor da divisao {index + 1}
-                          <input
-                            aria-label={`Valor da divisao ${index + 1}`}
-                            inputMode="decimal"
-                            onChange={(event) =>
-                              setSplitDraft((current) =>
-                                current === null
-                                  ? null
-                                  : current.map((currentLine) =>
-                                      currentLine.id === line.id
-                                        ? {
-                                            ...currentLine,
-                                            amount: event.target.value,
-                                          }
-                                        : currentLine,
-                                    ),
-                              )
-                            }
-                            value={line.amount}
-                          />
-                        </label>
-                      </Fragment>
-                    ))}
-                  </div>
-                  <div className="inline-actions">
-                    <button
-                      className="ghost-button"
-                      onClick={() =>
-                        setSplitDraft((current) =>
-                          current === null
-                            ? null
-                            : [
-                                ...current,
-                                {
-                                  id: String(current.length + 1),
-                                  categoryId: selectedTransaction.category_id,
-                                  amount: "",
-                                },
-                              ],
-                        )
-                      }
-                      type="button"
-                    >
-                      Adicionar divisao
-                    </button>
-                    <button className="primary-button" onClick={handleSaveSplit} type="button">
-                      Salvar split
-                    </button>
-                  </div>
-                </>
-              ) : null}
-            </div>
-
-            <div className="panel-card panel-card--nested">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Regras</p>
-                  <h3 className="section-title">Auto-categorizacao</h3>
-                </div>
-              </div>
-              <div className="form-grid">
-                <label>
-                  Padrao da regra
-                  <input
-                    aria-label="Padrao da regra"
-                    onChange={(event) => setRulePattern(event.target.value)}
-                    value={rulePattern}
-                  />
-                </label>
-                <label>
-                  Categoria da regra
-                  <select
-                    aria-label="Categoria da regra"
-                    onChange={(event) => setRuleCategoryId(event.target.value)}
-                    value={ruleCategoryId}
-                  >
-                    {getCategoryOptions(ruleCategoryId).map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="inline-actions">
-                <button className="primary-button" onClick={handleSaveRule} type="button">
-                  Salvar regra
-                </button>
-              </div>
-              {ruleFeedback ? <p className="success-banner">{ruleFeedback}</p> : null}
-            </div>
-
-            {canEditTransaction(selectedTransaction) || canVoidTransaction(selectedTransaction) ? (
-              <div className="inline-actions">
-                {canEditTransaction(selectedTransaction) ? (
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => {
-                      openEditForm(selectedTransaction);
-                      setSelectedTransactionId(null);
-                    }}
-                  >
-                    Editar transacao
-                  </button>
-                ) : null}
-                {canVoidTransaction(selectedTransaction) ? (
-                  <button
-                    className="ghost-button ghost-button--danger"
-                    type="button"
-                    onClick={() => {
-                      void onVoidTransaction(selectedTransaction.transaction_id);
-                      setSelectedTransactionId(null);
-                    }}
-                  >
-                    Estornar transacao
-                  </button>
-                ) : null}
-              </div>
-            ) : (
-              <p className="field-hint">
-                Lancamento somente leitura. Edicao e estorno nao estao disponiveis.
-              </p>
-            )}
-          </SheetContent>
-        ) : null}
-      </Sheet>
+        onVoid={(id: string) => {
+          void onVoidTransaction(id);
+          setSelectedTransactionId(null);
+        }}
+        onStartSplit={handleStartSplit}
+      />
     </section>
   );
+}
+
+function matchesTransactionPreset(
+  transaction: TransactionSummary,
+  preset: TransactionPreset,
+): boolean {
+  if (preset === "month") {
+    return true;
+  }
+
+  if (preset === "fixed") {
+    return transaction.ledger_event_type === "recurring_expense";
+  }
+
+  if (preset === "cards") {
+    return extractCardId(transaction) !== null;
+  }
+
+  if (preset === "installments") {
+    return transaction.ledger_event_type === "card_installment";
+  }
+
+  if (preset === "transfers") {
+    return transaction.type === "transfer";
+  }
+
+  if (preset === "investments") {
+    return transaction.type === "investment";
+  }
+
+  if (preset === "reimbursements") {
+    return (transaction.person_id?.trim().length ?? 0) > 0;
+  }
+
+  if (preset === "uncategorized") {
+    return transaction.category_id === "other";
+  }
+
+  return requiresLedgerReview(transaction);
+}
+
+function requiresLedgerReview(transaction: TransactionSummary): boolean {
+  const description = transaction.description?.trim() ?? "";
+  return description === "" || transaction.category_id === "other";
+}
+
+function normalizeTransactionPreset(value: string | undefined): TransactionPreset {
+  switch (value) {
+    case "fixed":
+    case "cards":
+    case "installments":
+    case "transfers":
+    case "investments":
+    case "reimbursements":
+    case "uncategorized":
+    case "review":
+      return value;
+    default:
+      return "month";
+  }
 }
 
 function normalizeTransactionFilters(filters: TransactionFilters): RequiredTransactionFilters {
@@ -1399,7 +1309,6 @@ function compareTransactions(
   direction: LedgerSortDirection,
   accounts: AccountSummary[],
   transactionSplits: Record<string, SplitLine[]>,
-  categoryRules: CategoryRule[],
 ): number {
   let comparison = 0;
 
@@ -1419,8 +1328,8 @@ function compareTransactions(
       break;
     case "category":
       comparison = compareText(
-        resolveCategoryPresentation(left, transactionSplits, categoryRules).label,
-        resolveCategoryPresentation(right, transactionSplits, categoryRules).label,
+        resolveCategoryPresentation(left, transactionSplits).label,
+        resolveCategoryPresentation(right, transactionSplits).label,
       );
       break;
     case "account":
@@ -1478,41 +1387,18 @@ function compareText(left: string, right: string): number {
   return left.localeCompare(right, "pt-BR", { sensitivity: "base" });
 }
 
-function findMatchingRule(
-  transaction: TransactionSummary,
-  categoryRules: CategoryRule[],
-): CategoryRule | null {
-  const description = (transaction.description ?? "").toLowerCase();
-  if (description === "") {
-    return null;
-  }
-
-  return (
-    categoryRules.find((rule) => description.includes(rule.pattern.toLowerCase())) ?? null
-  );
-}
-
 function resolveCategoryPresentation(
   transaction: TransactionSummary,
   transactionSplits: Record<string, SplitLine[]>,
-  categoryRules: CategoryRule[],
 ): {
   label: string;
-  source: "transaction" | "rule" | "split";
+  source: "transaction" | "split";
 } {
   const split = transactionSplits[transaction.transaction_id];
   if (split && split.length > 0) {
     return {
       label: `Dividida (${split.length})`,
       source: "split",
-    };
-  }
-
-  const matchingRule = findMatchingRule(transaction, categoryRules);
-  if (matchingRule !== null) {
-    return {
-      label: `${formatCategoryName(matchingRule.categoryId)} (regra)`,
-      source: "rule",
     };
   }
 
@@ -1580,6 +1466,3 @@ function DetailItem({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
-
-

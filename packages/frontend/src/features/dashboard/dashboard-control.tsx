@@ -41,20 +41,20 @@ export function DashboardControl({
       <div className="section-heading">
         <div>
           <p className="eyebrow">Controle</p>
-          <h2 className="section-title">Onde voce esta gastando</h2>
+          <h2 className="section-title">Onde você está gastando</h2>
         </div>
       </div>
 
       <div className="control-grid">
         <article className={`panel-card ${chartClassNames.surface}`}>
           <p className="eyebrow">Gastos por categoria</p>
-          <h3 className="section-title">Este mes</h3>
+          <h3 className="section-title">Este mês</h3>
 
           {chartData.length === 0 ? (
             <div className="empty-state empty-state--guided">
               <p>Sem despesas registradas ainda.</p>
               <p className="empty-state__hint">
-                Adicione transacoes para ver seus gastos por categoria.
+                Adicione transações para ver seus gastos por categoria.
               </p>
             </div>
           ) : (
@@ -110,7 +110,7 @@ export function DashboardControl({
             <div className="empty-state empty-state--guided">
               <p>Nenhuma conta cadastrada.</p>
               <p className="empty-state__hint">
-                Crie sua primeira conta para comecar a organizar seu dinheiro.
+                Crie sua primeira conta para começar a organizar seu dinheiro.
               </p>
             </div>
           ) : (
@@ -129,11 +129,11 @@ export function DashboardControl({
         </article>
 
         <article className="panel-card">
-          <p className="eyebrow">Proximas contas</p>
-          <h3 className="section-title">Recorrencias</h3>
+          <p className="eyebrow">Próximas contas</p>
+          <h3 className="section-title">Recorrências</h3>
 
           <div className="empty-state empty-state--guided">
-            <p>Recorrencias ainda nao implementadas.</p>
+            <p>Recorrências ainda não implementadas.</p>
             <p className="empty-state__hint">
               Em breve: assinaturas, boletos fixos e lembretes de pagamento.
             </p>

@@ -5,18 +5,18 @@ export type CategoryOption = {
 
 const CATEGORY_STORAGE_KEY = "finances.custom-categories.v1";
 
-export const DEFAULT_CATEGORY_OPTIONS: CategoryOption[] = [
-  { value: "food", label: "Alimentacao" },
-  { value: "transport", label: "Transporte" },
-  { value: "housing", label: "Moradia" },
-  { value: "health", label: "Saude" },
-  { value: "education", label: "Educacao" },
-  { value: "entertainment", label: "Lazer" },
-  { value: "utilities", label: "Contas" },
-  { value: "salary", label: "Salario" },
-  { value: "freelance", label: "Freelance" },
-  { value: "other", label: "Outros" },
-] as const;
+const LEGACY_DEFAULT_CATEGORY_IDS = new Set([
+  "food",
+  "transport",
+  "housing",
+  "health",
+  "education",
+  "entertainment",
+  "utilities",
+  "salary",
+  "freelance",
+  "other",
+]);
 
 export function getCategoryOptions(
   selectedValue?: string | null,
@@ -30,36 +30,31 @@ export function getCategoryOptions(
     return options;
   }
 
-  return [{ value: selectedValue, label: humanizeCategoryId(selectedValue) }, ...options];
+  return [{ value: selectedValue, label: fallbackCategoryLabel(selectedValue) }, ...options];
 }
 
 export function readStoredCategoryOptions(): CategoryOption[] {
   if (typeof window === "undefined") {
-    return [...DEFAULT_CATEGORY_OPTIONS];
+    return [];
   }
 
   const storedValue = window.localStorage.getItem(CATEGORY_STORAGE_KEY);
   if (!storedValue) {
-    return [...DEFAULT_CATEGORY_OPTIONS];
+    return [];
   }
 
   try {
     const parsed = JSON.parse(storedValue) as unknown;
     if (!Array.isArray(parsed)) {
-      return [...DEFAULT_CATEGORY_OPTIONS];
+      return [];
     }
 
-    const normalized = parsed
+    return parsed
       .map(normalizeCategoryOption)
-      .filter((option): option is CategoryOption => option !== null);
-
-    if (normalized.length === 0) {
-      return [...DEFAULT_CATEGORY_OPTIONS];
-    }
-
-    return normalized;
+      .filter((option): option is CategoryOption => option !== null)
+      .filter((option) => !LEGACY_DEFAULT_CATEGORY_IDS.has(option.value));
   } catch {
-    return [...DEFAULT_CATEGORY_OPTIONS];
+    return [];
   }
 }
 
@@ -67,10 +62,6 @@ export function storeCategoryOptions(options: CategoryOption[]): CategoryOption[
   const normalized = options
     .map(normalizeCategoryOption)
     .filter((option): option is CategoryOption => option !== null);
-
-  if (normalized.length === 0) {
-    return [...DEFAULT_CATEGORY_OPTIONS];
-  }
 
   if (typeof window !== "undefined") {
     window.localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(normalized));
@@ -95,18 +86,13 @@ export function createCategoryOption(
   };
 }
 
-export function isDefaultCategory(categoryId: string): boolean {
-  return DEFAULT_CATEGORY_OPTIONS.some((option) => option.value === categoryId);
-}
-
 export function resolveCategoryLabel(
   categoryId: string,
   options: CategoryOption[] = readStoredCategoryOptions(),
 ): string {
   return (
     options.find((option) => option.value === categoryId)?.label ??
-    BUILT_IN_CATEGORY_LABELS[categoryId] ??
-    humanizeCategoryId(categoryId)
+    fallbackCategoryLabel(categoryId)
   );
 }
 
@@ -163,7 +149,21 @@ function humanizeCategoryId(categoryId: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function fallbackCategoryLabel(categoryId: string): string {
+  return BUILT_IN_CATEGORY_LABELS[categoryId] ?? humanizeCategoryId(categoryId);
+}
+
 const BUILT_IN_CATEGORY_LABELS: Record<string, string> = {
+  food: "Alimentacao",
+  transport: "Transporte",
+  housing: "Moradia",
+  health: "Saude",
+  education: "Educacao",
+  entertainment: "Lazer",
+  utilities: "Contas",
+  salary: "Salario",
+  freelance: "Freelance",
+  other: "Outros",
   clothing: "Vestuario",
   transfer: "Transferencia",
   invoice_payment: "Pagamento de fatura",

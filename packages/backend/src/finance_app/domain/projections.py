@@ -28,6 +28,7 @@ class CardProjection:
     due_day: int
     payment_account_id: str
     is_active: bool
+    future_installment_total: int = 0
 
     def to_dict(self) -> dict[str, str | int | bool]:
         return {
@@ -38,6 +39,7 @@ class CardProjection:
             "due_day": self.due_day,
             "payment_account_id": self.payment_account_id,
             "is_active": self.is_active,
+            "future_installment_total": self.future_installment_total,
         }
 
 
@@ -124,6 +126,38 @@ class InvoiceItemProjection:
             "installment_number": self.installment_number,
             "installments_count": self.installments_count,
             "amount": self.amount,
+        }
+
+
+@dataclass(frozen=True)
+class CardInstallmentProjection:
+    installment_id: str
+    purchase_id: str
+    card_id: str
+    purchase_date: str
+    due_date: str
+    reference_month: str
+    category_id: str
+    description: str | None
+    installment_number: int
+    installments_count: int
+    amount: int
+    invoice_id: str
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        return {
+            "installment_id": self.installment_id,
+            "purchase_id": self.purchase_id,
+            "card_id": self.card_id,
+            "purchase_date": self.purchase_date,
+            "due_date": self.due_date,
+            "reference_month": self.reference_month,
+            "category_id": self.category_id,
+            "description": self.description,
+            "installment_number": self.installment_number,
+            "installments_count": self.installments_count,
+            "amount": self.amount,
+            "invoice_id": self.invoice_id,
         }
 
 

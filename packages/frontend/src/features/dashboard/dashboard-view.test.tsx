@@ -1,9 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { App } from "../../App";
 
 describe("Dashboard view", () => {
   it("loads the monthly summary and accounts on startup", async () => {
+    const user = userEvent.setup();
     const fetchMock = vi.fn<(typeof fetch)>().mockImplementation((input) => {
       const url = String(input);
 
@@ -16,6 +18,15 @@ describe("Dashboard view", () => {
               total_expense: 2000,
               net_flow: 3000,
               current_balance: 15500,
+              fixed_expenses_total: 500,
+              installment_total: 200,
+              invoices_due_total: 750,
+              free_to_spend: 2500,
+              pending_reimbursements_total: 0,
+              pending_reimbursements: [],
+              monthly_commitments: [],
+              monthly_fixed_expenses: [],
+              monthly_installments: [],
               recent_transactions: [
                 {
                   transaction_id: "tx-2",
@@ -137,15 +148,20 @@ describe("Dashboard view", () => {
     render(<App />);
 
     expect(
-      (await screen.findAllByText("R$ 155,00", undefined, { timeout: 5_000 })).length,
+      (await screen.findAllByText("R$ 50,00", undefined, { timeout: 5_000 })).length,
     ).toBeGreaterThan(0);
-    expect(screen.getAllByText("R$ 50,00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("R$ 20,00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("R$ 25,00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("R$ 7,50").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/alimenta/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/raio-x de despesas/i)).toBeInTheDocument();
-    expect(screen.queryByText("Fixos")).not.toBeInTheDocument();
-    expect(screen.queryByText("Variaveis")).not.toBeInTheDocument();
-    expect(screen.queryByText("Parcelas")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /compromissos/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /compromissos/i }));
+
+    expect(screen.getByText(/tudo em dia/i)).toBeInTheDocument();
+    expect(screen.getByText(/sem fixos/i)).toBeInTheDocument();
+    expect(screen.getByText(/sem parcelas/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(7);

@@ -1685,8 +1685,15 @@ def test_projector_summarizes_dashboard_month_from_projections(tmp_path: Path) -
         "total_expense": 15_00,
         "net_flow": 25_00,
         "current_balance": 76_00,
+        "fixed_expenses_total": 0,
+        "installment_total": 0,
+        "invoices_due_total": 0,
+        "free_to_spend": 25_00,
         "pending_reimbursements_total": 0,
         "pending_reimbursements": [],
+        "monthly_commitments": [],
+        "monthly_fixed_expenses": [],
+        "monthly_installments": [],
         "recent_transactions": [
             {
                 "transaction_id": "trf-1:debit",

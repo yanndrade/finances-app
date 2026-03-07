@@ -44,6 +44,7 @@ function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
     due_day: 20,
     payment_account_id: "acc-1",
     is_active: true,
+    future_installment_total: 0,
     ...overrides,
   };
 }
@@ -75,6 +76,15 @@ function buildDashboard(
     total_expense: 117_500,
     net_flow: 132_500,
     current_balance: 132_500,
+    fixed_expenses_total: 35_000,
+    installment_total: 12_500,
+    invoices_due_total: 10_000,
+    free_to_spend: 97_500,
+    pending_reimbursements_total: 0,
+    pending_reimbursements: [],
+    monthly_commitments: [],
+    monthly_fixed_expenses: [],
+    monthly_installments: [],
     recent_transactions: [buildTransaction()],
     spending_by_category: [{ category_id: "mercado", total: 2_500 }],
     previous_month: { total_income: 200_000, total_expense: 100_000, net_flow: 100_000 },
@@ -292,7 +302,7 @@ describe("UI consistency and cards overview", () => {
     expect(
       await screen.findByLabelText(/escopo dos cartoes/i, undefined, { timeout: 5_000 }),
     ).toHaveValue("all");
-    expect(screen.getByRole("tab", { name: /resumo/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /faturas/i })).toBeInTheDocument();
     expect(screen.getAllByText(/faturas abertas/i).length).toBeGreaterThan(0);
     const bradescoInvoice = screen.getByRole("button", { name: /bradesco platinum/i });
     expect(bradescoInvoice).toBeInTheDocument();

@@ -52,6 +52,7 @@ const defaultCards: api.CardSummary[] = [
     due_day: 20,
     payment_account_id: "acc-1",
     is_active: true,
+    future_installment_total: 0,
   },
 ];
 
@@ -78,6 +79,7 @@ function renderCardsView(
     overrides.onCreateCardPurchase ?? vi.fn(() => Promise.resolve());
   const onOpenLedgerFiltered = overrides.onOpenLedgerFiltered ?? vi.fn();
   const onOpenQuickAdd = overrides.onOpenQuickAdd ?? vi.fn();
+  const onOpenSettings = overrides.onOpenSettings ?? vi.fn();
   const onSetCardActive = overrides.onSetCardActive ?? vi.fn(() => Promise.resolve());
   const onUpdateCard = overrides.onUpdateCard ?? vi.fn(() => Promise.resolve());
 
@@ -91,6 +93,7 @@ function renderCardsView(
       onCreateCardPurchase={onCreateCardPurchase}
       onOpenLedgerFiltered={onOpenLedgerFiltered}
       onOpenQuickAdd={onOpenQuickAdd}
+      onOpenSettings={onOpenSettings}
       onSetCardActive={onSetCardActive}
       onUpdateCard={onUpdateCard}
       uiDensity={overrides.uiDensity ?? "compact"}
@@ -108,6 +111,8 @@ function renderCardsView(
 describe("CardsView", () => {
   beforeEach(() => {
     installDialogEnvironment();
+    vi.spyOn(api, "fetchCardPurchases").mockResolvedValue([]);
+    vi.spyOn(api, "fetchCardInstallments").mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -131,8 +136,8 @@ describe("CardsView", () => {
     const user = userEvent.setup();
     const { onCreateCard } = renderCardsView();
 
-    await user.click(screen.getByRole("tab", { name: /ajustes/i }));
-    await user.click(screen.getAllByRole("button", { name: /^novo cartao$/i })[1]);
+    await user.click(screen.getByRole("tab", { name: /carteira/i }));
+    await user.click(screen.getAllByRole("button", { name: /^novo cartao$/i })[0]);
     expect((screen.getByLabelText(/limite total/i) as HTMLInputElement).value).toMatch(/R\$\s*0,00/);
     expect(screen.getByText(/opcional\./i)).toBeInTheDocument();
     await user.type(screen.getByLabelText(/nome do cartao/i), "Cartao Verde");
@@ -161,7 +166,7 @@ describe("CardsView", () => {
 
     renderCardsView({ onUpdateCard });
 
-    await user.click(screen.getByRole("tab", { name: /ajustes/i }));
+    await user.click(screen.getByRole("tab", { name: /carteira/i }));
     await user.click(screen.getByRole("button", { name: /editar$/i }));
     await user.clear(screen.getByLabelText(/limite total/i));
     await user.type(screen.getByLabelText(/limite total/i), "150000");
@@ -185,7 +190,7 @@ describe("CardsView", () => {
     vi.stubGlobal("confirm", confirmMock);
     const { onSetCardActive } = renderCardsView();
 
-    await user.click(screen.getByRole("tab", { name: /ajustes/i }));
+    await user.click(screen.getByRole("tab", { name: /carteira/i }));
     await user.click(screen.getByRole("button", { name: /excluir cartao/i }));
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
@@ -207,6 +212,99 @@ describe("CardsView", () => {
       expect(
         screen.getByText(/nao foi possivel carregar os itens da fatura/i),
       ).toBeInTheDocument();
+    });
+  });
+
+  it("shows future committed installments for the selected card", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "fetchCardInstallments").mockResolvedValue([
+      {
+        installment_id: "purchase-1:2",
+        purchase_id: "purchase-1",
+        card_id: "card-1",
+        purchase_date: "2026-03-01T12:00:00Z",
+        due_date: "2026-04-20",
+        reference_month: "2026-04",
+        category_id: "electronics",
+        description: "Notebook",
+        installment_number: 2,
+        installments_count: 3,
+        amount: 33_33,
+        invoice_id: "card-1:2026-04",
+      },
+    ]);
+
+    renderCardsView();
+
+    await user.selectOptions(screen.getByLabelText(/escopo dos cartoes/i), "card-1");
+
+    expect(await screen.findByText(/parcelas futuras comprometidas/i)).toBeInTheDocument();
+    expect(screen.getByText(/notebook/i)).toBeInTheDocument();
+    expect(screen.getByText(/2\/3 • 2026-04/i)).toBeInTheDocument();
+  });
+  it("filters purchases by invoice status in the purchases tab", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "fetchCardPurchases").mockResolvedValue([
+      {
+        purchase_id: "purchase-1",
+        purchase_date: "2026-03-01T12:00:00Z",
+        amount: 90_00,
+        category_id: "food",
+        card_id: "card-1",
+        description: "Mercado",
+        installments_count: 1,
+        invoice_id: "card-1:2026-03",
+        reference_month: "2026-03",
+        closing_date: "2026-03-10",
+        due_date: "2026-03-20",
+      },
+    ]);
+
+    renderCardsView({
+      invoices: [
+        {
+          ...defaultInvoices[0],
+          status: "paid",
+          paid_amount: 90_00,
+          remaining_amount: 0,
+        },
+      ],
+    });
+
+    await user.click(screen.getByRole("tab", { name: /compras/i }));
+    expect(await screen.findByText(/mercado/i)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/status da fatura/i), "open");
+    expect(screen.queryByText(/mercado/i)).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/status da fatura/i), "paid");
+    expect(screen.getByText(/mercado/i)).toBeInTheDocument();
+  });
+
+  it("opens invoice items when clicking the invoice total value", async () => {
+    const user = userEvent.setup();
+    const fetchInvoiceItems = vi.spyOn(api, "fetchInvoiceItems").mockResolvedValue([
+      {
+        invoice_item_id: "purchase-1:1",
+        invoice_id: "card-1:2026-03",
+        purchase_id: "purchase-1",
+        card_id: "card-1",
+        purchase_date: "2026-03-01T12:00:00Z",
+        category_id: "food",
+        description: "Mercado",
+        installment_number: 1,
+        installments_count: 1,
+        amount: 90_00,
+      },
+    ]);
+
+    renderCardsView();
+
+    await user.selectOptions(screen.getByLabelText(/escopo dos cartoes/i), "card-1");
+    await user.click(screen.getByRole("button", { name: /r\$\s*90,00/i }));
+
+    await waitFor(() => {
+      expect(fetchInvoiceItems).toHaveBeenCalledWith("card-1:2026-03");
     });
   });
 });

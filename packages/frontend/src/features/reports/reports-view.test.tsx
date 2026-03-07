@@ -10,6 +10,7 @@ describe("ReportsView", () => {
     render(
       <ReportsView
         accounts={[]}
+        categories={[{ value: "food", label: "Alimentacao" }]}
         filters={{
           period: "month",
           reference: "2026-04-15",
@@ -22,7 +23,6 @@ describe("ReportsView", () => {
           person: "",
           text: "",
         }}
-        isSubmitting={false}
         loading={false}
         onApplyFilters={vi.fn(async () => undefined)}
         onOpenLedgerFiltered={onOpenLedgerFiltered}
@@ -36,6 +36,35 @@ describe("ReportsView", () => {
             income_total: 100_00,
             expense_total: 80_00,
             net_total: 20_00,
+          },
+          expense_mix: {
+            fixed_total: 20_00,
+            variable_total: 20_00,
+            installment_total: 40_00,
+          },
+          card_breakdown: [
+            {
+              card_id: "card-1",
+              total: 40_00,
+            },
+          ],
+          expense_evolution: [
+            {
+              month: "2026-03",
+              expense_total: 70_00,
+            },
+            {
+              month: "2026-04",
+              expense_total: 80_00,
+            },
+          ],
+          month_projection: {
+            current_balance: 300_00,
+            projected_end_balance: 180_00,
+            pending_fixed_total: 40_00,
+            invoice_due_total: 80_00,
+            planned_income_total: 0,
+            installment_impact_total: 40_00,
           },
           category_breakdown: [
             {
@@ -71,6 +100,10 @@ describe("ReportsView", () => {
     expect(screen.getByText("2026-05")).toBeInTheDocument();
     expect(screen.getAllByText("R$ 40,00").length).toBeGreaterThan(1);
     expect(screen.getByText(/fluxo e projecao simples/i)).toBeInTheDocument();
+    expect(screen.getByText(/fixos x variaveis x parcelas/i)).toBeInTheDocument();
+    expect(screen.getByText(/gastos por cartao/i)).toBeInTheDocument();
+    expect(screen.getByText(/evolucao mensal de gastos/i)).toBeInTheDocument();
+    expect(screen.getByText(/projecao ate o fim do mes/i)).toBeInTheDocument();
   });
 
   it("submits custom period filters", async () => {
@@ -79,6 +112,7 @@ describe("ReportsView", () => {
     render(
       <ReportsView
         accounts={[]}
+        categories={[{ value: "food", label: "Alimentacao" }]}
         filters={{
           period: "month",
           reference: "2026-04-15",
@@ -91,7 +125,6 @@ describe("ReportsView", () => {
           person: "",
           text: "",
         }}
-        isSubmitting={false}
         loading={false}
         onApplyFilters={onApplyFilters}
         onOpenLedgerFiltered={onOpenLedgerFiltered}
@@ -119,8 +152,9 @@ describe("ReportsView", () => {
     render(
       <ReportsView
         accounts={[]}
+        categories={[{ value: "food", label: "Alimentacao" }]}
         filters={{
-          period: "week",
+          period: "month",
           reference: "2026-04-15",
           from: "",
           to: "",
@@ -131,7 +165,6 @@ describe("ReportsView", () => {
           person: "",
           text: "",
         }}
-        isSubmitting={false}
         loading={false}
         onApplyFilters={vi.fn(async () => undefined)}
         onOpenLedgerFiltered={onOpenLedgerFiltered}
@@ -145,6 +178,21 @@ describe("ReportsView", () => {
             income_total: 100_00,
             expense_total: 80_00,
             net_total: 20_00,
+          },
+          expense_mix: {
+            fixed_total: 0,
+            variable_total: 80_00,
+            installment_total: 0,
+          },
+          card_breakdown: [],
+          expense_evolution: [],
+          month_projection: {
+            current_balance: 100_00,
+            projected_end_balance: 100_00,
+            pending_fixed_total: 0,
+            invoice_due_total: 0,
+            planned_income_total: 0,
+            installment_impact_total: 0,
           },
           category_breakdown: [],
           weekly_trend: [],
@@ -173,6 +221,7 @@ describe("ReportsView", () => {
     render(
       <ReportsView
         accounts={[]}
+        categories={[{ value: "food", label: "Alimentacao" }]}
         filters={{
           period: "month",
           reference: "2026-04-15",
@@ -185,7 +234,6 @@ describe("ReportsView", () => {
           person: "",
           text: "",
         }}
-        isSubmitting={false}
         loading={false}
         onApplyFilters={vi.fn(async () => undefined)}
         onOpenLedgerFiltered={onOpenLedgerFiltered}
@@ -199,6 +247,21 @@ describe("ReportsView", () => {
             income_total: 100_00,
             expense_total: 80_00,
             net_total: 20_00,
+          },
+          expense_mix: {
+            fixed_total: 0,
+            variable_total: 80_00,
+            installment_total: 0,
+          },
+          card_breakdown: [],
+          expense_evolution: [],
+          month_projection: {
+            current_balance: 100_00,
+            projected_end_balance: 100_00,
+            pending_fixed_total: 0,
+            invoice_due_total: 0,
+            planned_income_total: 0,
+            installment_impact_total: 0,
           },
           category_breakdown: [
             {
@@ -229,4 +292,3 @@ describe("ReportsView", () => {
     expect(month).toBe("2026-04");
   });
 });
-

@@ -159,6 +159,35 @@ describe("api timestamp normalization", () => {
     );
   });
 
+  it("requests card purchases for a specific card id", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(JSON.stringify([])),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.fetchCardPurchases("card-1");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/card-purchases?card=card-1");
+  });
+
+  it("requests future card installments for a specific card and month", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(JSON.stringify([])),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.fetchCardInstallments({
+      cardId: "card-1",
+      fromMonth: "2026-03",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/card-installments?card=card-1&from_month=2026-03",
+    );
+  });
+
   it("sends contribution and optional dividend values for investment movements", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { App } from "./App";
 import type {
   AccountSummary,
+  CardPurchaseSummary,
   CardSummary,
   DashboardSummary,
   InvestmentMovementSummary,
@@ -77,6 +78,15 @@ function buildDashboard(
     total_expense: 117_500,
     net_flow: 132_500,
     current_balance: 132_500,
+    fixed_expenses_total: 35_000,
+    installment_total: 12_500,
+    invoices_due_total: 10_000,
+    free_to_spend: 97_500,
+    pending_reimbursements_total: 0,
+    pending_reimbursements: [],
+    monthly_commitments: [],
+    monthly_fixed_expenses: [],
+    monthly_installments: [],
     recent_transactions: [buildTransaction()],
     spending_by_category: [{ category_id: "mercado", total: 2_500 }],
     category_budgets: [],
@@ -149,6 +159,24 @@ function buildReportSummary(
       expense_total: 117_500,
       net_total: 132_500,
     },
+    expense_mix: {
+      fixed_total: 30_000,
+      variable_total: 87_500,
+      installment_total: 0,
+    },
+    card_breakdown: [],
+    expense_evolution: [
+      { month: "2026-02", expense_total: 100_000 },
+      { month: "2026-03", expense_total: 117_500 },
+    ],
+    month_projection: {
+      current_balance: 132_500,
+      projected_end_balance: 102_500,
+      pending_fixed_total: 30_000,
+      invoice_due_total: 0,
+      planned_income_total: 0,
+      installment_impact_total: 0,
+    },
     category_breakdown: [{ category_id: "mercado", total: 2_500 }],
     weekly_trend: [
       {
@@ -176,6 +204,7 @@ function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
     due_day: 20,
     payment_account_id: "acc-1",
     is_active: true,
+    future_installment_total: 0,
     ...overrides,
   };
 }
@@ -218,9 +247,29 @@ function buildInvoiceItem(overrides: Partial<InvoiceItemSummary> = {}): InvoiceI
   };
 }
 
+function buildCardPurchase(
+  overrides: Partial<CardPurchaseSummary> = {},
+): CardPurchaseSummary {
+  return {
+    purchase_id: "purchase-1",
+    purchase_date: "2026-03-03T12:00:00Z",
+    amount: 50_00,
+    category_id: "mercado",
+    card_id: "card-1",
+    description: "Supermercado",
+    installments_count: 1,
+    invoice_id: "card-1:2026-03",
+    reference_month: "2026-03",
+    closing_date: "2026-03-10",
+    due_date: "2026-03-20",
+    ...overrides,
+  };
+}
+
 function installAppFetchMock(initialState?: {
   accounts?: AccountSummary[];
   cards?: CardSummary[];
+  cardPurchases?: CardPurchaseSummary[];
   transactions?: TransactionSummary[];
   dashboard?: DashboardSummary;
   investmentOverview?: InvestmentOverview;
@@ -232,6 +281,7 @@ function installAppFetchMock(initialState?: {
   const state = {
     accounts: initialState?.accounts ?? [buildAccount()],
     cards: initialState?.cards ?? [buildCard()],
+    cardPurchases: initialState?.cardPurchases ?? [],
     transactions: initialState?.transactions ?? [buildTransaction()],
     investmentOverview: initialState?.investmentOverview ?? buildInvestmentOverview(),
     investmentMovements: initialState?.investmentMovements ?? [],
@@ -307,6 +357,19 @@ function installAppFetchMock(initialState?: {
 
     if (url.includes("/api/transactions") && method === "GET") {
       return new Response(JSON.stringify(state.transactions));
+    }
+
+    if (url.includes("/api/card-purchases") && method === "GET") {
+      const currentUrl = new URL(url);
+      const cardId = currentUrl.searchParams.get("card");
+
+      return new Response(
+        JSON.stringify(
+          cardId === null
+            ? state.cardPurchases
+            : state.cardPurchases.filter((purchase) => purchase.card_id === cardId),
+        ),
+      );
     }
 
     if (url.includes("/api/reports/summary") && method === "GET") {
@@ -831,13 +894,13 @@ describe("App", () => {
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
 
     expect(
-      screen.getByRole("button", { name: /historico unificado/i }),
+      screen.getByRole("button", { name: /^historico$/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /patrimonio & investimentos/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /analises & relatorios/i }),
+      screen.getByRole("button", { name: /planejamento/i }),
     ).toBeInTheDocument();
   });
 
@@ -912,7 +975,7 @@ describe("App", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
     ).toBeInTheDocument();
     const typeFilter = await screen.findByRole("combobox", { name: /tipo do filtro/i });
     expect(typeFilter).toHaveValue("investment");
@@ -944,7 +1007,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect(await screen.findByText(/reembolsos pendentes/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/reembolsos pendentes/i)).length).toBeGreaterThan(0);
     expect(screen.getByText("Ana")).toBeInTheDocument();
     expect(screen.getAllByText("R$ 25,00").length).toBeGreaterThan(0);
 
@@ -1000,17 +1063,18 @@ describe("App", () => {
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
     expect(await screen.findByText(/orcamentos por categoria/i)).toBeInTheDocument();
     expect(screen.getByText(/^Em alerta$/i)).toBeInTheDocument();
-    expect(screen.getByText(/r\$\s*85,00 de r\$\s*100,00/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/r\$\s*85,00 de r\$\s*100,00/i).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /salvar limite/i })).not.toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /ajustar limites em configuracoes/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /abrir planejamento/i }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: /^config/i }),
+      await screen.findByRole("heading", { level: 1, name: /^planejamento/i }),
     ).toBeInTheDocument();
 
-    const budgetLimitInput = await screen.findByLabelText(/limite mensal/i);
+    const budgetCategorySelect = await screen.findByLabelText(/categoria do orcamento/i);
+    await userEvent.selectOptions(budgetCategorySelect, "food");
+
+    const budgetLimitInput = await screen.findByLabelText(/limite mensal do orcamento/i);
     await userEvent.clear(budgetLimitInput);
     await userEvent.type(budgetLimitInput, "15000");
     await userEvent.click(screen.getByRole("button", { name: /salvar limite/i }));
@@ -1074,7 +1138,7 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: /ver categorias em alerta/i }));
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
     ).toBeInTheDocument();
     const searchInput = await screen.findByLabelText(/buscar/i);
     expect(searchInput).toHaveValue("Alimentacao");
@@ -1121,12 +1185,12 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect(await screen.findByText(/^Sem categoria$/i)).toBeInTheDocument();
+    expect(await screen.findByText(/lancamentos nao categorizados/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
     ).toBeInTheDocument();
     const searchInput = await screen.findByLabelText(/buscar/i);
     expect(searchInput).toHaveValue("Compra sem categoria");
@@ -1160,9 +1224,9 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /analises.*relatorios/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^planejamento$/i }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: /^an.lises/i }),
+      await screen.findByRole("heading", { level: 1, name: /planejamento/i }),
     ).toBeInTheDocument();
 
     const openLedgerFromReportsButton = await screen.findByRole("button", {
@@ -1171,7 +1235,7 @@ describe("App", () => {
     await userEvent.click(openLedgerFromReportsButton);
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
     ).toBeInTheDocument();
     const searchInput = await screen.findByLabelText(/buscar/i);
     expect((searchInput as HTMLInputElement).value).toMatch(/alimenta/i);
@@ -1195,15 +1259,15 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /analises.*relatorios/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^planejamento$/i }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: /^an.lises/i }),
+      await screen.findByRole("heading", { level: 1, name: /planejamento/i }),
     ).toBeInTheDocument();
 
     await userEvent.click(await screen.findByRole("button", { name: /ver recorte do periodo/i }));
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
     ).toBeInTheDocument();
 
     const transactionCalls = fetchMock.mock.calls
@@ -1214,7 +1278,7 @@ describe("App", () => {
     expect(ledgerRequest.searchParams.get("to")).toBe("2026-04-13T23:59:59Z");
   });
 
-  it("shows upcoming events on dashboard and opens cards workspace from that section", async () => {
+  it("shows upcoming events on dashboard and opens the ledger from that section", async () => {
     installAppFetchMock({
       cards: [
         buildCard({ card_id: "card-1", name: "Nubank" }),
@@ -1239,9 +1303,11 @@ describe("App", () => {
     expect(screen.getByText(/nubank/i)).toBeInTheDocument();
     expect(screen.getByText(/vence em 2026-03-20/i)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /abrir cartoes/i }));
+    await userEvent.click(screen.getByRole("button", { name: /nubank vence em 2026-03-20/i }));
 
-    expect(await screen.findByRole("heading", { level: 1, name: /^cart/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
+    expect(await screen.findByLabelText(/cartao do filtro/i)).toHaveValue("card-1");
   });
 
   it("opens quick add with controlled category selection", async () => {
@@ -1415,7 +1481,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
 
     expect(
       await screen.findByText(/limite comprometido/i, undefined, { timeout: 5_000 }),
@@ -1490,14 +1556,14 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
 
     expect((await screen.findAllByText(/faturas abertas/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/carteira/i).length).toBeGreaterThan(0);
 
-    await userEvent.click(screen.getByRole("tab", { name: /ajustes/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /carteira/i }));
 
-    expect(await screen.findByText(/ajustes da carteira/i)).toBeInTheDocument();
+    expect(await screen.findByText(/carteira de cartoes/i)).toBeInTheDocument();
     expect(screen.getByText(/contas padrao/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /excluir cartao/i })).toBeInTheDocument();
   });
@@ -1510,8 +1576,8 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
-    await userEvent.click(screen.getByRole("tab", { name: /ajustes/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /carteira/i }));
     await userEvent.click(screen.getByRole("button", { name: /excluir cartao/i }));
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
@@ -1559,13 +1625,14 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
     await userEvent.click(await screen.findByRole("button", { name: /referencia 2026-03/i }));
     await userEvent.click(await screen.findByRole("button", { name: /ver gastos/i }));
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: /hist.rico unificado/i }),
+      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
     ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
     const cardFilter = await screen.findByLabelText(/cartao do filtro/i);
     expect(cardFilter).toHaveValue("card-1");
     expect(await screen.findByText(/mercado no cartao/i)).toBeInTheDocument();
@@ -1586,17 +1653,26 @@ describe("App", () => {
           purchase_count: 3,
         }),
       ],
+      cardPurchases: [
+        buildCardPurchase({
+          purchase_id: "purchase-1",
+          amount: 50_00,
+          reference_month: "2026-03",
+          invoice_id: "card-1:2026-03",
+          description: "Supermercado",
+        }),
+      ],
     });
 
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
     await userEvent.click(screen.getByRole("tab", { name: /compras/i }));
 
     expect(await screen.findByText(/compras consolidadas/i)).toBeInTheDocument();
-    expect(screen.getByText("2026-03")).toBeInTheDocument();
-    expect(screen.getByText("R$ 50,00")).toBeInTheDocument();
+    expect(await screen.findByText("Supermercado")).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s*50,00/)).toBeInTheDocument();
   });
 
   it("registers an invoice payment from the cards view and keeps partial invoices visible", async () => {
@@ -1616,7 +1692,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
 
     const invoiceButton = await screen.findByRole("button", { name: /referencia 2026-03/i });
     await userEvent.click(invoiceButton);
@@ -1677,7 +1753,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
     await userEvent.selectOptions(screen.getByLabelText(/escopo dos cartoes/i), "card-2");
 
     expect(await screen.findByText(/fatura de 2026-03/i)).toBeInTheDocument();
@@ -1735,7 +1811,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cart/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
     await userEvent.click(await screen.findByRole("button", { name: /referencia 2026-03/i }));
     await userEvent.click(await screen.findByRole("button", { name: /ver itens/i }));
 
@@ -1799,9 +1875,11 @@ describe("App", () => {
       name: /historico e filtros/i,
     });
     expect(within(transactionsSection).getByText("Supermercado")).toBeInTheDocument();
-    expect(screen.getByLabelText(/m.todo do filtro/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/categoria do filtro/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/pessoa do filtro/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^categoria$/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
+    expect(within(transactionsSection).getByLabelText(/^metodo$/i)).toBeInTheDocument();
+    expect(within(transactionsSection).getByLabelText(/^categoria$/i)).toBeInTheDocument();
+    expect(within(transactionsSection).getByLabelText(/^pessoa$/i)).toBeInTheDocument();
 
     await userEvent.click(within(transactionsSection).getByRole("button", { name: /editar/i }));
     await userEvent.clear(screen.getByLabelText(/descricao da transacao/i));
@@ -1855,8 +1933,11 @@ describe("App", () => {
     await screen.findByRole("heading", { level: 1, name: /vis/i });
     await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
 
+    const transactionsSection = await screen.findByRole("region", {
+      name: /historico e filtros/i,
+    });
     expect(
-      await screen.findByRole("heading", { level: 2, name: /historico unificado/i }),
+      await screen.findByRole("heading", { level: 2, name: /^historico$/i }),
     ).toBeInTheDocument();
     const kpiGroup = screen.getByRole("group", { name: /kpis do recorte/i });
     expect(within(kpiGroup).getByText(/entradas/i)).toBeInTheDocument();
@@ -1868,7 +1949,9 @@ describe("App", () => {
 
     expect(screen.getByLabelText(/periodo/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/buscar/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/conta do filtro/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^conta$/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
+    expect(within(transactionsSection).getByLabelText(/^conta$/i)).toBeInTheDocument();
   });
 
   it("shows origem e destino columns in the unified ledger and drawer details", async () => {
@@ -1951,10 +2034,17 @@ describe("App", () => {
     const tableShell = dataTable.closest(".table-shell");
     expect(tableShell).toHaveClass("table-shell--compact");
 
-    await userEvent.selectOptions(screen.getByLabelText(/densidade da tabela/i), "compact");
+    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
+    await userEvent.selectOptions(
+      within(transactionsSection).getByLabelText(/densidade da tabela/i),
+      "compact",
+    );
     expect(tableShell).toHaveClass("table-shell--compact");
 
-    await userEvent.selectOptions(screen.getByLabelText(/densidade da tabela/i), "dense");
+    await userEvent.selectOptions(
+      within(transactionsSection).getByLabelText(/densidade da tabela/i),
+      "dense",
+    );
     expect(tableShell).toHaveClass("table-shell--dense");
   });
 
@@ -2044,8 +2134,8 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /^analises/i }));
-    expect(await screen.findByRole("heading", { level: 1, name: /relat/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^planejamento$/i }));
+    expect(await screen.findByRole("heading", { level: 1, name: /planejamento/i })).toBeInTheDocument();
     expect(await screen.findByText(/consumo por categoria/i)).toBeInTheDocument();
 
     await act(async () => {

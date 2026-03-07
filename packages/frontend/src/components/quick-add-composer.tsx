@@ -84,6 +84,8 @@ type QuickAddComposerProps = {
   isSubmitting?: boolean;
 };
 
+type ComposerMode = "quick" | "advanced";
+
 export function QuickAddComposer({
   isOpen,
   onClose,
@@ -128,6 +130,7 @@ export function QuickAddComposer({
   const [personId, setPersonId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [cardId, setCardId] = useState("");
+  const [composerMode, setComposerMode] = useState<ComposerMode>("quick");
 
   const categoryOptions = getCategoryOptions(categoryId);
   const isCardExpense = entryType === "expense" && expensePaymentMode === "CARD";
@@ -156,7 +159,13 @@ export function QuickAddComposer({
       return;
     }
 
-    amountInputRef.current?.focus();
+    const timeout = globalThis.setTimeout(() => {
+      amountInputRef.current?.focus();
+    }, 0);
+
+    return () => {
+      globalThis.clearTimeout(timeout);
+    };
   }, [isOpen, isMobile, entryType, expensePaymentMode, transferMode, investmentMode]);
 
   useEffect(() => {
@@ -241,11 +250,23 @@ export function QuickAddComposer({
     }
   }, [isOpen, openInvoices, preset, presetInvoiceId]);
 
+  useEffect(() => {
+    const requiresAdvancedMode =
+      entryType === "transfer" ||
+      entryType === "investment" ||
+      (entryType === "expense" && expensePaymentMode === "CARD");
+
+    if (requiresAdvancedMode) {
+      setComposerMode("advanced");
+    }
+  }, [entryType, expensePaymentMode]);
+
   function resetForm() {
     setAmount("");
     setDescription("");
     setPersonId("");
     setCategoryId("");
+    setComposerMode("quick");
     dispatchQuickAdd({
       type: "reset",
       defaultAccountId: accountId,
@@ -463,11 +484,48 @@ export function QuickAddComposer({
     }
   }
 
+  const isAdvancedMode =
+    composerMode === "advanced" ||
+    entryType === "transfer" ||
+    entryType === "investment" ||
+    (entryType === "expense" && expensePaymentMode === "CARD");
+  const isAdvancedModeForced =
+    entryType === "transfer" ||
+    entryType === "investment" ||
+    (entryType === "expense" && expensePaymentMode === "CARD");
+
   const formContent = (
     <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-6 p-6 pt-2">
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/70 bg-slate-50/80 px-4 py-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+            {isAdvancedMode ? "Modo avançado" : "Modo rápido"}
+          </p>
+          <p className="text-sm font-medium text-slate-700">
+            {isAdvancedMode
+              ? "Campos extras aparecem quando o contexto exige mais controle."
+              : "Foque no essencial para registrar um lancamento em segundos."}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          className="rounded-xl"
+          disabled={isAdvancedModeForced}
+          onClick={() => setComposerMode((current) => (current === "quick" ? "advanced" : "quick"))}
+        >
+          {isAdvancedModeForced
+            ? "Avançado obrigatório"
+            : isAdvancedMode
+              ? "Usar modo rápido"
+              : "Abrir modo avançado"}
+        </Button>
+      </div>
+
       <div className="flex flex-col items-center justify-center py-2">
         <div className="mb-1 font-semibold text-muted-foreground">R$</div>
         <input
+          autoFocus
           ref={amountInputRef}
           className="w-full max-w-[300px] bg-transparent text-center text-4xl font-bold outline-none placeholder:text-muted-foreground/30 md:text-5xl"
           placeholder="0,00"
@@ -499,7 +557,7 @@ export function QuickAddComposer({
           >
             <option value="expense">Despesa</option>
             <option value="income">Receita</option>
-            <option value="transfer">Transferencia</option>
+            <option value="transfer">Transferência</option>
             <option value="investment">Investimento</option>
           </select>
         </div>
@@ -523,17 +581,17 @@ export function QuickAddComposer({
         </div>
 
         <div className="col-span-2 space-y-2">
-          <Label htmlFor="quick-add-description">Descricao</Label>
+          <Label htmlFor="quick-add-description">Descrição</Label>
           <Input
             id="quick-add-description"
             className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
-            placeholder="No que voce gastou?"
+            placeholder="No que você gastou?"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
         </div>
 
-        {entryType === "expense" ? (
+        {entryType === "expense" && isAdvancedMode ? (
           <div className="col-span-2 space-y-2 md:col-span-1">
             <Label htmlFor="quick-add-person">Pessoa relacionada</Label>
             <Input
@@ -564,17 +622,17 @@ export function QuickAddComposer({
               <option value="PIX">PIX</option>
               <option value="CASH">Dinheiro</option>
               <option value="OTHER">Outro</option>
-              <option value="CARD">Cartao</option>
+              <option value="CARD">Cartão</option>
             </select>
           </div>
         ) : null}
 
         {entryType === "transfer" ? (
           <div className="col-span-2 space-y-2 md:col-span-1">
-            <Label htmlFor="quick-add-transfer-mode">Modo da transferencia</Label>
+            <Label htmlFor="quick-add-transfer-mode">Modo da transferência</Label>
             <select
               id="quick-add-transfer-mode"
-              aria-label="Modo da transferencia"
+              aria-label="Modo da transferência"
               className={QUICK_ADD_SELECT_CLASS_NAME}
               onChange={(event) =>
                 dispatchQuickAdd({
@@ -629,7 +687,7 @@ export function QuickAddComposer({
           </div>
         ) : null}
 
-        {entryType === "investment" && investmentMode === "contribution" ? (
+        {entryType === "investment" && investmentMode === "contribution" && isAdvancedMode ? (
           <div className="col-span-2 space-y-2 md:col-span-1">
             <Label htmlFor="quick-add-dividend-amount">Dividendos (opcional)</Label>
             <Input
@@ -647,12 +705,12 @@ export function QuickAddComposer({
           </div>
         ) : null}
 
-        {entryType === "investment" && investmentMode === "withdrawal" ? (
+        {entryType === "investment" && investmentMode === "withdrawal" && isAdvancedMode ? (
           <div className="col-span-2 space-y-2 md:col-span-1">
-            <Label htmlFor="quick-add-invested-reduction">Reducao do investido</Label>
+            <Label htmlFor="quick-add-invested-reduction">Redução do investido</Label>
             <Input
               id="quick-add-invested-reduction"
-              aria-label="Reducao do investido"
+              aria-label="Redução do investido"
               className="h-11 border-transparent bg-muted/50"
               value={investedReductionAmount}
               onChange={(event) =>
@@ -772,10 +830,10 @@ export function QuickAddComposer({
         {isCardExpense ? (
           <>
             <div className="col-span-2 space-y-2 md:col-span-1">
-              <Label htmlFor="quick-add-card">Cartao</Label>
+              <Label htmlFor="quick-add-card">Cartão</Label>
               <select
                 id="quick-add-card"
-                aria-label="Cartao"
+                aria-label="Cartão"
                 className={QUICK_ADD_SELECT_CLASS_NAME}
                 onChange={(event) => {
                   setCardId(event.target.value);
@@ -823,7 +881,7 @@ export function QuickAddComposer({
 
       <div className="flex items-center justify-between pt-2">
         {entryType === "expense" || entryType === "income"
-          ? expensePaymentMode !== "CARD" && (
+          ? expensePaymentMode !== "CARD" && isAdvancedMode && (
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="keepOpen"
@@ -851,7 +909,7 @@ export function QuickAddComposer({
           size="lg"
           className="rounded-xl px-8 shadow-lg shadow-primary/20"
         >
-          Lancar
+          Lançar
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">Enter salva. Tab navega pelos campos.</p>
@@ -867,9 +925,9 @@ export function QuickAddComposer({
         >
           <div className="overflow-y-auto px-2 pb-4">
             <DrawerHeader className="px-4 pb-2 pt-6">
-              <DrawerTitle className="text-xl font-semibold">Lancar</DrawerTitle>
+              <DrawerTitle className="text-xl font-semibold">Lançar</DrawerTitle>
               <DrawerDescription>
-                Registre um lancamento sem sair da tela atual.
+                Registre um lançamento sem sair da tela atual.
               </DrawerDescription>
             </DrawerHeader>
             {formContent}
@@ -883,13 +941,13 @@ export function QuickAddComposer({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent
         data-testid="quick-add-dialog"
-        className="sm:max-w-[550px] overflow-hidden rounded-3xl border bg-background p-0 shadow-2xl"
+        className="max-h-[90vh] overflow-y-auto rounded-3xl border bg-background p-0 shadow-2xl sm:max-w-[720px] lg:max-w-[780px]"
       >
         <div className="p-6 pb-2">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">Lancar</DialogTitle>
+            <DialogTitle className="text-xl font-semibold">Lançar</DialogTitle>
             <DialogDescription>
-              Registre um lancamento sem sair da tela atual.
+              Registre um lançamento sem sair da tela atual.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -935,3 +993,4 @@ function useMediaQuery(query: string): boolean {
 
   return matches;
 }
+

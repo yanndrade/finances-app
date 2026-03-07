@@ -92,14 +92,61 @@ export type PendingReimbursementSummary = {
   receipt_transaction_id: string | null;
 };
 
+export type DashboardCommitmentSummary = {
+  commitment_id: string;
+  kind: "recurring" | "invoice";
+  title: string;
+  category_id: string | null;
+  amount: number;
+  due_date: string;
+  status: string;
+  account_id: string | null;
+  card_id: string | null;
+  payment_method?: string | null;
+  source: string;
+};
+
+export type DashboardFixedExpenseSummary = {
+  pending_id: string;
+  rule_id: string;
+  title: string;
+  category_id: string;
+  amount: number;
+  due_date: string;
+  status: string;
+  account_id: string;
+  payment_method: string;
+  transaction_id: string | null;
+};
+
+export type DashboardInstallmentSummary = {
+  installment_id: string;
+  purchase_id: string;
+  title: string | null;
+  category_id: string;
+  amount: number;
+  card_id: string;
+  installment_number: number;
+  installments_count: number;
+  due_date: string;
+  reference_month: string;
+};
+
 export type DashboardSummary = {
   month: string;
   total_income: number;
   total_expense: number;
   net_flow: number;
   current_balance: number;
+  fixed_expenses_total: number;
+  installment_total: number;
+  invoices_due_total: number;
+  free_to_spend: number;
   pending_reimbursements_total?: number;
   pending_reimbursements?: PendingReimbursementSummary[];
+  monthly_commitments?: DashboardCommitmentSummary[];
+  monthly_fixed_expenses?: DashboardFixedExpenseSummary[];
+  monthly_installments?: DashboardInstallmentSummary[];
   recent_transactions: TransactionSummary[];
   spending_by_category: CategorySpending[];
   category_budgets?: CategoryBudgetSummary[];
@@ -126,6 +173,7 @@ export type CardSummary = {
   due_day: number;
   payment_account_id: string;
   is_active: boolean;
+  future_installment_total: number;
 };
 
 export type CardPurchaseSummary = {
@@ -140,6 +188,21 @@ export type CardPurchaseSummary = {
   reference_month: string;
   closing_date: string;
   due_date: string;
+};
+
+export type CardInstallmentSummary = {
+  installment_id: string;
+  purchase_id: string;
+  card_id: string;
+  purchase_date: string;
+  due_date: string;
+  reference_month: string;
+  category_id: string;
+  description: string | null;
+  installment_number: number;
+  installments_count: number;
+  amount: number;
+  invoice_id: string;
 };
 
 export type InvoiceSummary = {
@@ -278,6 +341,7 @@ export type InvestmentOverviewParams = {
 export type TransactionFilters = {
   period?: ReportPeriod;
   reference?: string;
+  preset?: string;
   from: string;
   to: string;
   type?: TransactionTypeFilter;
@@ -314,6 +378,31 @@ export type FutureInstallmentMonth = {
   total: number;
 };
 
+export type ExpenseMixSummary = {
+  fixed_total: number;
+  variable_total: number;
+  installment_total: number;
+};
+
+export type CardSpendingSummary = {
+  card_id: string;
+  total: number;
+};
+
+export type MonthlyExpenseEvolutionPoint = {
+  month: string;
+  expense_total: number;
+};
+
+export type MonthProjectionSummary = {
+  current_balance: number;
+  projected_end_balance: number;
+  pending_fixed_total: number;
+  invoice_due_total: number;
+  planned_income_total: number;
+  installment_impact_total: number;
+};
+
 export type ReportSummary = {
   period: {
     type: ReportPeriod;
@@ -325,6 +414,10 @@ export type ReportSummary = {
     expense_total: number;
     net_total: number;
   };
+  expense_mix: ExpenseMixSummary;
+  card_breakdown: CardSpendingSummary[];
+  expense_evolution: MonthlyExpenseEvolutionPoint[];
+  month_projection: MonthProjectionSummary;
   category_breakdown: CategorySpending[];
   weekly_trend: WeeklyTrendPoint[];
   future_commitments: {
@@ -392,6 +485,32 @@ export async function fetchInvoices(cardId?: string): Promise<InvoiceSummary[]> 
   const query = cardId ? `?card=${encodeURIComponent(cardId)}` : "";
 
   return requestJson<InvoiceSummary[]>(`/api/invoices${query}`);
+}
+
+export async function fetchCardPurchases(cardId?: string): Promise<CardPurchaseSummary[]> {
+  const query = cardId ? `?card=${encodeURIComponent(cardId)}` : "";
+
+  return requestJson<CardPurchaseSummary[]>(
+    query.length > 0 ? `/api/card-purchases${query}` : "/api/card-purchases",
+  );
+}
+
+export async function fetchCardInstallments(params?: {
+  cardId?: string;
+  fromMonth?: string;
+}): Promise<CardInstallmentSummary[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.cardId) {
+    searchParams.set("card", params.cardId);
+  }
+  if (params?.fromMonth) {
+    searchParams.set("from_month", params.fromMonth);
+  }
+
+  const query = searchParams.toString();
+  return requestJson<CardInstallmentSummary[]>(
+    query.length > 0 ? `/api/card-installments?${query}` : "/api/card-installments",
+  );
 }
 
 export async function fetchInvoiceItems(invoiceId: string): Promise<InvoiceItemSummary[]> {
@@ -798,7 +917,3 @@ export function normalizeTimestampForApi(
 
   throw new Error("Data da compra invalida.");
 }
-
-
-
-

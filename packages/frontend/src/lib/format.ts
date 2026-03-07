@@ -13,8 +13,22 @@ export function formatDateTime(isoValue: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+  }).format(date);
+}
+
+export function formatDate(isoOrDateValue: string): string {
+  const normalizedValue = isoOrDateValue.includes("T")
+    ? isoOrDateValue
+    : `${isoOrDateValue}T12:00:00Z`;
+  const date = new Date(normalizedValue);
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   }).format(date);
 }
 
@@ -61,6 +75,7 @@ export function formatPaymentMethod(paymentMethod: string): string {
     PIX: "PIX",
     CASH: "Dinheiro",
     OTHER: "Outro",
+    INVOICE: "Fatura",
   };
 
   return labels[paymentMethod] ?? paymentMethod;
@@ -105,4 +120,33 @@ export function formatDelta(current: number, previous: number): DeltaInfo {
 
 export function formatCategoryName(categoryId: string): string {
   return resolveCategoryLabel(categoryId);
+}
+
+export function humanizeLedgerId(value: string | undefined | null, accounts: { account_id: string; name: string }[]): string {
+  if (!value) return "--";
+  
+  const separatorIndex = value.indexOf(":");
+  const kind = separatorIndex >= 0 ? value.slice(0, separatorIndex) : value;
+  const id = separatorIndex >= 0 ? value.slice(separatorIndex + 1).trim() : "";
+
+  if (kind === "account") {
+    return accounts.find((a) => a.account_id === id)?.name ?? id;
+  }
+  if (kind === "category") {
+    return formatCategoryName(id);
+  }
+  if (kind === "transfer") {
+    return "Transferência interna";
+  }
+  if (kind === "card_liability") {
+    return `Passivo do Cartão ${id}`;
+  }
+  if (kind === "person") {
+    return id || "Pessoa";
+  }
+  if (kind === "investment_asset") {
+    return "Patrimônio investido";
+  }
+
+  return value;
 }

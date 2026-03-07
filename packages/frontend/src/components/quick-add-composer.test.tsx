@@ -37,6 +37,7 @@ const CARDS: CardSummary[] = [
     due_day: 20,
     payment_account_id: "acc-1",
     is_active: true,
+    future_installment_total: 0,
   },
 ];
 
@@ -184,6 +185,8 @@ describe("QuickAddComposer", () => {
     expect(screen.getByTestId("quick-add-dialog")).toBeInTheDocument();
     expect(screen.queryByTestId("quick-add-drawer")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("0,00")).toHaveFocus();
+    expect(screen.getByText(/modo rapido/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/pessoa relacionada/i)).not.toBeInTheDocument();
   });
 
   it("renders mobile sheet variant when viewport is small", () => {
@@ -337,5 +340,20 @@ describe("QuickAddComposer", () => {
         }),
       );
     });
+  });
+
+  it("opens advanced mode on demand for optional fields", async () => {
+    installMatchMedia(false);
+    const user = userEvent.setup();
+
+    renderComposer();
+
+    expect(screen.queryByLabelText(/pessoa relacionada/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /abrir modo avancado/i }));
+
+    expect(screen.getByText(/modo avancado/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/pessoa relacionada/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/salvar e adicionar outra/i)).toBeInTheDocument();
   });
 });

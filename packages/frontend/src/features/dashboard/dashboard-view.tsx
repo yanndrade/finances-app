@@ -52,9 +52,9 @@ export function DashboardView({
   return (
     <div
       className={cn(
-        "space-y-8",
-        uiDensity === "compact" && "space-y-6",
-        uiDensity === "dense" && "space-y-4",
+        "space-y-6",
+        uiDensity === "compact" && "space-y-4",
+        uiDensity === "dense" && "space-y-3",
       )}
     >
       <div className="flex justify-end">

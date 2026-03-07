@@ -145,7 +145,7 @@ export function AppShell({
                   )}
                 >
                   <Plus className="mr-2 h-5 w-5" />
-                  + Lancar
+                  + Lançar
                   <kbd className="ml-3 hidden sm:inline-flex h-5 items-center gap-1 rounded border border-primary-foreground/20 bg-primary-foreground/10 px-1.5 font-mono text-[10px] font-medium opacity-100">
                     <span>Ctrl</span>
                     <span>N</span>

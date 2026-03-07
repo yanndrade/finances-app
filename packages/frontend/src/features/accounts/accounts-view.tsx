@@ -9,6 +9,7 @@ import type {
   AccountUpdatePayload,
 } from "../../lib/api";
 import { formatAccountType, formatCurrency } from "../../lib/format";
+import { cn } from "../../lib/utils";
 
 type AccountsViewProps = {
   accounts: AccountSummary[];
@@ -120,7 +121,7 @@ export function AccountsView({
     if (
       !nextIsActive &&
       !globalThis.confirm(
-        "Excluir esta conta da operacao ativa? O historico sera preservado.",
+        "Excluir esta conta da operação ativa? O histórico será preservado.",
       )
     ) {
       return;
@@ -141,21 +142,21 @@ export function AccountsView({
         <StatCard label="Contas inativas" tone="default" value={String(inactiveCount)} />
       </div>
 
-      <section aria-label="Gerenciar contas" className="panel-card">
-        <div className="section-heading">
+      <section aria-label="Gerenciar contas" className="panel-card p-6 md:p-8">
+        <div className="section-heading mb-6">
           <div>
-            <p className="eyebrow">Gestao</p>
+            <p className="eyebrow">Gestão</p>
             <h3 className="section-title">Contas e saldos</h3>
             <p className="section-copy">
-              Cadastre, edite, remova da operacao ativa ou reative contas sem sair desta tela.
+              Estrutura administrativa compacta com saldo atual, tipo, status e ações essenciais.
             </p>
           </div>
-          <div className="inline-actions">
-            <button className="ghost-button" onClick={onOpenSettings} type="button">
-              Abrir configuracoes
+          <div className="inline-actions flex flex-wrap gap-3">
+            <button className="ghost-button text-xs" onClick={onOpenSettings} type="button">
+              Abrir configurações
             </button>
             <button
-              className="primary-button"
+              className="primary-button text-xs px-4"
               onClick={() => setIsCreateModalOpen(true)}
               type="button"
             >
@@ -189,61 +190,75 @@ export function AccountsView({
           <div className="empty-state">
             {searchQuery
               ? "Nenhuma conta encontrada para essa busca."
-              : "Voce ainda nao tem contas cadastradas. Clique em Adicionar conta."}
+              : "Você ainda não tem contas cadastradas. Clique em Adicionar conta."}
           </div>
         ) : (
-          <div className="account-grid">
-            {filteredAndSortedAccounts.map((account) => (
-              <article key={account.account_id} className="account-card">
-                <div className="account-card__header">
-                  <div>
-                    <strong>{account.name}</strong>
-                    <p className="account-card__meta">{formatAccountType(account.type)}</p>
-                  </div>
-                  <span
-                    className={`status-badge status-badge--${account.is_active ? "active" : "voided"}`}
-                  >
-                    {account.is_active ? "Ativa" : "Inativa"}
-                  </span>
-                </div>
-                <p className="account-card__balance">{formatCurrency(account.current_balance)}</p>
-                <p className="account-card__meta">
-                  Saldo inicial {formatCurrency(account.initial_balance)}
-                </p>
-                {!account.is_active ? (
-                  <p className="account-card__meta">
-                    Fora da operacao ativa. O historico continua preservado.
-                  </p>
-                ) : null}
-                <div className="inline-actions">
-                  <button
-                    className="ghost-button"
-                    onClick={() => {
-                      setEditingAccountId(account.account_id);
-                      setEditForm({
-                        name: account.name,
-                        type: account.type as AccountPayload["type"],
-                        initialBalance: String(account.initial_balance),
-                        isActive: account.is_active,
-                      });
-                    }}
-                    type="button"
-                  >
-                    Editar
-                  </button>
-                  <button
-                    className={account.is_active ? "ghost-button ghost-button--danger" : "ghost-button"}
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      void handleToggleAccountActive(account);
-                    }}
-                    type="button"
-                  >
-                    {account.is_active ? "Excluir conta" : "Reativar conta"}
-                  </button>
-                </div>
-              </article>
-            ))}
+          <div className="table-shell table-shell--compact">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th className="text-[10px] uppercase tracking-widest px-4 py-3">Conta</th>
+                  <th className="text-[10px] uppercase tracking-widest px-4 py-3">Tipo</th>
+                  <th className="text-[10px] uppercase tracking-widest px-4 py-3">Status</th>
+                  <th className="text-[10px] uppercase tracking-widest px-4 py-3">Saldo atual</th>
+                  <th className="text-[10px] uppercase tracking-widest px-4 py-3">Saldo inicial</th>
+                  <th className="text-[10px] uppercase tracking-widest px-4 py-3">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAndSortedAccounts.map((account) => (
+                  <tr key={account.account_id} className="text-sm">
+                    <td className="px-4 py-3">
+                      <div className="space-y-0.5">
+                        <strong className="text-slate-900">{account.name}</strong>
+                        {!account.is_active ? (
+                          <p className="text-[10px] text-slate-400">Inativa</p>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">{formatAccountType(account.type)}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`status-badge status-badge--${account.is_active ? "active" : "voided"} text-[9px]`}
+                      >
+                        {account.is_active ? "Ativa" : "Inativa"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-bold text-slate-900">{formatCurrency(account.current_balance)}</td>
+                    <td className="px-4 py-3 text-slate-500">{formatCurrency(account.initial_balance)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-actions flex justify-end gap-2">
+                        <button
+                          className="ghost-button text-[10px] px-3 h-8"
+                          onClick={() => {
+                            setEditingAccountId(account.account_id);
+                            setEditForm({
+                              name: account.name,
+                              type: account.type as AccountPayload["type"],
+                              initialBalance: String(account.initial_balance),
+                              isActive: account.is_active,
+                            });
+                          }}
+                          type="button"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className={cn(account.is_active ? "ghost-button ghost-button--danger" : "ghost-button", "text-[10px] px-3 h-8")}
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            void handleToggleAccountActive(account);
+                          }}
+                          type="button"
+                        >
+                          {account.is_active ? "Excluir" : "Entrar"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
@@ -282,7 +297,7 @@ export function AccountsView({
               value={createForm.type}
             >
               <option value="checking">Conta corrente</option>
-              <option value="savings">Poupanca</option>
+              <option value="savings">Poupança</option>
               <option value="wallet">Carteira</option>
               <option value="investment">Investimento</option>
               <option value="other">Outra</option>
@@ -296,7 +311,7 @@ export function AccountsView({
             }
           />
           <p className="field-hint">
-            Saldo inicial opcional. Se voce ja tem dinheiro nessa conta hoje, informe aqui.
+            Saldo inicial opcional. Se você já tem dinheiro nessa conta hoje, informe aqui.
           </p>
           <button className="primary-button" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Criando..." : "Criar conta"}
@@ -337,7 +352,7 @@ export function AccountsView({
               value={editForm.type}
             >
               <option value="checking">Conta corrente</option>
-              <option value="savings">Poupanca</option>
+              <option value="savings">Poupança</option>
               <option value="wallet">Carteira</option>
               <option value="investment">Investimento</option>
               <option value="other">Outra</option>

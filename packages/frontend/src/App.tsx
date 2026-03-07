@@ -9,12 +9,6 @@ import type { AppView } from "./components/sidebar";
 import { ToastViewport, type AppToast } from "./components/toast-viewport";
 import { useAppDataOrchestrator } from "./features/app/use-app-data-orchestrator";
 import {
-  buildCategoryRule,
-  readStoredCategoryRules,
-  storeCategoryRules,
-  type CategoryRule,
-} from "./lib/category-rules";
-import {
   createCategoryOption,
   readStoredCategoryOptions,
   storeCategoryOptions,
@@ -31,7 +25,6 @@ import {
   markReimbursementReceived,
   payInvoice,
   resetApplicationData,
-  upsertCategoryBudget,
   updateAccount,
   updateCard,
   updateTransaction,
@@ -58,11 +51,7 @@ import {
   monthFirstDay,
   monthLastDay,
 } from "./lib/date-filters";
-import {
-  UI_DENSITY_STORAGE_KEY,
-  readStoredUiDensity,
-  type UiDensity,
-} from "./lib/ui-density";
+import type { UiDensity } from "./lib/ui-density";
 
 const QuickAddComposer = lazy(async () => {
   const module = await import("./components/quick-add-composer");
@@ -126,19 +115,19 @@ const VIEW_META: Record<
   }
 > = {
   dashboard: {
-    title: "Vis\u00E3o geral",
-    description: "Resumo mensal e pontos de atencao.",
+    title: "Visão geral",
+    description: "Resumo mensal e pontos de atenção.",
   },
   reports: {
-    title: "An\u00E1lises & relat\u00F3rios",
-    description: "Tendencias, variacoes e compromissos futuros.",
+    title: "Planejamento",
+    description: "Orçamento, compromissos e relatórios prontos do mês.",
   },
   investments: {
-    title: "Patrim\u00F4nio & investimentos",
-    description: "Composicao patrimonial, aportes e rendimento.",
+    title: "Patrimônio & investimentos",
+    description: "Composição patrimonial, aportes e rendimento.",
   },
   transactions: {
-    title: "Hist\u00F3rico unificado",
+    title: "Histórico",
     description: "Filtro, ajuste e linha do tempo financeira.",
   },
   accounts: {
@@ -146,12 +135,12 @@ const VIEW_META: Record<
     description: "Saldos e estrutura da carteira.",
   },
   cards: {
-    title: "Cart\u00F5es",
+    title: "Cartões",
     description: "Faturas, ciclos e compras.",
   },
   settings: {
-    title: "Configura\u00E7\u00F5es",
-    description: "Ferramentas e prefer\u00EAncias.",
+    title: "Configurações",
+    description: "Ferramentas e preferências.",
   },
 };
 
@@ -159,16 +148,13 @@ const TOAST_DURATION_MS = {
   success: 3200,
   error: 5200,
 } as const;
+const DEFAULT_UI_DENSITY: UiDensity = "compact";
 
 export function App() {
   const [activeView, setActiveView] = useState<AppView>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
-  const [uiDensity, setUiDensity] = useState<UiDensity>(() => readStoredUiDensity());
   const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>(() =>
     readStoredCategoryOptions(),
-  );
-  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>(() =>
-    readStoredCategoryRules(),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
@@ -217,20 +203,8 @@ export function App() {
   }, [activeView]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(UI_DENSITY_STORAGE_KEY, uiDensity);
-  }, [uiDensity]);
-
-  useEffect(() => {
     storeCategoryOptions(categoryOptions);
   }, [categoryOptions]);
-
-  useEffect(() => {
-    storeCategoryRules(categoryRules);
-  }, [categoryRules]);
 
   useEffect(() => {
     if (toast === null) {
@@ -323,7 +297,7 @@ export function App() {
   async function handleTransactionSubmit(payload: CashTransactionPayload): Promise<void> {
     const wasSuccessful = await runMutation(
       () => createCashTransaction(payload),
-      "Transa\u00e7\u00e3o registrada com sucesso.",
+      "Transação registrada com sucesso.",
     );
 
     if (!wasSuccessful) {
@@ -333,13 +307,13 @@ export function App() {
 
   async function handleTransferSubmit(payload: TransferPayload): Promise<void> {
     if (payload.fromAccountId === payload.toAccountId) {
-      showToast("error", "Selecione contas diferentes para a transfer\u00eancia.");
+      showToast("error", "Selecione contas diferentes para a transferência.");
       throw new Error("Selecione contas diferentes para a transferencia.");
     }
 
     const wasSuccessful = await runMutation(
       () => createTransfer(payload),
-      "Transfer\u00eancia registrada com sucesso.",
+      "Transferência registrada com sucesso.",
     );
 
     if (!wasSuccessful) {
@@ -389,7 +363,7 @@ export function App() {
           initialBalanceInCents: account.initial_balance,
           isActive,
         }),
-      isActive ? "Conta reativada com sucesso." : "Conta removida da operacao ativa.",
+      isActive ? "Conta reativada com sucesso." : "Conta removida da operação ativa.",
     );
 
     if (!wasSuccessful) {
@@ -400,7 +374,7 @@ export function App() {
   async function handleCreateCard(payload: CardPayload): Promise<void> {
     const wasSuccessful = await runMutation(
       () => createCard(payload),
-      "Cartao criado com sucesso.",
+      "Cartão criado com sucesso.",
     );
 
     if (!wasSuccessful) {
@@ -411,7 +385,7 @@ export function App() {
   async function handleUpdateCard(cardId: string, payload: CardUpdatePayload): Promise<void> {
     const wasSuccessful = await runMutation(
       () => updateCard(cardId, payload),
-      "Cartao atualizado com sucesso.",
+      "Cartão atualizado com sucesso.",
     );
 
     if (!wasSuccessful) {
@@ -430,7 +404,7 @@ export function App() {
           paymentAccountId: card.payment_account_id,
           isActive,
         }),
-      isActive ? "Cartao reativado com sucesso." : "Cartao removido da operacao ativa.",
+      isActive ? "Cartão reativado com sucesso." : "Cartão removido da operação ativa.",
     );
 
     if (!wasSuccessful) {
@@ -441,7 +415,7 @@ export function App() {
   async function handleCreateCardPurchase(payload: CardPurchasePayload): Promise<void> {
     const wasSuccessful = await runMutation(
       () => createCardPurchase(payload),
-      "Compra no cartao registrada com sucesso.",
+      "Compra no cartão registrada com sucesso.",
     );
 
     if (!wasSuccessful) {
@@ -474,14 +448,14 @@ export function App() {
   ): Promise<void> {
     await runMutation(
       () => updateTransaction(transactionId, payload),
-      "Transacao atualizada com sucesso.",
+      "Transação atualizada com sucesso.",
     );
   }
 
   async function handleVoidTransaction(transactionId: string): Promise<void> {
     await runMutation(
       () => voidTransaction(transactionId),
-      "Transacao estornada com sucesso.",
+      "Transação estornada com sucesso.",
     );
   }
 
@@ -495,26 +469,6 @@ export function App() {
         }),
       "Reembolso confirmado com sucesso.",
     );
-  }
-
-  async function handleUpsertCategoryBudget(
-    month: string,
-    categoryId: string,
-    limitInCents: number,
-  ): Promise<void> {
-    const wasSuccessful = await runMutation(
-      () =>
-        upsertCategoryBudget({
-          categoryId,
-          month,
-          limitInCents,
-        }),
-      "Orcamento mensal salvo com sucesso.",
-    );
-
-    if (!wasSuccessful) {
-      throw new Error("Nao foi possivel salvar o orcamento.");
-    }
   }
 
   async function handleCreateInvestmentMovement(
@@ -557,7 +511,7 @@ export function App() {
 
     const wasSuccessful = await runMutation(
       () => resetApplicationData(),
-      "Aplicacao zerada com sucesso.",
+      "Aplicação zerada com sucesso.",
     );
 
     if (wasSuccessful) {
@@ -567,7 +521,7 @@ export function App() {
 
   async function handleExportBackup(): Promise<void> {
     if (typeof URL.createObjectURL !== "function") {
-      showToast("error", "Nao foi possivel exportar backup neste ambiente.");
+      showToast("error", "Não foi possível exportar backup neste ambiente.");
       return;
     }
 
@@ -588,7 +542,7 @@ export function App() {
       URL.revokeObjectURL(objectUrl);
       showToast("success", "Backup exportado com sucesso.");
     } catch {
-      showToast("error", "Nao foi possivel exportar um backup completo.");
+      showToast("error", "Não foi possível exportar um backup completo.");
     }
   }
 
@@ -613,31 +567,6 @@ export function App() {
 
   function handleRemoveCategory(categoryId: string): void {
     setCategoryOptions(categoryOptions.filter((option) => option.value !== categoryId));
-    setCategoryRules(categoryRules.filter((rule) => rule.categoryId !== categoryId));
-  }
-
-  function handleUpsertCategoryRule(pattern: string, categoryId: string): boolean {
-    const nextRule = buildCategoryRule(pattern, categoryId);
-    if (nextRule === null) {
-      return false;
-    }
-
-    const existing = categoryRules.find((rule) => rule.pattern === nextRule.pattern);
-    if (existing) {
-      setCategoryRules(
-        categoryRules.map((rule) =>
-          rule.id === existing.id ? { ...rule, categoryId: nextRule.categoryId } : rule,
-        ),
-      );
-      return true;
-    }
-
-    setCategoryRules([...categoryRules, nextRule]);
-    return true;
-  }
-
-  function handleRemoveCategoryRule(ruleId: string): void {
-    setCategoryRules(categoryRules.filter((rule) => rule.id !== ruleId));
   }
 
   const activeMeta = VIEW_META[activeView];
@@ -649,7 +578,7 @@ export function App() {
       onOpenCommandPalette={openCommandPalette}
       onOpenQuickAdd={() => openQuickAdd()}
       title={activeMeta.title}
-      uiDensity={uiDensity}
+      uiDensity={DEFAULT_UI_DENSITY}
     >
       <Suspense fallback={<ViewFallback activeView={activeView} />}>
         {activeView === "dashboard" ? (
@@ -668,20 +597,20 @@ export function App() {
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={() => openQuickAdd()}
             transactions={transactions}
-            uiDensity={uiDensity}
+            uiDensity={DEFAULT_UI_DENSITY}
           />
         ) : null}
 
         {activeView === "reports" ? (
           <ReportsView
             accounts={accounts}
+            categories={categoryOptions}
             filters={transactionFilters}
-            isSubmitting={isSubmitting}
             loading={isDataLoading}
             onApplyFilters={handleApplyReportFilters}
             onOpenLedgerFiltered={openLedgerWithFilters}
             summary={reportSummary}
-            uiDensity={uiDensity}
+            uiDensity={DEFAULT_UI_DENSITY}
           />
         ) : null}
 
@@ -703,24 +632,21 @@ export function App() {
             }}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={(preset) => openQuickAdd(preset)}
-            uiDensity={uiDensity}
+            uiDensity={DEFAULT_UI_DENSITY}
           />
         ) : null}
 
         {activeView === "transactions" ? (
           <TransactionsView
             accounts={accounts}
-            categoryRules={categoryRules}
             cards={cards}
             filters={transactionFilters}
             isSubmitting={isSubmitting}
             onApplyFilters={handleApplyTransactionFilters}
-            onDensityChange={setUiDensity}
-            onUpsertCategoryRule={handleUpsertCategoryRule}
             onUpdateTransaction={handleUpdateTransaction}
             onVoidTransaction={handleVoidTransaction}
             transactions={transactions}
-            uiDensity={uiDensity}
+            uiDensity={DEFAULT_UI_DENSITY}
           />
         ) : null}
 
@@ -743,22 +669,20 @@ export function App() {
             isSubmitting={isSubmitting}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={(preset, options) => openQuickAdd(preset, options)}
+            onOpenSettings={() => setActiveView("settings")}
             onCreateCard={handleCreateCard}
             onCreateCardPurchase={handleCreateCardPurchase}
             onSetCardActive={handleSetCardActive}
             onUpdateCard={handleUpdateCard}
-            uiDensity={uiDensity}
+            uiDensity={DEFAULT_UI_DENSITY}
           />
         ) : null}
 
         {activeView === "settings" ? (
           <SettingsView
             accountsCount={accounts.length}
-            budgetMonth={dashboard?.month ?? selectedMonth}
             cardsCount={cards.length}
             categories={categoryOptions}
-            categoryRules={categoryRules}
-            categoryBudgets={dashboard?.category_budgets ?? []}
             isSubmitting={isSubmitting}
             onCreateCategory={handleCreateCategory}
             onOpenAccounts={() => setActiveView("accounts")}
@@ -767,12 +691,7 @@ export function App() {
               void handleExportBackup();
             }}
             onRemoveCategory={handleRemoveCategory}
-            onRemoveCategoryRule={handleRemoveCategoryRule}
-            onUiDensityChange={setUiDensity}
-            onUpsertCategoryBudget={handleUpsertCategoryBudget}
-            onUpsertCategoryRule={handleUpsertCategoryRule}
             onResetApplicationData={handleResetAllData}
-            uiDensity={uiDensity}
           />
         ) : null}
       </Suspense>
@@ -833,7 +752,9 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
     return (
       <div className="space-y-8" aria-hidden="true">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+            Carregando informações...
+          </p>
           <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
           <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
         </div>
@@ -871,8 +792,6 @@ function getErrorMessage(error: unknown): string {
 
   return "Nao foi possivel concluir a operacao.";
 }
-
-
 
 
 

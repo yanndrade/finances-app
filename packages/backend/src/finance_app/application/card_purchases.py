@@ -45,6 +45,12 @@ class CardPurchaseProjector(Protocol):
         *,
         invoice_id: str,
     ) -> list[dict[str, str | int | None]]: ...
+    def list_card_installments(
+        self,
+        *,
+        card_id: str | None = None,
+        reference_month_from: str | None = None,
+    ) -> list[dict[str, str | int | None]]: ...
 
 
 class CardReader(Protocol):
@@ -140,6 +146,18 @@ class CardPurchaseService:
         if self._find_invoice(invoice_id) is None:
             raise InvoiceNotFoundError(f"Invoice '{invoice_id}' was not found.")
         return self._projector.list_invoice_items(invoice_id=invoice_id)
+
+    def list_card_installments(
+        self,
+        *,
+        card_id: str | None = None,
+        reference_month_from: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        self._sync_projections()
+        return self._projector.list_card_installments(
+            card_id=card_id,
+            reference_month_from=reference_month_from,
+        )
 
     def _validate_payload(
         self,

@@ -34,37 +34,37 @@ type SidebarProps = {
 export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
   {
     id: "dashboard",
-    label: "Visao geral",
-    shortLabel: "Inicio",
-    description: "Visao mensal do caixa",
+    label: "Visão geral",
+    shortLabel: "Início",
+    description: "Visão mensal do caixa",
     icon: Home,
   },
   {
     id: "transactions",
-    label: "Historico unificado",
-    shortLabel: "Historico",
-    description: "Linha do tempo completa do dinheiro",
+    label: "Histórico",
+    shortLabel: "Histórico",
+    description: "Histórico central e operação do mês",
     icon: ReceiptText,
   },
   {
     id: "cards",
-    label: "Cartoes",
-    shortLabel: "Cartoes",
+    label: "Cartões",
+    shortLabel: "Cartões",
     description: "Faturas, limite e ciclo de pagamento",
     icon: CreditCard,
   },
   {
     id: "reports",
-    label: "Analises & relatorios",
-    shortLabel: "Analises",
-    description: "Tendencias, cashflow e compromissos",
+    label: "Planejamento",
+    shortLabel: "Planejamento",
+    description: "Orçamento, relatórios e projeção",
     icon: BarChart3,
   },
   {
     id: "investments",
-    label: "Patrimonio & investimentos",
-    shortLabel: "Patrimonio",
-    description: "Composicao, evolucao e movimentos",
+    label: "Patrimônio & investimentos",
+    shortLabel: "Patrimônio",
+    description: "Composição, evolução e movimentos",
     icon: LineChart,
   },
   {
@@ -86,11 +86,11 @@ export function isMobileEssentialView(view: AppView): boolean {
 
 export function Sidebar({ activeView, onNavigate }: SidebarProps) {
   return (
-    <nav aria-label="Main navigation" className="sidebar">
+    <nav aria-label="Navegação principal" className="sidebar">
       <div className="brand-block">
-        <p className="eyebrow">Finances</p>
+        <p className="eyebrow">Finanças</p>
         <strong className="brand-title">Controle pessoal</strong>
-        <p className="sidebar-copy">Desktop focado em caixa, contas e movimentacoes.</p>
+        <p className="sidebar-copy">Desktop focado em caixa, contas e movimentações.</p>
       </div>
       <ul className="nav-list">
         {DESKTOP_NAV_ITEMS.map((item) => {
@@ -125,10 +125,10 @@ export function Sidebar({ activeView, onNavigate }: SidebarProps) {
         >
           <span className="nav-item__headline">
             <Settings2 aria-hidden="true" className="nav-item__icon" />
-            <span className="nav-item__label">Configuracoes</span>
+            <span className="nav-item__label">Configurações</span>
           </span>
           <span aria-hidden="true" className="nav-item__description">
-            Regras, preferencias e backup
+            Regras, preferências e backup
           </span>
         </button>
       </div>

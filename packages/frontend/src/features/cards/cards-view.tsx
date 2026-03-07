@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { addMonths, format, parseISO, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -50,13 +50,17 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import {
   type AccountSummary,
+  type CardInstallmentSummary,
   type CardPayload,
+  type CardPurchaseSummary,
   type CardPurchasePayload,
   type CardSummary,
   type CardUpdatePayload,
   type InvoiceItemSummary,
   type InvoiceSummary,
   type TransactionFilters,
+  fetchCardInstallments,
+  fetchCardPurchases,
 } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import type { UiDensity } from "../../lib/ui-density";
@@ -72,6 +76,7 @@ type CardsViewProps = {
   cards: CardSummary[];
   invoices: InvoiceSummary[];
   isSubmitting: boolean;
+  onOpenSettings: () => void;
   onOpenQuickAdd: (preset: QuickAddPreset, options?: QuickAddOpenOptions) => void;
   onOpenLedgerFiltered: (
     filters: Partial<TransactionFilters>,
@@ -104,6 +109,7 @@ export function CardsView({
   cards,
   invoices,
   isSubmitting,
+  onOpenSettings,
   onOpenQuickAdd,
   onOpenLedgerFiltered,
   onCreateCard,
@@ -123,6 +129,12 @@ export function CardsView({
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState<CardFormState>(() => createEmptyCardForm());
   const [editForm, setEditForm] = useState<CardEditFormState | null>(null);
+  const [selectedCycleInvoiceId, setSelectedCycleInvoiceId] = useState<string | null>(null);
+  const [purchaseStatusFilter, setPurchaseStatusFilter] = useState<"all" | "open" | "partial" | "paid">("all");
+  const [cardPurchases, setCardPurchases] = useState<CardPurchaseSummary[]>([]);
+  const [futureInstallments, setFutureInstallments] = useState<CardInstallmentSummary[]>([]);
+  const [purchasesLoadError, setPurchasesLoadError] = useState<string | null>(null);
+  const [installmentsLoadError, setInstallmentsLoadError] = useState<string | null>(null);
   const {
     invoiceItems,
     isLoadingItems,
@@ -168,10 +180,100 @@ export function CardsView({
   );
   const upcomingDueDate = openInvoices.map((invoice) => invoice.due_date).sort()[0] ?? null;
   const totalLimit = activeCards.reduce((sum, card) => sum + card.limit, 0);
+  const totalFutureInstallments = activeCards.reduce(
+    (sum, card) => sum + (card.future_installment_total ?? 0),
+    0,
+  );
   const cardsWithOpenInvoices = new Set(openInvoices.map((invoice) => invoice.card_id)).size;
-  const committedLimit = totalOpenAmount;
+  const committedLimit = totalOpenAmount + totalFutureInstallments;
   const availableLimit = Math.max(totalLimit - committedLimit, 0);
   const limitUsage = totalLimit > 0 ? Math.min((committedLimit / totalLimit) * 100, 100) : 0;
+  const selectedCycleInvoice =
+    visibleInvoices.find((invoice) => invoice.invoice_id === selectedCycleInvoiceId) ?? currentInvoice;
+  const invoiceStatusById = new Map(visibleInvoices.map((invoice) => [invoice.invoice_id, invoice.status]));
+  const visiblePurchases = cardPurchases.filter((purchase) => {
+    if (isAggregateView) {
+      if (purchase.reference_month !== referenceMonth) {
+        return false;
+      }
+      if (purchaseStatusFilter === "all") {
+        return true;
+      }
+      return invoiceStatusById.get(purchase.invoice_id) === purchaseStatusFilter;
+    }
+
+    if (purchase.invoice_id !== selectedCycleInvoice?.invoice_id) {
+      return false;
+    }
+    if (purchaseStatusFilter === "all") {
+      return true;
+    }
+    return invoiceStatusById.get(purchase.invoice_id) === purchaseStatusFilter;
+  });
+  const visibleFutureInstallments = futureInstallments.filter(
+    (installment) => installment.reference_month > referenceMonth,
+  );
+
+  useEffect(() => {
+    setSelectedCycleInvoiceId(currentInvoice?.invoice_id ?? null);
+  }, [currentInvoice?.invoice_id, selectedScope, referenceMonth]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPurchases() {
+      try {
+        setPurchasesLoadError(null);
+        const purchases = await fetchCardPurchases(isAggregateView ? undefined : selectedScope);
+        if (!cancelled) {
+          setCardPurchases(purchases);
+        }
+      } catch {
+        if (!cancelled) {
+          setCardPurchases([]);
+          setPurchasesLoadError("Não foi possível carregar as compras do cartão.");
+        }
+      }
+    }
+
+    void loadPurchases();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAggregateView, selectedScope]);
+
+  useEffect(() => {
+    if (isAggregateView) {
+      setFutureInstallments([]);
+      setInstallmentsLoadError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadInstallments() {
+      try {
+        setInstallmentsLoadError(null);
+        const installments = await fetchCardInstallments({
+          cardId: selectedScope,
+          fromMonth: referenceMonth,
+        });
+        if (!cancelled) {
+          setFutureInstallments(installments);
+        }
+      } catch {
+        if (!cancelled) {
+          setFutureInstallments([]);
+          setInstallmentsLoadError("Não foi possível carregar as parcelas futuras.");
+        }
+      }
+    }
+
+    void loadInstallments();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAggregateView, referenceMonth, selectedScope]);
 
   async function loadInvoiceItems(invoiceId: string) {
     setSelectedInvoiceId(invoiceId);
@@ -243,7 +345,7 @@ export function CardsView({
     if (
       !nextIsActive &&
       !globalThis.confirm(
-        "Excluir este cartao da operacao ativa? Faturas e historico serao preservados.",
+        "Excluir este cartão da operação ativa? Faturas e histórico serão preservados.",
       )
     ) {
       return;
@@ -291,7 +393,7 @@ export function CardsView({
             </Button>
             <div className="min-w-[10rem] text-center">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
-                Referencia
+                Referência
               </p>
               <p className="text-xl font-black capitalize text-slate-800">
                 {format(referenceDate, "MMMM yyyy", { locale: ptBR })}
@@ -317,7 +419,7 @@ export function CardsView({
                 value={selectedScope}
                 onChange={(event) => setSelectedScope(event.target.value)}
               >
-                <option value={ALL_CARDS_SCOPE}>Todos os cartoes</option>
+                <option value={ALL_CARDS_SCOPE}>Todos os cartões</option>
                 {activeCards.map((card) => (
                   <option key={card.card_id} value={card.card_id}>
                     {card.name}
@@ -336,33 +438,35 @@ export function CardsView({
               Nova compra
             </Button>
             <Button className="h-12 rounded-2xl font-black px-6" type="button" onClick={openCreateDialog}>
-              Novo cartao
+              Novo cartão
             </Button>
           </div>
         </div>
       </div>
 
       <Tabs defaultValue="summary" className="w-full">
-        <TabsList className={cn("grid h-auto w-full grid-cols-1 gap-1.5 rounded-[1.5rem] bg-[rgba(214,226,239,0.46)] p-1.5 sm:grid-cols-3 md:w-auto", uiDensity === "dense" ? "mb-5" : "mb-8")}>
-          <TabsTrigger value="summary" className="rounded-2xl px-6 py-3 data-[state=active]:bg-white data-[state=active]:shadow-sm font-black text-xs uppercase tracking-widest">
-            Resumo
-          </TabsTrigger>
-          <TabsTrigger value="purchases" className="rounded-2xl px-6 py-3 data-[state=active]:bg-white data-[state=active]:shadow-sm font-black text-xs uppercase tracking-widest">
-            Compras
-          </TabsTrigger>
-          <TabsTrigger value="settings" className="rounded-2xl px-6 py-3 data-[state=active]:bg-white data-[state=active]:shadow-sm font-black text-xs uppercase tracking-widest">
-            Ajustes
-          </TabsTrigger>
-        </TabsList>
+        <div className={cn("flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between", uiDensity === "dense" ? "mb-5" : "mb-8")}>
+          <TabsList className="bg-slate-200/50 p-1.5 h-14 rounded-[1.75rem] backdrop-blur-sm">
+            <TabsTrigger className="px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all data-[state=active]:bg-white data-[state=active]:shadow-[0_8px_20px_-12px_rgba(0,0,0,0.3)] data-[state=active]:text-slate-900 text-slate-500 hover:text-slate-700" value="summary">
+              Faturas
+            </TabsTrigger>
+            <TabsTrigger className="px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all data-[state=active]:bg-white data-[state=active]:shadow-[0_8px_20px_-12px_rgba(0,0,0,0.3)] data-[state=active]:text-slate-900 text-slate-500 hover:text-slate-700" value="purchases">
+              Compras
+            </TabsTrigger>
+            <TabsTrigger className="px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all data-[state=active]:bg-white data-[state=active]:shadow-[0_8px_20px_-12px_rgba(0,0,0,0.3)] data-[state=active]:text-slate-900 text-slate-500 hover:text-slate-700" value="settings">
+              Carteira
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="summary" className="space-y-6 outline-none focus:ring-0">
           {isAggregateView ? (
             <div className="space-y-6">
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-                <SummaryStat label="Todos os cartoes" value="Faturas abertas" />
+                <SummaryStat label="Todos os cartões" value="Faturas abertas" />
                 <SummaryStat label="Em aberto" value={formatCurrency(totalOpenAmount)} />
-                <SummaryStat label="Pago no periodo" value={formatCurrency(totalPaidAmount)} />
-                <SummaryStat label="Proximo vencimento" value={upcomingDueDate ?? "--"} />
+                <SummaryStat label="Pago no período" value={formatCurrency(totalPaidAmount)} />
+                <SummaryStat label="Próximo vencimento" value={upcomingDueDate ?? "--"} />
               </div>
 
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
@@ -370,12 +474,12 @@ export function CardsView({
                   <CardHeader className="pb-4">
                     <CardTitle className="text-2xl font-black text-slate-900">Faturas abertas</CardTitle>
                     <CardDescription className="font-bold text-slate-400">
-                      Panorama do periodo por cartao. Clique para detalhar um ciclo.
+                      Panorama do período por cartão. Clique para detalhar um ciclo.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {visibleInvoices.length === 0 ? (
-                      <EmptySurface message="Nenhuma fatura encontrada para o periodo selecionado." />
+                      <EmptySurface message="Nenhuma fatura encontrada para o período selecionado." />
                     ) : (
                       visibleInvoices.map((invoice) => (
                         <button
@@ -407,27 +511,69 @@ export function CardsView({
                   </CardContent>
                 </Card>
 
-                <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" ? "rounded-[1.75rem]" : "rounded-[2.5rem]")}>
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-xl font-black text-slate-900">Carteira</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <MiniMetric label="Cartoes ativos" value={String(activeCards.length)} />
-                    <MiniMetric label="Limite total" value={formatCurrency(totalLimit)} />
-                    <MiniMetric label="Limite comprometido" value={formatCurrency(committedLimit)} />
-                    <MiniMetric label="Limite disponivel" value={formatCurrency(availableLimit)} />
-                    <MiniMetric label="Com faturas abertas" value={String(cardsWithOpenInvoices)} />
-                    <div className="space-y-3 rounded-[1.75rem] bg-slate-50 p-4">
-                      <div className="flex items-end justify-between gap-3">
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
-                          Uso do limite
-                        </span>
-                        <span className="text-sm font-black text-slate-900">{Math.round(limitUsage)}%</span>
-                      </div>
-                      <Progress value={limitUsage} className="h-3 rounded-full bg-slate-100" />
+              <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" ? "rounded-[1.75rem]" : "rounded-[2.5rem]")}>
+                <CardHeader className="pb-4 border-b border-slate-50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg font-black text-slate-900">Saúde dos Cartões</CardTitle>
+                      <CardDescription className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Visão consolidada
+                      </CardDescription>
                     </div>
-                  </CardContent>
-                </Card>
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="Operação ativa" />
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-8">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Total em Aberto</p>
+                    <p className="text-3xl font-black text-slate-900 tracking-tight">
+                      {formatCurrency(totalLimit - availableLimit)}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Ativos</p>
+                      <p className="text-lg font-black text-slate-800">{activeCards.length}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Pendentes</p>
+                      <p className="text-lg font-black text-slate-800">{cardsWithOpenInvoices}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-end justify-between">
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Uso do Limite</p>
+                      <p className="text-xs font-black text-slate-600">
+                        {Math.round(limitUsage)}%
+                      </p>
+                    </div>
+                    <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={cn(
+                          "h-full transition-all duration-500",
+                          limitUsage > 80 ? "bg-rose-500" : "bg-slate-900",
+                        )}
+                        style={{ width: `${limitUsage}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                      <span>{formatCurrency(committedLimit)}</span>
+                      <span>Total {formatCurrency(totalLimit)}</span>
+                    </div>
+                  </div>
+
+                  <Button 
+                    variant="outline" 
+                    className="w-full h-11 rounded-xl border-slate-200 font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900" 
+                    type="button" 
+                    onClick={onOpenSettings}
+                  >
+                    Gerenciar Carteira
+                  </Button>
+                </CardContent>
+              </Card>
               </div>
             </div>
           ) : (
@@ -440,6 +586,8 @@ export function CardsView({
               onSelectInvoice={jumpToInvoice}
               selectedCard={selectedCard}
               selectedScope={selectedScope}
+              futureInstallments={visibleFutureInstallments}
+              installmentsLoadError={installmentsLoadError}
               uiDensity={uiDensity}
             />
           )}
@@ -449,55 +597,89 @@ export function CardsView({
           <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" ? "rounded-[1.75rem]" : "rounded-[3rem]")}>
             <CardHeader className="pb-4">
               <CardTitle className="text-2xl font-black text-slate-900">
-                {isAggregateView ? "Compras consolidadas" : "Historico de compras"}
+                {isAggregateView ? "Compras consolidadas" : "Histórico de compras"}
               </CardTitle>
               <CardDescription className="font-bold text-slate-400">
                 {isAggregateView
-                  ? "Resumo do periodo por fatura. Selecione um cartao para ver itens detalhados."
-                  : "Abra os itens de uma fatura no resumo para listar os lancamentos aqui."}
+                  ? "Compras do ciclo atual em todos os cartões ativos."
+                  : "Compras do cartão por ciclo, com parcelas e vencimentos."}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {isAggregateView ? (
+              <div className="px-8 pb-4 space-y-4">
+                <label className="flex max-w-sm flex-col gap-2 text-sm font-medium text-slate-700">
+                  Status da fatura
+                  <select
+                    aria-label="Status da fatura"
+                    className="h-11 rounded-xl border border-slate-200 px-3"
+                    onChange={(event) =>
+                      setPurchaseStatusFilter(event.target.value as "all" | "open" | "partial" | "paid")
+                    }
+                    value={purchaseStatusFilter}
+                  >
+                    <option value="all">Todos</option>
+                    <option value="open">Aberta</option>
+                    <option value="partial">Parcial</option>
+                    <option value="paid">Paga</option>
+                  </select>
+                </label>
+              {!isAggregateView && visibleInvoices.length > 0 ? (
+                <div>
+                  <label className="flex max-w-sm flex-col gap-2 text-sm font-medium text-slate-700">
+                    Ciclo da fatura
+                    <select
+                      aria-label="Ciclo da fatura"
+                      className="h-11 rounded-xl border border-slate-200 px-3"
+                      onChange={(event) => setSelectedCycleInvoiceId(event.target.value)}
+                      value={selectedCycleInvoice?.invoice_id ?? ""}
+                    >
+                      {visibleInvoices.map((invoice) => (
+                        <option key={invoice.invoice_id} value={invoice.invoice_id}>
+                          {invoice.reference_month} • vence {invoice.due_date}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+              </div>
+              {purchasesLoadError ? (
+                <div className="px-8 py-10 text-center">
+                  <p className="text-sm font-bold text-rose-600">{purchasesLoadError}</p>
+                </div>
+              ) : (
                 <div className={`table-shell table-shell--${uiDensity}`}>
                   <Table>
                     <TableHeader className="bg-slate-50/50">
                       <TableRow className="border-slate-50 hover:bg-transparent">
-                        <TableHead className="px-8 h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Cartao</TableHead>
-                        <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Referencia</TableHead>
-                        <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Lancamentos</TableHead>
+                        <TableHead className="px-8 h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Cartão</TableHead>
+                        <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Compra</TableHead>
+                        <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Ciclo</TableHead>
+                        <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Parcelas</TableHead>
                         <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400 text-right pr-8">Valor</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {visibleInvoices.length === 0 ? (
+                      {visiblePurchases.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={4} className="h-40 text-center text-slate-300 font-bold">
-                            Nada para mostrar neste periodo.
+                          <TableCell colSpan={5} className="h-40 text-center text-slate-300 font-bold">
+                            Nada para mostrar neste período.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        visibleInvoices.map((invoice) => (
-                          <TableRow key={invoice.invoice_id} className="border-slate-50">
-                            <TableCell className="px-8 py-5 font-black text-slate-800">{cardName(invoice.card_id, cards)}</TableCell>
-                            <TableCell className="font-bold text-slate-500">{invoice.reference_month}</TableCell>
-                            <TableCell className="font-bold text-slate-500">{invoice.purchase_count}</TableCell>
-                            <TableCell className="pr-8 text-right font-black text-slate-900">{formatCurrency(invoice.total_amount)}</TableCell>
+                        visiblePurchases.map((purchase) => (
+                          <TableRow key={purchase.purchase_id} className="border-slate-50">
+                            <TableCell className="px-8 py-5 font-black text-slate-800">{cardName(purchase.card_id, cards)}</TableCell>
+                            <TableCell className="font-bold text-slate-900">{purchase.description || "Compra no cartao"}</TableCell>
+                            <TableCell className="font-bold text-slate-500">{purchase.reference_month}</TableCell>
+                            <TableCell className="font-bold text-slate-500">{purchase.installments_count}x</TableCell>
+                            <TableCell className="pr-8 text-right font-black text-slate-900">{formatCurrency(purchase.amount)}</TableCell>
                           </TableRow>
                         ))
                       )}
                     </TableBody>
                   </Table>
                 </div>
-              ) : (
-                <>
-                  {invoiceItemsError ? (
-                    <div className="px-8 py-10 text-center">
-                      <p className="text-sm font-bold text-rose-600">{invoiceItemsError}</p>
-                    </div>
-                  ) : null}
-                  <InvoiceItemsTable invoiceItems={invoiceItems} />
-                </>
               )}
             </CardContent>
           </Card>
@@ -509,23 +691,23 @@ export function CardsView({
               <CardHeader className="pb-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <CardTitle className="text-2xl font-black text-slate-900">Ajustes da carteira</CardTitle>
+                    <CardTitle className="text-2xl font-black text-slate-900">Carteira de cartões</CardTitle>
                     <CardDescription className="font-bold text-slate-400">
-                      Cadastre, revise, remova da operacao ativa ou reative cartoes sem sair desta tela.
+                      Visão estrutural compacta da carteira. Ajustes administrativos ficam em Configurações.
                     </CardDescription>
                   </div>
-                  <Button type="button" onClick={openCreateDialog}>Novo cartao</Button>
+                  <Button variant="outline" type="button" onClick={onOpenSettings}>Abrir configurações</Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-                  <SummaryStat label="Cartoes ativos" value={String(activeCards.length)} />
+                  <SummaryStat label="Cartões ativos" value={String(activeCards.length)} />
                   <SummaryStat label="Limite total" value={formatCurrency(totalLimit)} />
-                  <SummaryStat label="Contas padrao" value={String(uniquePaymentAccounts(activeCards))} />
+                  <SummaryStat label="Contas padrão" value={String(uniquePaymentAccounts(activeCards))} />
                 </div>
                 <div className="space-y-3">
                   {cards.length === 0 ? (
-                    <EmptySurface message="Nenhum cartao cadastrado. Use Novo cartao para configurar a carteira." />
+                    <EmptySurface message="Nenhum cartão cadastrado. Use Novo cartão para configurar a carteira." />
                   ) : (
                     cards.map((card) => (
                       <div
@@ -541,7 +723,7 @@ export function CardsView({
                             Limite {formatCurrency(card.limit)} | Fecha dia {card.closing_day} | Vence dia {card.due_day}
                           </p>
                           <p className="text-sm text-slate-500">
-                            Conta padrao: {accountName(card.payment_account_id, accounts)}
+                            Conta padrão: {accountName(card.payment_account_id, accounts)}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-3">
@@ -556,13 +738,16 @@ export function CardsView({
                               void handleToggleCardActive(card);
                             }}
                           >
-                            {card.is_active ? "Excluir cartao" : "Reativar cartao"}
+                            {card.is_active ? "Excluir cartão" : "Reativar cartão"}
                           </Button>
                         </div>
                       </div>
                     ))
                   )}
                 </div>
+                <p className="field-hint">
+                  Cadastros pesados continuam acessíveis aqui por compatibilidade, mas o fluxo recomendado passa por Configurações.
+                </p>
               </CardContent>
             </Card>
           ) : (
@@ -570,14 +755,14 @@ export function CardsView({
               <CardHeader className="pb-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <CardTitle className="text-2xl font-black text-slate-900">Ajustes do cartao</CardTitle>
+                    <CardTitle className="text-2xl font-black text-slate-900">Ajustes do cartão</CardTitle>
                     <CardDescription className="font-bold text-slate-400">
-                      Ciclo, limite, conta padrao opcional e status do cartao selecionado.
+                      Ciclo, limite, conta padrão opcional e status do cartão selecionado.
                     </CardDescription>
                   </div>
                   {selectedCard ? (
                     <div className="flex flex-wrap gap-3">
-                      <Button type="button" onClick={() => openEditDialog(selectedCard)}>Editar cartao</Button>
+                      <Button type="button" onClick={() => openEditDialog(selectedCard)}>Editar cartão</Button>
                       <Button
                         type="button"
                         variant="destructive"
@@ -585,7 +770,7 @@ export function CardsView({
                           void handleToggleCardActive(selectedCard);
                         }}
                       >
-                        Excluir cartao
+                        Excluir cartão
                       </Button>
                     </div>
                   ) : null}
@@ -597,7 +782,7 @@ export function CardsView({
                 <MiniMetric label="Fechamento" value={String(selectedCard?.closing_day ?? "--")} />
                 <MiniMetric label="Vencimento" value={String(selectedCard?.due_day ?? "--")} />
                 <MiniMetric
-                  label="Conta padrao"
+                  label="Conta padrão"
                   value={selectedCard ? accountName(selectedCard.payment_account_id, accounts) : "--"}
                 />
                 <MiniMetric label="Status" value={selectedCard?.is_active ? "Ativo" : "Inativo"} />
@@ -621,7 +806,7 @@ export function CardsView({
             <DrawerHeader className="mb-6 px-0">
               <DrawerTitle className="text-4xl font-black tracking-tighter">Resumo detalhado</DrawerTitle>
               <DrawerDescription className="text-base font-bold text-slate-400">
-                Analise completa dos lancamentos deste periodo.
+                Análise completa dos lançamentos deste período.
               </DrawerDescription>
             </DrawerHeader>
 
@@ -693,7 +878,7 @@ export function CardsView({
           <DialogHeader>
             <DialogTitle>Editar cartao</DialogTitle>
             <DialogDescription>
-              Atualize limite, ciclo, conta padrao opcional ou desative o cartao sem perder historico.
+              Atualize limite, ciclo, conta padrão opcional ou desative o cartão sem perder histórico.
             </DialogDescription>
           </DialogHeader>
           {editForm ? (
@@ -754,6 +939,8 @@ function CardScopeDetail({
   onSelectInvoice,
   selectedCard,
   selectedScope,
+  futureInstallments,
+  installmentsLoadError,
   uiDensity,
 }: {
   currentInvoice: InvoiceSummary | null;
@@ -767,21 +954,24 @@ function CardScopeDetail({
   onSelectInvoice: (invoice: InvoiceSummary) => void;
   selectedCard: CardSummary | null;
   selectedScope: string;
+  futureInstallments: CardInstallmentSummary[];
+  installmentsLoadError: string | null;
   uiDensity: UiDensity;
 }) {
   if (selectedCard === null) {
-    return <EmptySurface message="Selecione um cartao para ver os detalhes do ciclo." />;
+    return <EmptySurface message="Selecione um cartão para ver os detalhes do ciclo." />;
   }
 
   if (currentInvoice === null) {
-    return <EmptySurface message="Nao ha faturas para o cartao neste periodo." />;
+    return <EmptySurface message="Não há faturas para o cartão neste período." />;
   }
 
   const progress =
     currentInvoice.total_amount > 0
       ? (currentInvoice.paid_amount / currentInvoice.total_amount) * 100
       : 0;
-  const committedLimit = currentInvoice.remaining_amount;
+  const futureInstallmentsTotal = selectedCard.future_installment_total ?? 0;
+  const committedLimit = currentInvoice.remaining_amount + futureInstallmentsTotal;
   const availableLimit = Math.max(selectedCard.limit - committedLimit, 0);
   const limitUsage =
     selectedCard.limit > 0 ? Math.min((committedLimit / selectedCard.limit) * 100, 100) : 0;
@@ -796,22 +986,22 @@ function CardScopeDetail({
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
       <Card className={cn("finance-card finance-card--strong lg:col-span-8 overflow-hidden", uiDensity === "dense" ? "rounded-[1.75rem]" : "rounded-[3rem]")}>
-        <CardHeader className="flex flex-col gap-6 space-y-0 p-6 pb-4 sm:flex-row sm:items-start sm:justify-between md:p-10 md:pb-6">
-          <div className="min-w-0 space-y-2">
-            <CardTitle className="text-2xl font-black tracking-tight text-slate-900 md:text-3xl">
+        <CardHeader className="flex flex-col gap-6 space-y-0 p-5 pb-3 sm:flex-row sm:items-start sm:justify-between md:p-8 md:pb-4">
+          <div className="min-w-0 space-y-1.5">
+            <CardTitle className="text-xl font-black tracking-tight text-slate-900 md:text-2xl">
               Fatura de {currentInvoice.reference_month}
             </CardTitle>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {renderStatusBadge(currentInvoice.status)}
               <Badge
                 variant="outline"
-                className="rounded-lg border-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-300"
+                className="rounded-lg border-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-400"
               >
                 {selectedCard.name}
               </Badge>
             </div>
           </div>
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button
               variant="ghost"
               size="sm"
@@ -825,7 +1015,7 @@ function CardScopeDetail({
                   currentInvoice.reference_month,
                 )
               }
-              className="h-11 rounded-2xl px-6 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/5"
+              className="h-10 rounded-xl px-4 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/5"
               type="button"
             >
               Ver gastos
@@ -834,7 +1024,7 @@ function CardScopeDetail({
               variant="ghost"
               size="sm"
               onClick={() => void onLoadInvoiceItems(currentInvoice.invoice_id)}
-              className="h-11 rounded-2xl px-6 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/5"
+              className="h-10 rounded-xl px-4 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/5"
               type="button"
             >
               Ver itens
@@ -848,40 +1038,47 @@ function CardScopeDetail({
               disabled={
                 currentInvoice.remaining_amount <= 0 || Number.isNaN(currentInvoice.remaining_amount)
               }
-              className="h-11 rounded-2xl bg-primary px-8 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
+              className="h-10 rounded-xl bg-primary px-6 text-[9px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
               type="button"
             >
               Pagar agora
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-8 p-6 pt-2 md:space-y-10 md:p-10 md:pt-4">
-          <div className="grid grid-cols-2 gap-6 md:gap-8 lg:grid-cols-4">
-            <MiniMetric label="Valor total" value={formatCurrency(currentInvoice.total_amount)} />
+        <CardContent className="space-y-6 p-5 pt-1 md:space-y-8 md:p-8 md:pt-2">
+          <div className="grid grid-cols-2 gap-4 md:gap-6 lg:grid-cols-4">
+            <button
+              className="space-y-0.5 text-left"
+              onClick={() => void onLoadInvoiceItems(currentInvoice.invoice_id)}
+              type="button"
+            >
+              <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">Valor total</p>
+              <p className="text-base font-black text-slate-900">{formatCurrency(currentInvoice.total_amount)}</p>
+            </button>
             <MiniMetric label="Pago" value={formatCurrency(currentInvoice.paid_amount)} />
             <MiniMetric label="Em aberto" value={formatCurrency(currentInvoice.remaining_amount)} />
-            <MiniMetric label="Lancamentos" value={String(currentInvoice.purchase_count)} />
+            <MiniMetric label="Lançamentos" value={String(currentInvoice.purchase_count)} />
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="flex items-end justify-between">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+              <span className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">
                 Progresso de pagamento
               </span>
-              <span className="text-sm font-black text-slate-900">{Math.round(progress)}%</span>
+              <span className="text-xs font-black text-slate-900">{Math.round(progress)}%</span>
             </div>
-            <Progress value={progress} className="h-4 rounded-full bg-slate-50" />
+            <Progress value={progress} className="h-3 rounded-full bg-slate-50" />
           </div>
 
-          <div className="grid grid-cols-1 gap-6 border-t border-slate-50 pt-10 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 border-t border-slate-50 pt-8 md:grid-cols-2">
             <MetricPanel
-              icon={<Calendar className="h-6 w-6" />}
+              icon={<Calendar className="h-5 w-5" />}
               label="Fechamento"
               tone="neutral"
               value={currentInvoice.closing_date}
             />
             <MetricPanel
-              icon={<Clock className="h-6 w-6" />}
+              icon={<Clock className="h-5 w-5" />}
               label="Vencimento"
               tone="danger"
               value={currentInvoice.due_date}
@@ -893,7 +1090,7 @@ function CardScopeDetail({
       <div className="space-y-8 lg:col-span-4">
         <Card className={cn("finance-card finance-card--strong overflow-hidden", uiDensity === "dense" ? "rounded-[1.75rem]" : "rounded-[2.5rem]")}>
           <CardHeader className="pb-4">
-            <CardTitle className="text-xl font-black text-slate-900">Limite do cartao</CardTitle>
+            <CardTitle className="text-xl font-black text-slate-900">Limite do cartão</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             <MiniMetric label="Limite total" value={formatCurrency(selectedCard.limit)} />
@@ -901,13 +1098,40 @@ function CardScopeDetail({
             <MiniMetric label="Limite disponivel" value={formatCurrency(availableLimit)} />
             <div className="space-y-3 rounded-[1.75rem] bg-slate-50 p-4">
               <div className="flex items-end justify-between gap-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+                <span className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">
                   Uso do limite
                 </span>
                 <span className="text-sm font-black text-slate-900">{Math.round(limitUsage)}%</span>
               </div>
               <Progress value={limitUsage} className="h-3 rounded-full bg-slate-100" />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className={cn("finance-card finance-card--strong overflow-hidden", uiDensity === "dense" ? "rounded-[1.75rem]" : "rounded-[2.5rem]")}>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl font-black text-slate-900">Parcelas futuras comprometidas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {installmentsLoadError ? (
+              <p className="text-sm font-bold text-rose-600">{installmentsLoadError}</p>
+            ) : futureInstallments.length === 0 ? (
+              <p className="text-sm text-slate-400">Nenhuma parcela futura comprometida a partir deste ciclo.</p>
+            ) : (
+              futureInstallments.slice(0, 5).map((installment) => (
+                <div key={installment.installment_id} className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {installment.description || "Compra parcelada"}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {installment.installment_number}/{installment.installments_count} • {installment.reference_month}
+                  </p>
+                  <p className="mt-1 text-sm font-black text-slate-900">
+                    {formatCurrency(installment.amount)}
+                  </p>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -921,7 +1145,7 @@ function CardScopeDetail({
                 <AlertCircle className="h-6 w-6 text-primary" />
               </div>
               <p className="text-sm font-bold leading-relaxed text-primary/70">
-                A fatura fecha no dia {selectedCard.closing_day}. Lancamentos antes do fechamento entram neste ciclo.
+                A fatura fecha no dia {selectedCard.closing_day}. Lançamentos antes do fechamento entram neste ciclo.
               </p>
             </div>
           </CardContent>
@@ -978,7 +1202,7 @@ function CardFormFields<TForm extends CardFormState>({
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 md:col-span-2">
-        Nome do cartao
+        Nome do cartão
         <input
           className="h-11 rounded-xl border border-slate-200 px-3"
           value={form.name}
@@ -1003,7 +1227,7 @@ function CardFormFields<TForm extends CardFormState>({
         />
       </label>
       <div className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-        <span>Conta padrao para pagamento</span>
+        <span>Conta padrão para pagamento</span>
         <Select
           value={form.paymentAccountId || NO_PAYMENT_ACCOUNT_VALUE}
           onValueChange={(value) =>
@@ -1020,7 +1244,7 @@ function CardFormFields<TForm extends CardFormState>({
             <SelectValue placeholder="Sem conta padrao" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NO_PAYMENT_ACCOUNT_VALUE}>Sem conta padrao</SelectItem>
+            <SelectItem value={NO_PAYMENT_ACCOUNT_VALUE}>Sem conta padrão</SelectItem>
             {accounts.map((account) => (
               <SelectItem key={account.account_id} value={account.account_id}>
                 {account.name}
@@ -1075,7 +1299,7 @@ function InvoiceItemsTable({ invoiceItems }: { invoiceItems: InvoiceItemSummary[
       <TableHeader className="bg-slate-50/50">
         <TableRow className="border-slate-50 hover:bg-transparent">
           <TableHead className="px-8 h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Data</TableHead>
-          <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Descricao</TableHead>
+          <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Descrição</TableHead>
           <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">Parcela</TableHead>
           <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400 text-right pr-8">Valor</TableHead>
         </TableRow>
@@ -1093,7 +1317,7 @@ function InvoiceItemsTable({ invoiceItems }: { invoiceItems: InvoiceItemSummary[
               <TableCell className="px-8 py-5 font-bold text-slate-500">
                 {format(parseISO(item.purchase_date), "dd MMM")}
               </TableCell>
-              <TableCell className="font-black text-slate-900">{item.description || "Compra no cartao"}</TableCell>
+              <TableCell className="font-black text-slate-900">{item.description || "Compra no cartão"}</TableCell>
               <TableCell className="font-bold text-slate-500">
                 {item.installment_number}/{item.installments_count}
               </TableCell>
@@ -1110,10 +1334,10 @@ function InvoiceItemsTable({ invoiceItems }: { invoiceItems: InvoiceItemSummary[
 
 function SummaryStat({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="rounded-[2.2rem] border-none bg-white shadow-sm">
-      <CardContent className="space-y-2 p-6">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">{label}</p>
-        <p className="text-2xl font-black text-slate-900">{value}</p>
+    <Card className="rounded-[1.6rem] border-none bg-white shadow-sm">
+      <CardContent className="space-y-1 p-5">
+        <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">{label}</p>
+        <p className="text-xl font-black text-slate-900">{value}</p>
       </CardContent>
     </Card>
   );
@@ -1121,9 +1345,9 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="space-y-1">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">{label}</p>
-      <p className="text-lg font-black text-slate-900">{value}</p>
+    <div className="space-y-0.5">
+      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">{label}</p>
+      <p className="text-base font-black text-slate-900">{value}</p>
     </div>
   );
 }
@@ -1146,11 +1370,11 @@ function MetricPanel({
   const valueClasses = tone === "danger" ? "text-rose-700" : "text-slate-700";
 
   return (
-    <div className={`flex items-center gap-5 rounded-[2rem] p-6 ${toneClasses}`}>
-      <div className="rounded-2xl bg-white p-3 shadow-sm">{icon}</div>
+    <div className={`flex items-center gap-4 rounded-[1.5rem] p-4 ${toneClasses}`}>
+      <div className="rounded-xl bg-white p-2.5 shadow-sm">{icon}</div>
       <div>
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">{label}</p>
-        <p className={`text-lg font-black ${valueClasses}`}>{value}</p>
+        <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">{label}</p>
+        <p className={`text-base font-black ${valueClasses}`}>{value}</p>
       </div>
     </div>
   );
@@ -1210,3 +1434,4 @@ function createEmptyCardForm(): CardFormState {
 function formatCurrencyInput(value: string) {
   return formatCurrency(parseInt(value || "0", 10));
 }
+

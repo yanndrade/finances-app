@@ -44,7 +44,7 @@ const ACTION_COMMANDS: Array<{
 }> = [
   {
     label: "Registrar despesa",
-    hint: "Lancador rapido",
+    hint: "Lançador rápido",
     value: "registrar despesa gasto",
     preset: "expense",
   },
@@ -56,14 +56,14 @@ const ACTION_COMMANDS: Array<{
   },
   {
     label: "Transferir entre contas",
-    hint: "Transferencia interna",
-    value: "transferir entre contas transferencia interna",
+    hint: "Transferência interna",
+    value: "transferir entre contas transferência interna",
     preset: "transfer_internal",
   },
   {
     label: "Pagar fatura",
-    hint: "Transferencia para cartao",
-    value: "pagar fatura cartao",
+    hint: "Transferência para cartão",
+    value: "pagar fatura cartão",
     preset: "transfer_invoice_payment",
   },
   {
@@ -88,37 +88,37 @@ const NAVIGATION_COMMANDS: Array<{
   icon: typeof Home;
 }> = [
   {
-    label: "Visao geral",
-    hint: "Dashboard acionavel",
-    value: "visao geral dashboard",
+    label: "Visão geral",
+    hint: "Dashboard acionável",
+    value: "visão geral dashboard",
     view: "dashboard",
     icon: Home,
   },
   {
-    label: "Historico unificado",
-    hint: "Ledger principal",
-    value: "historico unificado ledger movimentos",
+    label: "Histórico",
+    hint: "Histórico principal",
+    value: "histórico ledger movimentos",
     view: "transactions",
     icon: Landmark,
   },
   {
-    label: "Cartoes",
-    hint: "Gestao de faturas",
-    value: "cartoes credito",
+    label: "Cartões",
+    hint: "Gestão de faturas",
+    value: "cartões crédito",
     view: "cards",
     icon: CreditCard,
   },
   {
-    label: "Patrimonio & investimentos",
-    hint: "Aportes e evolucao",
-    value: "patrimonio investimentos",
+    label: "Patrimônio & investimentos",
+    hint: "Aportes e evolução",
+    value: "patrimônio investimentos",
     view: "investments",
     icon: TrendingUp,
   },
   {
-    label: "Analises & relatorios",
-    hint: "Categorias e tendencia",
-    value: "analises relatorios insights",
+    label: "Planejamento",
+    hint: "Orçamento e projeção",
+    value: "planejamento orçamento relatórios insights",
     view: "reports",
     icon: BarChart3,
   },
@@ -130,9 +130,9 @@ const NAVIGATION_COMMANDS: Array<{
     icon: Wallet,
   },
   {
-    label: "Configuracoes",
-    hint: "Preferencias do sistema",
-    value: "configuracoes sistema",
+    label: "Configurações",
+    hint: "Preferências do sistema",
+    value: "configurações sistema",
     view: "settings",
     icon: Settings2,
   },
@@ -151,20 +151,20 @@ export function CommandPalette({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="overflow-hidden p-0 sm:max-w-[560px]">
+      <DialogContent className="overflow-hidden p-0 sm:max-w-[680px]">
         <DialogHeader className="px-4 pt-4 pb-1">
-          <DialogTitle>Command palette</DialogTitle>
+          <DialogTitle>Paleta de comandos</DialogTitle>
           <DialogDescription>
-            Digite uma acao para navegar ou lancar rapidamente.
+            Digite para navegar ou disparar ações rápidas.
           </DialogDescription>
         </DialogHeader>
 
         <Command className="rounded-none">
-          <CommandInput placeholder="Ex.: Registrar despesa, Pagar fatura, Abrir Historico..." />
+          <CommandInput placeholder="Ex.: Registrar despesa, Pagar fatura, Abrir Histórico..." />
           <CommandList>
-            <CommandEmpty>Nenhuma acao encontrada.</CommandEmpty>
+            <CommandEmpty>Nenhuma ação encontrada.</CommandEmpty>
 
-            <CommandGroup heading="Lancamentos">
+            <CommandGroup heading="Lançamentos">
               {ACTION_COMMANDS.map((command) => (
                 <CommandItem
                   key={command.value}
@@ -184,7 +184,7 @@ export function CommandPalette({
 
             <CommandSeparator />
 
-            <CommandGroup heading="Navegacao">
+            <CommandGroup heading="Navegação">
               {NAVIGATION_COMMANDS.map((command) => {
                 const Icon = command.icon;
                 return (
@@ -210,3 +210,4 @@ export function CommandPalette({
     </Dialog>
   );
 }
+

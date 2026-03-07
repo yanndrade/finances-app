@@ -89,6 +89,15 @@ describe("Movements panel", () => {
                     total_expense: 2000,
                     net_flow: 3000,
                     current_balance: 15500,
+                    fixed_expenses_total: 0,
+                    installment_total: 0,
+                    invoices_due_total: 0,
+                    free_to_spend: 3000,
+                    pending_reimbursements_total: 0,
+                    pending_reimbursements: [],
+                    monthly_commitments: [],
+                    monthly_fixed_expenses: [],
+                    monthly_installments: [],
                     recent_transactions: [],
                     spending_by_category: [],
                     previous_month: { total_income: 0, total_expense: 0, net_flow: 0 },
@@ -101,6 +110,15 @@ describe("Movements panel", () => {
                     total_expense: 3000,
                     net_flow: 2000,
                     current_balance: 14500,
+                    fixed_expenses_total: 0,
+                    installment_total: 0,
+                    invoices_due_total: 0,
+                    free_to_spend: 2000,
+                    pending_reimbursements_total: 0,
+                    pending_reimbursements: [],
+                    monthly_commitments: [],
+                    monthly_fixed_expenses: [],
+                    monthly_installments: [],
                     recent_transactions: [
                       {
                         transaction_id: "tx-new",
@@ -234,7 +252,7 @@ describe("Movements panel", () => {
 
     render(<App />);
 
-    await screen.findAllByText("R$ 155,00", undefined, { timeout: 5_000 });
+    await screen.findAllByText("R$ 50,00", undefined, { timeout: 5_000 });
     await userEvent.click(screen.getByRole("button", { name: /\+\s*lan.ar/i }));
 
     const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
@@ -243,7 +261,8 @@ describe("Movements panel", () => {
     await userEvent.selectOptions(within(dialog).getByLabelText(/^Categoria$/i), "food");
     await userEvent.click(within(dialog).getByRole("button", { name: /^lan.ar$/i }));
 
-    expect((await screen.findAllByText("R$ 145,00")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("R$ 50,00")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("R$ 20,00")).length).toBeGreaterThan(0);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/expenses"),
       expect.objectContaining({ method: "POST" }),
