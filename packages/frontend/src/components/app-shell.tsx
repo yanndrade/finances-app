@@ -129,12 +129,12 @@ export function AppShell({
       <div className="app-workspace">
         <main className="app-main">
           <header className="page-header">
-            <div>
+            <div className="page-header__intro">
               <p className="eyebrow">Versão 0.6</p>
               <h1 className="page-title">{title}</h1>
               <p className="page-copy">{description}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 lg:gap-3">
+            <div className="page-header__controls flex flex-wrap items-center gap-2 lg:gap-3">
               {actions ? <div className="page-actions">{actions}</div> : null}
               {month && onMonthChange && activeView === "dashboard" ? (
                 <div className="flex-shrink-0">

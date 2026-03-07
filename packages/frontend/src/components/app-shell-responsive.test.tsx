@@ -84,7 +84,7 @@ describe("AppShell responsive behavior", () => {
       contextPanel: <div>Contexto desktop</div>,
     });
 
-    expect(screen.getByRole("navigation", { name: /main navigation/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /navega(ç|c)(ã|a)o principal/i })).toBeInTheDocument();
     expect(screen.getByText("Contexto desktop")).toBeInTheDocument();
     expect(
       screen.queryByRole("navigation", { name: /navegacao mobile/i }),
@@ -98,13 +98,13 @@ describe("AppShell responsive behavior", () => {
 
     const mobileNav = screen.getByRole("navigation", { name: /navegacao mobile/i });
     expect(mobileNav).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /inicio/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /historico/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /cartoes/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /in(í|i)cio/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hist(ó|o)rico/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cart(õ|o)es/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /relatorios/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^contas$/i })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /cartoes/i }));
+    await user.click(screen.getByRole("button", { name: /cart(õ|o)es/i }));
     expect(onNavigate).toHaveBeenCalledWith("cards");
 
     await user.click(screen.getByRole("button", { name: /adicionar gasto/i }));
@@ -128,7 +128,7 @@ describe("AppShell responsive behavior", () => {
       activeView: "reports",
     });
 
-    expect(screen.getByRole("navigation", { name: /main navigation/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /navega(ç|c)(ã|a)o principal/i })).toBeInTheDocument();
 
     act(() => {
       controller.setMatches(true);

@@ -694,11 +694,6 @@ export function App() {
             }}
             onRemoveCategory={handleRemoveCategory}
             onResetApplicationData={handleResetAllData}
-            uiDensity={uiDensity}
-            onUiDensityChange={(nextDensity) => {
-              setUiDensity(nextDensity);
-              window.localStorage.setItem(UI_DENSITY_STORAGE_KEY, nextDensity);
-            }}
           />
         ) : null}
       </Suspense>

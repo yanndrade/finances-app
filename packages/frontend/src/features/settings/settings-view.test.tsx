@@ -25,16 +25,14 @@ describe("SettingsView", () => {
         onRemoveCategory={vi.fn()}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={onExportBackup}
-        uiDensity="comfort"
-        onUiDensityChange={vi.fn()}
       />,
     );
 
-    expect(screen.getByText(/contas, cartoes e estrutura base/i)).toBeInTheDocument();
+    expect(screen.getByText(/contas, cart(õ|o)es e estrutura base/i)).toBeInTheDocument();
     expect(screen.getByText(/^categorias$/i)).toBeInTheDocument();
     expect(screen.queryByText(/^regras de auto-categorizacao$/i)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /gerenciar cartoes/i }));
+    await userEvent.click(screen.getByRole("button", { name: /gerenciar cart(õ|o)es/i }));
     await userEvent.click(screen.getByRole("button", { name: /exportar backup json/i }));
 
     expect(onOpenCards).toHaveBeenCalledTimes(1);
@@ -57,8 +55,6 @@ describe("SettingsView", () => {
         onRemoveCategory={onRemoveCategory}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={vi.fn()}
-        uiDensity="comfort"
-        onUiDensityChange={vi.fn()}
       />,
     );
 
@@ -83,8 +79,6 @@ describe("SettingsView", () => {
         onRemoveCategory={vi.fn()}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={vi.fn()}
-        uiDensity="comfort"
-        onUiDensityChange={vi.fn()}
       />,
     );
 
@@ -104,8 +98,6 @@ describe("SettingsView", () => {
         onRemoveCategory={vi.fn()}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={vi.fn()}
-        uiDensity="comfort"
-        onUiDensityChange={vi.fn()}
       />,
     );
 

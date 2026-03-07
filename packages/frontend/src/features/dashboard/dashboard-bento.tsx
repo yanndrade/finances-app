@@ -243,7 +243,7 @@ export function DashboardBento({
         />
       </div>
 
-      <Tabs defaultValue="radar" className="w-full">
+      <Tabs defaultValue="radar" className="dashboard-tabs w-full">
         <div
           className={cn(
             "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
@@ -274,7 +274,7 @@ export function DashboardBento({
 
         <TabsContent value="commitments" className="space-y-6 outline-none focus:ring-0">
       <div className={cn("dashboard-commitment-rail grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3", uiDensity === "dense" ? "gap-3" : uiDensity === "compact" ? "gap-4" : "gap-5")}>
-        <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" && "rounded-[1.6rem]")}>
+        <Card className={cn("finance-card finance-card--strong dashboard-commitment-card", uiDensity === "dense" && "rounded-[1.6rem]")}>
           <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
             <div className="flex items-center gap-3">
               <div className="rounded-xl bg-indigo-100 p-2">
@@ -328,7 +328,7 @@ export function DashboardBento({
           </CardContent>
         </Card>
 
-        <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" && "rounded-[1.6rem]")}>
+        <Card className={cn("finance-card finance-card--strong dashboard-commitment-card", uiDensity === "dense" && "rounded-[1.6rem]")}>
           <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
             <div className="flex items-center gap-3">
               <div className="rounded-xl bg-slate-100 p-2">
@@ -371,7 +371,7 @@ export function DashboardBento({
           </CardContent>
         </Card>
 
-        <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" && "rounded-[1.6rem]")}>
+        <Card className={cn("finance-card finance-card--strong dashboard-commitment-card", uiDensity === "dense" && "rounded-[1.6rem]")}>
           <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
             <div className="flex items-center gap-3">
               <div className="rounded-xl bg-amber-50 p-2">
@@ -422,7 +422,7 @@ export function DashboardBento({
       </div>
 
       <div className={cn("dashboard-support-grid grid grid-cols-1 lg:grid-cols-2", uiDensity === "dense" ? "gap-3" : uiDensity === "compact" ? "gap-4" : "gap-5")}>
-        <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" && "rounded-[1.6rem]")}>
+        <Card className={cn("finance-card finance-card--strong dashboard-support-card", uiDensity === "dense" && "rounded-[1.6rem]")}>
           <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -466,7 +466,7 @@ export function DashboardBento({
           </CardContent>
         </Card>
 
-        <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" && "rounded-[1.6rem]")}>
+        <Card className={cn("finance-card finance-card--strong dashboard-support-card", uiDensity === "dense" && "rounded-[1.6rem]")}>
           <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -1097,4 +1097,3 @@ function KpiCard({
     </Card>
   );
 }
-
