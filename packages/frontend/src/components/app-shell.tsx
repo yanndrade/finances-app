@@ -17,6 +17,8 @@ type AppShellProps = {
   onOpenCommandPalette?: () => void;
   children: ReactNode;
   uiDensity: UiDensity;
+  month?: string;
+  onMonthChange?: (month: string) => void;
 };
 
 const MOBILE_QUERY = "(max-width: 900px)";
@@ -32,6 +34,8 @@ export function AppShell({
   onOpenCommandPalette,
   children,
   uiDensity,
+  month,
+  onMonthChange,
 }: AppShellProps) {
   const isMobile = useMediaQuery(MOBILE_QUERY);
 
@@ -130,23 +134,40 @@ export function AppShell({
               <h1 className="page-title">{title}</h1>
               <p className="page-copy">{description}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 lg:gap-3">
               {actions ? <div className="page-actions">{actions}</div> : null}
+              {month && onMonthChange && activeView === "dashboard" ? (
+                <div className="flex-shrink-0">
+                  <input
+                    onChange={(event) => onMonthChange(event.target.value)}
+                    type="month"
+                    className={cn(
+                      "bg-muted/70 border border-input rounded-xl font-semibold text-slate-700 cursor-pointer outline-none transition-colors hover:bg-muted focus:ring-1 focus:ring-ring focus:bg-background",
+                      uiDensity === "dense"
+                        ? "px-2.5 py-2 text-xs"
+                        : uiDensity === "compact"
+                          ? "px-3 py-2 text-sm"
+                          : "px-3 py-2.5 text-sm",
+                    )}
+                    value={month}
+                  />
+                </div>
+              ) : null}
               {onOpenQuickAdd ? (
                 <Button
                   onClick={onOpenQuickAdd}
                   className={cn(
-                    "bg-primary text-primary-foreground hover:bg-primary/90 font-black tracking-[-0.01em] shadow-md rounded-2xl",
+                    "bg-primary text-primary-foreground hover:bg-primary/90 font-black tracking-[-0.01em] shadow-md rounded-2xl whitespace-nowrap flex-shrink-0",
                     uiDensity === "dense"
-                      ? "px-4 py-5"
+                      ? "px-3 py-4 text-sm"
                       : uiDensity === "compact"
-                        ? "px-5 py-5"
-                        : "px-5 py-6",
+                        ? "px-4 py-4 text-sm"
+                        : "px-4 py-5 text-base",
                   )}
                 >
-                  <Plus className="mr-2 h-5 w-5" />
-                  + Lançar
-                  <kbd className="ml-3 hidden sm:inline-flex h-5 items-center gap-1 rounded border border-primary-foreground/20 bg-primary-foreground/10 px-1.5 font-mono text-[10px] font-medium opacity-100">
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Lançar
+                  <kbd className="ml-2 hidden sm:inline-flex h-4 items-center gap-0.5 rounded border border-primary-foreground/20 bg-primary-foreground/10 px-1 font-mono text-[9px] font-medium opacity-100">
                     <span>Ctrl</span>
                     <span>N</span>
                   </kbd>

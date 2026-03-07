@@ -51,7 +51,7 @@ import {
   monthFirstDay,
   monthLastDay,
 } from "./lib/date-filters";
-import type { UiDensity } from "./lib/ui-density";
+import { readStoredUiDensity, UI_DENSITY_STORAGE_KEY, type UiDensity } from "./lib/ui-density";
 
 const QuickAddComposer = lazy(async () => {
   const module = await import("./components/quick-add-composer");
@@ -148,7 +148,6 @@ const TOAST_DURATION_MS = {
   success: 3200,
   error: 5200,
 } as const;
-const DEFAULT_UI_DENSITY: UiDensity = "compact";
 
 export function App() {
   const [activeView, setActiveView] = useState<AppView>("dashboard");
@@ -162,6 +161,7 @@ export function App() {
   const [quickAddPreset, setQuickAddPreset] = useState<QuickAddPreset | undefined>(undefined);
   const [quickAddInvoiceId, setQuickAddInvoiceId] = useState<string | undefined>(undefined);
   const [toast, setToast] = useState<AppToast>(null);
+  const [uiDensity, setUiDensity] = useState<UiDensity>(() => readStoredUiDensity());
 
   const {
     dashboard,
@@ -578,7 +578,9 @@ export function App() {
       onOpenCommandPalette={openCommandPalette}
       onOpenQuickAdd={() => openQuickAdd()}
       title={activeMeta.title}
-      uiDensity={DEFAULT_UI_DENSITY}
+      uiDensity={uiDensity}
+      month={selectedMonth}
+      onMonthChange={setSelectedMonth}
     >
       <Suspense fallback={<ViewFallback activeView={activeView} />}>
         {activeView === "dashboard" ? (
@@ -597,7 +599,7 @@ export function App() {
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={() => openQuickAdd()}
             transactions={transactions}
-            uiDensity={DEFAULT_UI_DENSITY}
+            uiDensity={uiDensity}
           />
         ) : null}
 
@@ -610,7 +612,7 @@ export function App() {
             onApplyFilters={handleApplyReportFilters}
             onOpenLedgerFiltered={openLedgerWithFilters}
             summary={reportSummary}
-            uiDensity={DEFAULT_UI_DENSITY}
+            uiDensity={uiDensity}
           />
         ) : null}
 
@@ -632,7 +634,7 @@ export function App() {
             }}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={(preset) => openQuickAdd(preset)}
-            uiDensity={DEFAULT_UI_DENSITY}
+            uiDensity={uiDensity}
           />
         ) : null}
 
@@ -646,7 +648,7 @@ export function App() {
             onUpdateTransaction={handleUpdateTransaction}
             onVoidTransaction={handleVoidTransaction}
             transactions={transactions}
-            uiDensity={DEFAULT_UI_DENSITY}
+            uiDensity={uiDensity}
           />
         ) : null}
 
@@ -674,7 +676,7 @@ export function App() {
             onCreateCardPurchase={handleCreateCardPurchase}
             onSetCardActive={handleSetCardActive}
             onUpdateCard={handleUpdateCard}
-            uiDensity={DEFAULT_UI_DENSITY}
+            uiDensity={uiDensity}
           />
         ) : null}
 
@@ -692,6 +694,11 @@ export function App() {
             }}
             onRemoveCategory={handleRemoveCategory}
             onResetApplicationData={handleResetAllData}
+            uiDensity={uiDensity}
+            onUiDensityChange={(nextDensity) => {
+              setUiDensity(nextDensity);
+              window.localStorage.setItem(UI_DENSITY_STORAGE_KEY, nextDensity);
+            }}
           />
         ) : null}
       </Suspense>

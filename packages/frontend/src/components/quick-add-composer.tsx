@@ -541,8 +541,8 @@ export function QuickAddComposer({
         <FieldError message={validationErrors.amount} />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2 space-y-2 md:col-span-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <div className="space-y-2">
           <Label htmlFor="quick-add-type">Tipo</Label>
           <select
             id="quick-add-type"
@@ -562,7 +562,7 @@ export function QuickAddComposer({
           </select>
         </div>
 
-        <div className="col-span-2 space-y-2 md:col-span-1">
+        <div className="space-y-2">
           <Label htmlFor="quick-add-date">Data</Label>
           <Input
             id="quick-add-date"
@@ -580,7 +580,7 @@ export function QuickAddComposer({
           <FieldError message={validationErrors.date} />
         </div>
 
-        <div className="col-span-2 space-y-2">
+        <div className="col-span-1 sm:col-span-2 space-y-2">
           <Label htmlFor="quick-add-description">Descrição</Label>
           <Input
             id="quick-add-description"
@@ -592,7 +592,7 @@ export function QuickAddComposer({
         </div>
 
         {entryType === "expense" && isAdvancedMode ? (
-          <div className="col-span-2 space-y-2 md:col-span-1">
+          <div className="space-y-2">
             <Label htmlFor="quick-add-person">Pessoa relacionada</Label>
             <Input
               id="quick-add-person"
@@ -605,7 +605,7 @@ export function QuickAddComposer({
         ) : null}
 
         {entryType === "expense" ? (
-          <div className="col-span-2 space-y-2 md:col-span-1">
+          <div className="space-y-2">
             <Label htmlFor="quick-add-payment-mode">Modo de pagamento</Label>
             <select
               id="quick-add-payment-mode"
@@ -628,7 +628,7 @@ export function QuickAddComposer({
         ) : null}
 
         {entryType === "transfer" ? (
-          <div className="col-span-2 space-y-2 md:col-span-1">
+          <div className="space-y-2">
             <Label htmlFor="quick-add-transfer-mode">Modo da transferência</Label>
             <select
               id="quick-add-transfer-mode"
@@ -648,7 +648,7 @@ export function QuickAddComposer({
         ) : null}
 
         {entryType === "investment" ? (
-          <div className="col-span-2 space-y-2 md:col-span-1">
+          <div className="space-y-2">
             <Label htmlFor="quick-add-investment-mode">Tipo do movimento</Label>
             <select
               id="quick-add-investment-mode"
@@ -668,7 +668,7 @@ export function QuickAddComposer({
         ) : null}
 
         {entryType === "expense" || entryType === "income" ? (
-          <div className={isCardExpense ? "col-span-2 space-y-2" : "col-span-2 space-y-2 md:col-span-1"}>
+          <div className={isCardExpense ? "col-span-1 sm:col-span-2 space-y-2" : "space-y-2"}>
             <Label htmlFor="quick-add-category">Categoria</Label>
             <select
               id="quick-add-category"
@@ -688,7 +688,7 @@ export function QuickAddComposer({
         ) : null}
 
         {entryType === "investment" && investmentMode === "contribution" && isAdvancedMode ? (
-          <div className="col-span-2 space-y-2 md:col-span-1">
+          <div className="space-y-2">
             <Label htmlFor="quick-add-dividend-amount">Dividendos (opcional)</Label>
             <Input
               id="quick-add-dividend-amount"
@@ -706,7 +706,7 @@ export function QuickAddComposer({
         ) : null}
 
         {entryType === "investment" && investmentMode === "withdrawal" && isAdvancedMode ? (
-          <div className="col-span-2 space-y-2 md:col-span-1">
+          <div className="space-y-2">
             <Label htmlFor="quick-add-invested-reduction">Redução do investido</Label>
             <Input
               id="quick-add-invested-reduction"
@@ -724,7 +724,7 @@ export function QuickAddComposer({
         ) : null}
 
         {isCardExpense ? null : (
-          <div className="col-span-2 space-y-2 md:col-span-1">
+          <div className="col-span-1 sm:col-span-2 space-y-2">
             <Label htmlFor="quick-add-account">
               {entryType === "transfer" && transferMode === "invoice_payment"
                 ? "Conta que vai pagar a fatura"
@@ -762,7 +762,7 @@ export function QuickAddComposer({
         )}
 
         {entryType === "transfer" && transferMode === "internal" ? (
-          <div className="col-span-2 space-y-2 md:col-span-1">
+          <div className="space-y-2">
             <Label htmlFor="quick-add-destination-account">Conta destino</Label>
             <select
               id="quick-add-destination-account"
@@ -792,10 +792,10 @@ export function QuickAddComposer({
 
         {entryType === "transfer" && transferMode === "invoice_payment" ? (
           <>
-            <div className="col-span-2 rounded-2xl bg-primary/5 px-4 py-3 text-sm font-medium text-primary/80">
+            <div className="col-span-1 sm:col-span-2 rounded-2xl bg-primary/5 px-4 py-3 text-sm font-medium text-primary/80">
               Quitar saldo do cartao usando uma conta existente.
             </div>
-            <div className="col-span-2 space-y-2 md:col-span-1">
+            <div className="col-span-1 sm:col-span-2 space-y-2">
               <Label htmlFor="quick-add-invoice">Fatura</Label>
               <select
                 id="quick-add-invoice"
@@ -829,7 +829,7 @@ export function QuickAddComposer({
 
         {isCardExpense ? (
           <>
-            <div className="col-span-2 space-y-2 md:col-span-1">
+            <div className="space-y-2">
               <Label htmlFor="quick-add-card">Cartão</Label>
               <select
                 id="quick-add-card"
@@ -852,7 +852,7 @@ export function QuickAddComposer({
               </select>
               <FieldError message={validationErrors.cardId} />
             </div>
-            <div className="col-span-2 space-y-2 md:col-span-1">
+            <div className="space-y-2">
               <Label htmlFor="quick-add-installments">Parcelas</Label>
               <Input
                 id="quick-add-installments"
@@ -921,7 +921,7 @@ export function QuickAddComposer({
       <Drawer open={isOpen} onOpenChange={(open) => !open && handleClose()}>
         <DrawerContent
           data-testid="quick-add-drawer"
-          className="max-h-[92vh] overflow-hidden rounded-t-[1.75rem] border bg-background"
+          className="max-h-[95vh] sm:max-h-[92vh] overflow-hidden rounded-t-[1.75rem] border bg-background"
         >
           <div className="overflow-y-auto px-2 pb-4">
             <DrawerHeader className="px-4 pb-2 pt-6">
@@ -941,7 +941,7 @@ export function QuickAddComposer({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent
         data-testid="quick-add-dialog"
-        className="max-h-[90vh] overflow-y-auto rounded-3xl border bg-background p-0 shadow-2xl sm:max-w-[720px] lg:max-w-[780px]"
+        className="max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-3xl border bg-background p-0 shadow-2xl sm:max-w-[720px] lg:max-w-[780px]"
       >
         <div className="p-6 pb-2">
           <DialogHeader>

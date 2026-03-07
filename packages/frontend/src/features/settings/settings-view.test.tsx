@@ -25,6 +25,8 @@ describe("SettingsView", () => {
         onRemoveCategory={vi.fn()}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={onExportBackup}
+        uiDensity="comfort"
+        onUiDensityChange={vi.fn()}
       />,
     );
 
@@ -55,6 +57,8 @@ describe("SettingsView", () => {
         onRemoveCategory={onRemoveCategory}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={vi.fn()}
+        uiDensity="comfort"
+        onUiDensityChange={vi.fn()}
       />,
     );
 
@@ -79,6 +83,8 @@ describe("SettingsView", () => {
         onRemoveCategory={vi.fn()}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={vi.fn()}
+        uiDensity="comfort"
+        onUiDensityChange={vi.fn()}
       />,
     );
 
@@ -98,6 +104,8 @@ describe("SettingsView", () => {
         onRemoveCategory={vi.fn()}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={vi.fn()}
+        uiDensity="comfort"
+        onUiDensityChange={vi.fn()}
       />,
     );
 

@@ -144,8 +144,8 @@ export function InvestmentsView({
     <div
       className={cn(
         "investments-workbench space-y-6",
-        uiDensity === "compact" && "space-y-5",
-        uiDensity === "dense" && "space-y-4",
+        uiDensity === "compact" && "space-y-4",
+        uiDensity === "dense" && "space-y-3",
       )}
     >
       <Card

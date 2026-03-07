@@ -13,6 +13,8 @@ type SettingsViewProps = {
   onRemoveCategory: (categoryId: string) => void;
   onExportBackup: () => void;
   onResetApplicationData: () => Promise<void>;
+  uiDensity: import("../../lib/ui-density").UiDensity;
+  onUiDensityChange: (density: import("../../lib/ui-density").UiDensity) => void;
 };
 
 const PRODUCTIVITY_SHORTCUTS = [
@@ -32,6 +34,8 @@ export function SettingsView({
   onRemoveCategory,
   onExportBackup,
   onResetApplicationData,
+  uiDensity,
+  onUiDensityChange,
 }: SettingsViewProps) {
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
   const [categoryFeedback, setCategoryFeedback] = useState<string | null>(null);
@@ -51,7 +55,46 @@ export function SettingsView({
   }
 
   return (
-    <div className="screen-stack">
+    <div className="screen-stack max-w-6xl mx-auto">
+      <section className="panel-card settings-panel" aria-label="Preferências do sistema">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Interface</p>
+            <h3 className="section-title">Preferências visuais</h3>
+            <p className="section-copy">
+              Ajuste a densidade da interface para melhor se adaptar à sua tela e preferência
+              de leitura.
+            </p>
+          </div>
+        </div>
+
+        <div className="settings-hub-list">
+          <article className="settings-hub-item">
+            <header className="settings-hub-item__header">
+              <strong>Densidade da interface</strong>
+              <span className="status-badge status-badge--active">{uiDensity === "dense" ? "Compactíssimo" : uiDensity === "compact" ? "Equilibrado" : "Espaçado"}</span>
+            </header>
+            <p>
+              O modo <strong>Denso</strong> é ideal para telas 1080p, garantindo que o máximo de
+              informação apareça sem necessidade de rolagem.
+            </p>
+            <div className="settings-action-row flex-wrap gap-2" style={{ marginTop: "0.5rem" }}>
+              {(["comfort", "compact", "dense"] as const).map((density) => (
+                <button
+                  key={density}
+                  className={uiDensity === density ? "primary-button" : "secondary-button"}
+                  onClick={() => onUiDensityChange(density)}
+                  type="button"
+                  style={{ textTransform: "capitalize" }}
+                >
+                  {density === "comfort" ? "Confortável" : density === "compact" ? "Compacto" : "Denso"}
+                </button>
+              ))}
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section className="panel-card settings-panel" aria-label="Configurações do sistema">
         <div className="section-heading">
           <div>
@@ -78,7 +121,7 @@ export function SettingsView({
               <span className="settings-chip">{accountsCount} conta(s)</span>
               <span className="settings-chip">{cardsCount} cartão(ões)</span>
             </div>
-            <div className="settings-action-row">
+            <div className="settings-action-row flex-wrap gap-2">
               <button className="secondary-button" onClick={onOpenAccounts} type="button">
                 Gerenciar contas
               </button>
@@ -100,8 +143,8 @@ export function SettingsView({
               Cadastre somente as categorias que você realmente usa no lançamento rápido, no
               histórico e no planejamento mensal.
             </p>
-            <form className="settings-inline-form" onSubmit={handleCreateCategorySubmit}>
-              <label className="settings-inline-form__field">
+            <form className="settings-inline-form flex flex-col sm:flex-row gap-2 sm:gap-3" onSubmit={handleCreateCategorySubmit}>
+              <label className="settings-inline-form__field flex-1 min-w-0">
                 Nova categoria
                 <input
                   aria-label="Nova categoria"
@@ -113,7 +156,7 @@ export function SettingsView({
                   value={newCategoryLabel}
                 />
               </label>
-              <button className="primary-button" type="submit">
+              <button className="primary-button whitespace-nowrap" type="submit">
                 Adicionar categoria
               </button>
             </form>
@@ -149,7 +192,7 @@ export function SettingsView({
               <span className="status-badge status-badge--active">Ativo</span>
             </header>
             <p>Exporte um backup quando quiser congelar o estado atual da base.</p>
-            <div className="settings-action-row">
+            <div className="settings-action-row flex-wrap gap-2">
               <button className="secondary-button" onClick={onExportBackup} type="button">
                 Exportar backup JSON
               </button>

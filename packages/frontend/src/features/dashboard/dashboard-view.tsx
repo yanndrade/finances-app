@@ -57,26 +57,6 @@ export function DashboardView({
         uiDensity === "dense" && "space-y-3",
       )}
     >
-      <div className="flex justify-end">
-        <div
-          className={cn(
-            "finance-toolbar-card",
-            uiDensity === "dense"
-              ? "rounded-[1.25rem] px-3 py-2"
-              : uiDensity === "compact"
-                ? "rounded-[1.5rem] px-3.5 py-2.5"
-                : "rounded-[1.75rem] px-4 py-3",
-          )}
-        >
-          <input
-            onChange={(event) => onMonthChange(event.target.value)}
-            type="month"
-            className="bg-transparent border-none focus:ring-0 font-semibold text-slate-700 cursor-pointer outline-none"
-            value={month}
-          />
-        </div>
-      </div>
-
       {loading && dashboard === null ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="h-32 bg-slate-200 animate-pulse rounded-[2rem]" />

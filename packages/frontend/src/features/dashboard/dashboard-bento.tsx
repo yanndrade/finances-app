@@ -567,8 +567,8 @@ export function DashboardBento({
             </div>
           </CardHeader>
           <CardContent className={cn("flex flex-col items-center justify-center text-center", uiDensity === "dense" ? "px-5 py-5 pt-0" : uiDensity === "compact" ? "px-5 py-6 pt-0" : "py-6")}>
-            <div className="relative mb-6 h-40 w-40">
-              <PieChart width={160} height={160}>
+            <div className={cn("relative h-40 w-40", uiDensity === "dense" ? "mb-4 h-32 w-32" : "mb-6")}>
+              <PieChart width={uiDensity === "dense" ? 128 : 160} height={uiDensity === "dense" ? 128 : 160}>
                 <Pie
                   data={[
                     { value: realizedInvestment },
@@ -725,11 +725,11 @@ export function DashboardBento({
               </div>
             </div>
 
-            <div className="grid gap-6 rounded-3xl border border-slate-100 bg-slate-50/50 p-4 xl:grid-cols-[14rem_1fr]">
+            <div className={cn("grid gap-6 rounded-3xl border border-slate-100 bg-slate-50/50 p-4 xl:grid-cols-[14rem_1fr]", uiDensity === "dense" && "gap-4 p-3")}>
               {categoryComposition.length > 0 ? (
                 <>
                   <div className="flex items-center justify-center">
-                    <PieChart width={160} height={160}>
+                    <PieChart width={uiDensity === "dense" ? 120 : 160} height={uiDensity === "dense" ? 120 : 160}>
                       <Pie
                         data={categoryComposition}
                         cx="50%"
