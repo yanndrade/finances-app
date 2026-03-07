@@ -462,14 +462,9 @@ button {
   box-shadow:
     0 18px 48px rgba(35, 24, 60, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-.hero-panel {
-  padding: 1.65rem;
-}
-
-.panel-card {
   padding: 1.45rem;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .panel-card--nested {
@@ -1179,8 +1174,14 @@ select:focus {
 }
 
 .settings-inline-form {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 1fr;
   align-items: end;
+}
+
+@media (min-width: 640px) {
+  .settings-inline-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
 }
 
 .settings-budget-form,

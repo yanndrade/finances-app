@@ -273,7 +273,7 @@ export function DashboardBento({
         </div>
 
         <TabsContent value="commitments" className="space-y-6 outline-none focus:ring-0">
-      <div className={cn("dashboard-commitment-rail grid grid-cols-1 xl:grid-cols-3", uiDensity === "dense" ? "gap-4" : "gap-6")}>
+      <div className={cn("dashboard-commitment-rail grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3", uiDensity === "dense" ? "gap-3" : uiDensity === "compact" ? "gap-4" : "gap-5")}>
         <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" && "rounded-[1.6rem]")}>
           <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
             <div className="flex items-center gap-3">
@@ -421,7 +421,7 @@ export function DashboardBento({
         </Card>
       </div>
 
-      <div className={cn("dashboard-support-grid grid grid-cols-1 xl:grid-cols-2", uiDensity === "dense" ? "gap-4" : "gap-6")}>
+      <div className={cn("dashboard-support-grid grid grid-cols-1 lg:grid-cols-2", uiDensity === "dense" ? "gap-3" : uiDensity === "compact" ? "gap-4" : "gap-5")}>
         <Card className={cn("finance-card finance-card--strong", uiDensity === "dense" && "rounded-[1.6rem]")}>
           <CardHeader className={cn(uiDensity === "dense" ? "pb-2 px-5 pt-5" : uiDensity === "compact" ? "pb-3 px-5 pt-5" : "pb-3")}>
             <div className="flex items-center justify-between gap-3">
@@ -642,9 +642,9 @@ export function DashboardBento({
                 Ver tudo <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className={cn("space-y-5", uiDensity === "dense" && "px-5 py-5 pt-0")}>
-            <div className="grid gap-6 xl:grid-cols-2">
+           </CardHeader>
+           <CardContent className={cn("space-y-5", uiDensity === "dense" && "px-5 py-5 pt-0")}>
+             <div className="grid gap-4 md:gap-6 md:grid-cols-2">
               <div className="space-y-4">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
                   Últimas saídas do mês
@@ -723,9 +723,9 @@ export function DashboardBento({
                   )}
                 </div>
               </div>
-            </div>
+             </div>
 
-            <div className={cn("grid gap-6 rounded-3xl border border-slate-100 bg-slate-50/50 p-4 xl:grid-cols-[14rem_1fr]", uiDensity === "dense" && "gap-4 p-3")}>
+             <div className={cn("grid gap-4 md:gap-6 md:grid-cols-[14rem_1fr] rounded-3xl border border-slate-100 bg-slate-50/50 p-4", uiDensity === "dense" && "gap-4 p-3")}>
               {categoryComposition.length > 0 ? (
                 <>
                   <div className="flex items-center justify-center">
