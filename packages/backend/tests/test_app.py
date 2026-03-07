@@ -1337,6 +1337,7 @@ def test_recurring_rules_generate_monthly_pendings_without_affecting_balance(tmp
         "amount": 25_00,
         "due_day": 5,
         "account_id": "acc-1",
+        "card_id": None,
         "payment_method": "PIX",
         "category_id": "rent",
         "description": "Apartment rent",
@@ -1354,6 +1355,7 @@ def test_recurring_rules_generate_monthly_pendings_without_affecting_balance(tmp
             "amount": 25_00,
             "due_date": "2026-03-05",
             "account_id": "acc-1",
+            "card_id": None,
             "payment_method": "PIX",
             "category_id": "rent",
             "description": "Apartment rent",
@@ -1410,6 +1412,7 @@ def test_confirm_pending_creates_expense_using_due_date(tmp_path) -> None:
         "amount": 25_00,
         "due_date": "2026-03-05",
         "account_id": "acc-1",
+        "card_id": None,
         "payment_method": "PIX",
         "category_id": "rent",
         "description": "Apartment rent",
@@ -1465,6 +1468,178 @@ def test_dashboard_endpoint_rejects_invalid_month_format(tmp_path) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_recurring_rules_can_be_listed_and_updated(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_recurring_rule(
+        client,
+        {
+            "id": "rule-rent",
+            "name": "Rent",
+            "amount": 25_00,
+            "due_day": 5,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+        },
+    )
+
+    list_response = client.get("/api/recurring-rules")
+    assert list_response.status_code == 200
+    assert list_response.json() == [
+        {
+            "rule_id": "rule-rent",
+            "name": "Rent",
+            "amount": 25_00,
+            "due_day": 5,
+            "account_id": "acc-1",
+            "card_id": None,
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+            "is_active": True,
+        }
+    ]
+
+    update_response = client.patch(
+        "/api/recurring-rules/rule-rent",
+        json={
+            "name": "Streaming Bundle",
+            "amount": 45_00,
+            "due_day": 8,
+            "payment_method": "CARD",
+            "account_id": None,
+            "card_id": "card-1",
+            "category_id": "streaming",
+            "description": "Apps + music",
+            "is_active": False,
+        },
+    )
+    assert update_response.status_code == 200
+    assert update_response.json() == {
+        "rule_id": "rule-rent",
+        "name": "Streaming Bundle",
+        "amount": 45_00,
+        "due_day": 8,
+        "account_id": None,
+        "card_id": "card-1",
+        "payment_method": "CARD",
+        "category_id": "streaming",
+        "description": "Apps + music",
+        "is_active": False,
+    }
+
+    active_response = client.get("/api/recurring-rules", params={"active": "true"})
+    assert active_response.status_code == 200
+    assert active_response.json() == []
+
+
+def test_confirm_pending_for_card_recurring_rule_creates_card_purchase(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_recurring_rule(
+        client,
+        {
+            "id": "rule-streaming",
+            "name": "Streaming",
+            "amount": 30_00,
+            "due_day": 9,
+            "card_id": "card-1",
+            "payment_method": "CARD",
+            "category_id": "streaming",
+            "description": "Monthly streaming",
+        },
+    )
+
+    confirm_response = client.post("/api/pendings/rule-streaming:2026-03/confirm")
+    assert confirm_response.status_code == 201
+    assert confirm_response.json() == {
+        "pending_id": "rule-streaming:2026-03",
+        "rule_id": "rule-streaming",
+        "month": "2026-03",
+        "name": "Streaming",
+        "amount": 30_00,
+        "due_date": "2026-03-09",
+        "account_id": None,
+        "card_id": "card-1",
+        "payment_method": "CARD",
+        "category_id": "streaming",
+        "description": "Monthly streaming",
+        "status": "confirmed",
+        "transaction_id": "rule-streaming:2026-03:purchase",
+    }
+
+    card_purchases_response = client.get("/api/card-purchases", params={"card": "card-1"})
+    assert card_purchases_response.status_code == 200
+    assert card_purchases_response.json() == [
+        {
+            "purchase_id": "rule-streaming:2026-03:purchase",
+            "purchase_date": "2026-03-09T00:00:00Z",
+            "amount": 30_00,
+            "category_id": "streaming",
+            "card_id": "card-1",
+            "description": "Monthly streaming",
+            "installments_count": 1,
+            "invoice_id": "card-1:2026-03",
+            "reference_month": "2026-03",
+            "closing_date": "2026-03-10",
+            "due_date": "2026-03-20",
+        }
+    ]
+
+    dashboard_response = client.get("/api/dashboard", params={"month": "2026-03"})
+    assert dashboard_response.status_code == 200
+    assert dashboard_response.json()["total_expense"] == 30_00
+    assert dashboard_response.json()["fixed_expenses_total"] == 30_00
+    assert dashboard_response.json()["installment_total"] == 0
+    assert dashboard_response.json()["monthly_fixed_expenses"] == [
+        {
+            "pending_id": "rule-streaming:2026-03",
+            "rule_id": "rule-streaming",
+            "title": "Streaming",
+            "category_id": "streaming",
+            "amount": 30_00,
+            "due_date": "2026-03-09",
+            "status": "confirmed",
+            "account_id": None,
+            "card_id": "card-1",
+            "payment_method": "CARD",
+            "transaction_id": "rule-streaming:2026-03:purchase",
+        }
+    ]
 
 
 def test_backend_allows_cors_for_local_frontend_origins(tmp_path) -> None:

@@ -3,6 +3,7 @@ import {
   CreditCard,
   Home,
   LineChart,
+  Repeat,
   ReceiptText,
   Settings2,
   Wallet2,
@@ -14,6 +15,7 @@ export type AppView =
   | "reports"
   | "investments"
   | "transactions"
+  | "fixedExpenses"
   | "accounts"
   | "cards"
   | "settings";
@@ -47,6 +49,13 @@ export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
     icon: ReceiptText,
   },
   {
+    id: "fixedExpenses",
+    label: "Gastos fixos",
+    shortLabel: "Fixos",
+    description: "Regras recorrentes e pendencias do mes",
+    icon: Repeat,
+  },
+  {
     id: "cards",
     label: "Cartões",
     shortLabel: "Cartões",
@@ -77,7 +86,10 @@ export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
 ];
 
 export const MOBILE_NAV_ITEMS: NavigationItem[] = DESKTOP_NAV_ITEMS.filter((item) =>
-  item.id === "dashboard" || item.id === "transactions" || item.id === "cards",
+  item.id === "dashboard" ||
+  item.id === "transactions" ||
+  item.id === "fixedExpenses" ||
+  item.id === "cards",
 );
 
 export function isMobileEssentialView(view: AppView): boolean {

@@ -181,7 +181,8 @@ class RecurringRuleProjectionRecord(ProjectionBase):
     name: Mapped[str] = mapped_column(String, nullable=False)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     due_day: Mapped[int] = mapped_column(Integer, nullable=False)
-    account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    account_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    card_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     payment_method: Mapped[str] = mapped_column(String, nullable=False)
     category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -197,7 +198,8 @@ class PendingProjectionRecord(ProjectionBase):
     name: Mapped[str] = mapped_column(String, nullable=False)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     due_date: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    account_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    card_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     payment_method: Mapped[str] = mapped_column(String, nullable=False)
     category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -767,11 +769,15 @@ class Projector:
                     fixed_query = fixed_query.filter(
                         PendingProjectionRecord.account_id == account_id
                     )
+                if card_id is not None:
+                    fixed_query = fixed_query.filter(
+                        PendingProjectionRecord.card_id == card_id
+                    )
                 if payment_method is not None:
                     fixed_query = fixed_query.filter(
                         PendingProjectionRecord.payment_method == payment_method
                     )
-                if person_id is not None or card_id is not None:
+                if person_id is not None:
                     fixed_query = fixed_query.filter(
                         PendingProjectionRecord.pending_id == "__none__"
                     )
@@ -857,7 +863,17 @@ class Projector:
             for row in confirmed_fixed_rows
             if row.transaction_id is not None
         }
+        fixed_card_purchase_ids = {
+            str(row.transaction_id)
+            for row in confirmed_fixed_rows
+            if row.payment_method == "CARD" and row.transaction_id is not None
+        }
         fixed_total = sum(row.amount for row in confirmed_fixed_rows)
+        installment_mix_total = sum(
+            row.amount
+            for row in period_installment_rows
+            if row.purchase_id not in fixed_card_purchase_ids
+        )
         variable_total = sum(
             row.amount
             for row in transaction_rows
@@ -941,7 +957,7 @@ class Projector:
             "expense_mix": {
                 "fixed_total": fixed_total,
                 "variable_total": variable_total,
-                "installment_total": period_installment_impact_total,
+                "installment_total": installment_mix_total,
             },
             "card_breakdown": card_breakdown,
             "expense_evolution": expense_evolution,
@@ -951,7 +967,7 @@ class Projector:
                 "pending_fixed_total": pending_fixed_total,
                 "invoice_due_total": invoice_due_total,
                 "planned_income_total": planned_income_total,
-                "installment_impact_total": period_installment_impact_total,
+                "installment_impact_total": installment_mix_total,
             },
             "category_breakdown": category_breakdown,
             "weekly_trend": weekly_trend,
@@ -1260,6 +1276,7 @@ class Projector:
                 amount=row.amount,
                 due_day=row.due_day,
                 account_id=row.account_id,
+                card_id=row.card_id,
                 payment_method=row.payment_method,
                 category_id=row.category_id,
                 description=row.description,
@@ -1428,8 +1445,16 @@ class Projector:
             for row in month_rows
             if row.type == "expense" and row.category_id != "invoice_payment"
         )
-        installment_total = sum(row.amount for row in installment_rows)
-        total_expense = expense_from_transactions + installment_total
+        fixed_card_purchase_ids = {
+            row.transaction_id
+            for row in pending_rows
+            if row.payment_method == "CARD" and row.transaction_id is not None
+        }
+        display_installment_rows = [
+            row for row in installment_rows if row.purchase_id not in fixed_card_purchase_ids
+        ]
+        installment_total = sum(row.amount for row in display_installment_rows)
+        total_expense = expense_from_transactions + sum(row.amount for row in installment_rows)
 
         # Spending by category (expenses only, excluding transfers)
         category_totals: dict[str, int] = {}
@@ -1510,6 +1535,7 @@ class Projector:
                 "due_date": row.due_date,
                 "status": row.status,
                 "account_id": row.account_id,
+                "card_id": row.card_id,
                 "payment_method": row.payment_method,
                 "transaction_id": row.transaction_id,
             }
@@ -1528,7 +1554,7 @@ class Projector:
                 "due_date": row.due_date,
                 "reference_month": row.reference_month,
             }
-            for row in installment_rows
+            for row in display_installment_rows
         ]
         monthly_commitments = [
             {
@@ -1540,7 +1566,7 @@ class Projector:
                 "due_date": row.due_date,
                 "status": row.status,
                 "account_id": row.account_id,
-                "card_id": None,
+                "card_id": row.card_id,
                 "payment_method": row.payment_method,
                 "source": "recorrente",
             }
@@ -1735,6 +1761,10 @@ class Projector:
 
         if event.type == "RecurringRuleCreated":
             self._apply_recurring_rule_created(session, event.payload)
+            return
+
+        if event.type == "RecurringRuleUpdated":
+            self._apply_recurring_rule_updated(session, event.payload)
             return
 
         if event.type == "BudgetUpdated":
@@ -1961,13 +1991,35 @@ class Projector:
                 name=str(payload["name"]),
                 amount=int(payload["amount"]),
                 due_day=int(payload["due_day"]),
-                account_id=str(payload["account_id"]),
+                account_id=_optional_string(payload.get("account_id")),
+                card_id=_optional_string(payload.get("card_id")),
                 payment_method=str(payload["payment_method"]),
                 category_id=str(payload["category_id"]),
                 description=_optional_string(payload.get("description")),
                 is_active=bool(payload.get("is_active", True)),
             )
         )
+
+    def _apply_recurring_rule_updated(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        rule_id = str(payload["id"])
+        existing = session.get(RecurringRuleProjectionRecord, rule_id)
+        if existing is None:
+            self._apply_recurring_rule_created(session, payload)
+            return
+
+        existing.name = str(payload["name"])
+        existing.amount = int(payload["amount"])
+        existing.due_day = int(payload["due_day"])
+        existing.account_id = _optional_string(payload.get("account_id"))
+        existing.card_id = _optional_string(payload.get("card_id"))
+        existing.payment_method = str(payload["payment_method"])
+        existing.category_id = str(payload["category_id"])
+        existing.description = _optional_string(payload.get("description"))
+        existing.is_active = bool(payload.get("is_active", True))
 
     def _apply_budget_updated(
         self,
@@ -2475,6 +2527,7 @@ class Projector:
                     amount=row.amount,
                     due_date=self._due_date_for_month(month, row.due_day),
                     account_id=row.account_id,
+                    card_id=row.card_id,
                     payment_method=row.payment_method,
                     category_id=row.category_id,
                     description=row.description,
@@ -2496,6 +2549,7 @@ class Projector:
             amount=row.amount,
             due_date=row.due_date,
             account_id=row.account_id,
+            card_id=row.card_id,
             payment_method=row.payment_method,
             category_id=row.category_id,
             description=row.description,
@@ -2851,7 +2905,12 @@ class Projector:
                     "person_id": reimbursement_person_id,
                     "status": "readonly",
                     "ledger_event_type": (
-                        "card_installment"
+                        "recurring_card_installment"
+                        if installment_row.purchase_id.endswith(":purchase")
+                        and installment_row.installments_count > 1
+                        else "recurring_card_purchase"
+                        if installment_row.purchase_id.endswith(":purchase")
+                        else "card_installment"
                         if installment_row.installments_count > 1
                         else "card_purchase"
                     ),
@@ -2942,7 +3001,11 @@ class Projector:
                     "description": purchase_row.description,
                     "person_id": None,
                     "status": "readonly",
-                    "ledger_event_type": "card_purchase",
+                    "ledger_event_type": (
+                        "recurring_card_purchase"
+                        if purchase_row.purchase_id.endswith(":purchase")
+                        else "card_purchase"
+                    ),
                     "ledger_source": f"card_liability:{purchase_row.card_id}",
                     "ledger_destination": f"category:{purchase_row.category_id}",
                 }
@@ -3260,6 +3323,7 @@ class Projector:
             "amount",
             "due_day",
             "account_id",
+            "card_id",
             "payment_method",
             "category_id",
             "description",
@@ -3282,6 +3346,7 @@ class Projector:
             "amount",
             "due_date",
             "account_id",
+            "card_id",
             "payment_method",
             "category_id",
             "description",

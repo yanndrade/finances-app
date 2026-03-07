@@ -15,11 +15,13 @@ import {
   type CategoryOption,
 } from "./lib/categories";
 import {
+  confirmPendingExpense,
   createAccount,
   createCard,
   createCardPurchase,
   createCashTransaction,
   createInvestmentMovement,
+  createRecurringRule,
   createTransfer,
   fetchBackupSnapshot,
   markReimbursementReceived,
@@ -27,6 +29,7 @@ import {
   resetApplicationData,
   updateAccount,
   updateCard,
+  updateRecurringRule,
   updateTransaction,
   voidTransaction,
   type AccountSummary,
@@ -41,6 +44,8 @@ import {
   type InvestmentMovementPayload,
   type InvestmentView,
   type InvoiceSummary,
+  type RecurringRulePayload,
+  type RecurringRuleUpdatePayload,
   type TransactionPatchPayload,
   type TransactionFilters,
   type TransferPayload,
@@ -76,6 +81,11 @@ const DashboardView = lazy(async () => {
 const ReportsView = lazy(async () => {
   const module = await import("./features/reports/reports-view");
   return { default: module.ReportsView };
+});
+
+const FixedExpensesView = lazy(async () => {
+  const module = await import("./features/recurring/fixed-expenses-view");
+  return { default: module.FixedExpensesView };
 });
 
 const SettingsView = lazy(async () => {
@@ -138,6 +148,10 @@ const VIEW_META: Record<
     title: "Cartões",
     description: "Faturas, ciclos e compras.",
   },
+  fixedExpenses: {
+    title: "Gastos fixos",
+    description: "Cadastro, revisao e confirmacao das recorrencias.",
+  },
   settings: {
     title: "Configurações",
     description: "Ferramentas e preferências.",
@@ -169,6 +183,8 @@ export function App() {
     cards,
     invoices,
     transactions,
+    recurringRules,
+    pendingExpenses,
     reportSummary,
     investmentOverview,
     investmentMovements,
@@ -434,6 +450,42 @@ export function App() {
     }
   }
 
+  async function handleCreateRecurringRule(payload: RecurringRulePayload): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => createRecurringRule(payload),
+      "Gasto fixo criado com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel criar o gasto fixo.");
+    }
+  }
+
+  async function handleUpdateRecurringRule(
+    ruleId: string,
+    payload: RecurringRuleUpdatePayload,
+  ): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => updateRecurringRule(ruleId, payload),
+      "Gasto fixo atualizado com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel atualizar o gasto fixo.");
+    }
+  }
+
+  async function handleConfirmPendingExpense(pendingId: string): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => confirmPendingExpense(pendingId),
+      "Pendencia confirmada com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("Nao foi possivel confirmar a pendencia.");
+    }
+  }
+
   async function handleApplyTransactionFilters(filters: TransactionFilters): Promise<void> {
     await refreshData({ filters, includeReport: false });
   }
@@ -652,6 +704,24 @@ export function App() {
           />
         ) : null}
 
+        {activeView === "fixedExpenses" ? (
+          <FixedExpensesView
+            accounts={accounts}
+            cards={cards}
+            categories={categoryOptions}
+            isSubmitting={isSubmitting}
+            month={selectedMonth}
+            pendingExpenses={pendingExpenses}
+            recurringRules={recurringRules}
+            onConfirmPending={handleConfirmPendingExpense}
+            onCreateRule={handleCreateRecurringRule}
+            onMonthChange={setSelectedMonth}
+            onOpenLedgerFiltered={openLedgerWithFilters}
+            onUpdateRule={handleUpdateRecurringRule}
+            uiDensity={uiDensity}
+          />
+        ) : null}
+
         {activeView === "accounts" ? (
           <AccountsView
             accounts={accounts}
@@ -794,11 +864,5 @@ function getErrorMessage(error: unknown): string {
 
   return "Nao foi possivel concluir a operacao.";
 }
-
-
-
-
-
-
 
 

@@ -51,7 +51,9 @@ type DashboardBentoProps = {
   invoices: InvoiceSummary[];
   isSubmitting: boolean;
   onMarkReimbursementReceived: (transactionId: string) => Promise<void>;
-  onNavigate: (view: "transactions" | "investments" | "cards" | "reports" | "settings") => void;
+  onNavigate: (
+    view: "transactions" | "fixedExpenses" | "investments" | "cards" | "reports" | "settings",
+  ) => void;
   onOpenLedgerFiltered: (
     filters: Partial<TransactionFilters>,
     month?: string,
@@ -210,7 +212,7 @@ export function DashboardBento({
           value={dashboard.fixed_expenses_total}
           color="text-slate-900"
           bgColor="bg-slate-100"
-          onClick={() => onOpenLedgerFiltered({ period: "month", preset: "fixed" }, dashboard.month)}
+          onClick={() => onNavigate("fixedExpenses")}
           uiDensity={uiDensity}
         />
         <KpiCard
@@ -350,9 +352,7 @@ export function DashboardBento({
                 <button
                   key={expense.pending_id}
                   className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-left"
-                  onClick={() =>
-                    onOpenLedgerFiltered({ period: "month", preset: "fixed" }, dashboard.month)
-                  }
+                  onClick={() => onNavigate("fixedExpenses")}
                   type="button"
                 >
                   <div className="min-w-0">

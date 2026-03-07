@@ -4,6 +4,7 @@ import {
   HandCoins,
   Home,
   Landmark,
+  Repeat,
   Settings2,
   TrendingUp,
   Wallet,
@@ -102,6 +103,13 @@ const NAVIGATION_COMMANDS: Array<{
     icon: Landmark,
   },
   {
+    label: "Gastos fixos",
+    hint: "Regras e pendências",
+    value: "gastos fixos recorrências pendências",
+    view: "fixedExpenses",
+    icon: Repeat,
+  },
+  {
     label: "Cartões",
     hint: "Gestão de faturas",
     value: "cartões crédito",
@@ -109,7 +117,7 @@ const NAVIGATION_COMMANDS: Array<{
     icon: CreditCard,
   },
   {
-    label: "Patrimônio & investimentos",
+    label: "Patrimônio e investimentos",
     hint: "Aportes e evolução",
     value: "patrimônio investimentos",
     view: "investments",
@@ -152,11 +160,9 @@ export function CommandPalette({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="overflow-hidden p-0 sm:max-w-[680px]">
-        <DialogHeader className="px-4 pt-4 pb-1">
+        <DialogHeader className="px-4 pb-1 pt-4">
           <DialogTitle>Paleta de comandos</DialogTitle>
-          <DialogDescription>
-            Digite para navegar ou disparar ações rápidas.
-          </DialogDescription>
+          <DialogDescription>Digite para navegar ou disparar ações rápidas.</DialogDescription>
         </DialogHeader>
 
         <Command className="rounded-none">
@@ -210,4 +216,3 @@ export function CommandPalette({
     </Dialog>
   );
 }
-

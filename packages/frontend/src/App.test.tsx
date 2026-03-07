@@ -9,7 +9,9 @@ import type {
   DashboardSummary,
   InvestmentMovementSummary,
   InvestmentOverview,
+  PendingExpenseSummary,
   ReportSummary,
+  RecurringRuleSummary,
   TransactionSummary,
 } from "./lib/api";
 
@@ -266,11 +268,52 @@ function buildCardPurchase(
   };
 }
 
+function buildRecurringRule(
+  overrides: Partial<RecurringRuleSummary> = {},
+): RecurringRuleSummary {
+  return {
+    rule_id: "rec-1",
+    name: "Internet",
+    amount: 120_00,
+    due_day: 10,
+    account_id: "acc-1",
+    card_id: null,
+    payment_method: "PIX",
+    category_id: "internet",
+    description: "Fibra",
+    is_active: true,
+    ...overrides,
+  };
+}
+
+function buildPendingExpense(
+  overrides: Partial<PendingExpenseSummary> = {},
+): PendingExpenseSummary {
+  return {
+    pending_id: "rec-1:2026-03",
+    rule_id: "rec-1",
+    month: "2026-03",
+    name: "Internet",
+    amount: 120_00,
+    due_date: "2026-03-10",
+    account_id: "acc-1",
+    card_id: null,
+    payment_method: "PIX",
+    category_id: "internet",
+    description: "Fibra",
+    status: "pending",
+    transaction_id: null,
+    ...overrides,
+  };
+}
+
 function installAppFetchMock(initialState?: {
   accounts?: AccountSummary[];
   cards?: CardSummary[];
   cardPurchases?: CardPurchaseSummary[];
   transactions?: TransactionSummary[];
+  recurringRules?: RecurringRuleSummary[];
+  pendingExpenses?: PendingExpenseSummary[];
   dashboard?: DashboardSummary;
   investmentOverview?: InvestmentOverview;
   investmentMovements?: InvestmentMovementSummary[];
@@ -283,6 +326,8 @@ function installAppFetchMock(initialState?: {
     cards: initialState?.cards ?? [buildCard()],
     cardPurchases: initialState?.cardPurchases ?? [],
     transactions: initialState?.transactions ?? [buildTransaction()],
+    recurringRules: initialState?.recurringRules ?? [],
+    pendingExpenses: initialState?.pendingExpenses ?? [],
     investmentOverview: initialState?.investmentOverview ?? buildInvestmentOverview(),
     investmentMovements: initialState?.investmentMovements ?? [],
     reportSummary: initialState?.reportSummary ?? buildReportSummary(),
@@ -332,6 +377,14 @@ function installAppFetchMock(initialState?: {
       return new Response(JSON.stringify(state.cards));
     }
 
+    if (url.includes("/api/recurring-rules") && method === "GET") {
+      return new Response(JSON.stringify(state.recurringRules));
+    }
+
+    if (url.includes("/api/pendings") && method === "GET") {
+      return new Response(JSON.stringify(state.pendingExpenses));
+    }
+
     if (url.includes("/api/invoices/") && url.endsWith("/items") && method === "GET") {
       const invoiceId = decodeURIComponent(
         url.split("/api/invoices/")[1]?.replace("/items", "") ?? "",
@@ -374,6 +427,133 @@ function installAppFetchMock(initialState?: {
 
     if (url.includes("/api/reports/summary") && method === "GET") {
       return new Response(JSON.stringify(state.reportSummary));
+    }
+
+    if (url.endsWith("/api/recurring-rules") && method === "POST") {
+      const payload = JSON.parse(String(init?.body)) as {
+        id: string;
+        name: string;
+        amount: number;
+        due_day: number;
+        account_id?: string;
+        card_id?: string;
+        payment_method: "PIX" | "CASH" | "OTHER" | "CARD";
+        category_id: string;
+        description?: string;
+      };
+
+      const createdRule = buildRecurringRule({
+        rule_id: payload.id,
+        name: payload.name,
+        amount: payload.amount,
+        due_day: payload.due_day,
+        account_id: payload.account_id ?? null,
+        card_id: payload.card_id ?? null,
+        payment_method: payload.payment_method,
+        category_id: payload.category_id,
+        description: payload.description ?? null,
+      });
+      state.recurringRules = [createdRule, ...state.recurringRules];
+      state.pendingExpenses = [
+        buildPendingExpense({
+          pending_id: `${createdRule.rule_id}:${state.dashboard.month}`,
+          rule_id: createdRule.rule_id,
+          month: state.dashboard.month,
+          name: createdRule.name,
+          amount: createdRule.amount,
+          due_date: `${state.dashboard.month}-${String(createdRule.due_day).padStart(2, "0")}`,
+          account_id: createdRule.account_id,
+          card_id: createdRule.card_id,
+          payment_method: createdRule.payment_method,
+          category_id: createdRule.category_id,
+          description: createdRule.description,
+        }),
+        ...state.pendingExpenses,
+      ];
+
+      return new Response(JSON.stringify(createdRule), { status: 201 });
+    }
+
+    if (url.includes("/api/recurring-rules/") && method === "PATCH") {
+      const ruleId = decodeURIComponent(url.split("/api/recurring-rules/")[1] ?? "");
+      const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const existingRule = state.recurringRules.find((rule) => rule.rule_id === ruleId);
+      if (!existingRule) {
+        return new Response("Rule not found", { status: 404 });
+      }
+
+      const updatedRule: RecurringRuleSummary = {
+        ...existingRule,
+        ...(payload.name !== undefined ? { name: String(payload.name) } : {}),
+        ...(payload.amount !== undefined ? { amount: Number(payload.amount) } : {}),
+        ...(payload.due_day !== undefined ? { due_day: Number(payload.due_day) } : {}),
+        ...(payload.payment_method !== undefined
+          ? { payment_method: payload.payment_method as RecurringRuleSummary["payment_method"] }
+          : {}),
+        ...(payload.category_id !== undefined ? { category_id: String(payload.category_id) } : {}),
+        ...(payload.description !== undefined
+          ? { description: payload.description === null ? null : String(payload.description) }
+          : {}),
+        ...(payload.is_active !== undefined ? { is_active: Boolean(payload.is_active) } : {}),
+        ...(payload.account_id !== undefined
+          ? { account_id: payload.account_id === null ? null : String(payload.account_id) }
+          : {}),
+        ...(payload.card_id !== undefined
+          ? { card_id: payload.card_id === null ? null : String(payload.card_id) }
+          : {}),
+      };
+      state.recurringRules = state.recurringRules.map((rule) =>
+        rule.rule_id === ruleId ? updatedRule : rule,
+      );
+      state.pendingExpenses = state.pendingExpenses.map((pending) =>
+        pending.rule_id === ruleId
+          ? {
+              ...pending,
+              name: updatedRule.name,
+              amount: updatedRule.amount,
+              due_date: `${pending.month}-${String(updatedRule.due_day).padStart(2, "0")}`,
+              account_id: updatedRule.account_id,
+              card_id: updatedRule.card_id,
+              payment_method: updatedRule.payment_method,
+              category_id: updatedRule.category_id,
+              description: updatedRule.description,
+            }
+          : pending,
+      );
+      return new Response(JSON.stringify(updatedRule));
+    }
+
+    if (url.includes("/api/pendings/") && url.endsWith("/confirm") && method === "POST") {
+      const pendingId = decodeURIComponent(url.split("/api/pendings/")[1]?.replace("/confirm", "") ?? "");
+      const pending = state.pendingExpenses.find((item) => item.pending_id === pendingId);
+      if (!pending) {
+        return new Response("Pending not found", { status: 404 });
+      }
+
+      const confirmedPending: PendingExpenseSummary = {
+        ...pending,
+        status: "confirmed",
+        transaction_id:
+          pending.payment_method === "CARD" ? `${pending.pending_id}:purchase` : `${pending.pending_id}:expense`,
+      };
+      state.pendingExpenses = state.pendingExpenses.map((item) =>
+        item.pending_id === pendingId ? confirmedPending : item,
+      );
+      state.dashboard.monthly_fixed_expenses = state.pendingExpenses.map((item) => ({
+        pending_id: item.pending_id,
+        rule_id: item.rule_id,
+        title: item.name,
+        category_id: item.category_id,
+        amount: item.amount,
+        due_date: item.due_date,
+        status: item.status,
+        account_id: item.account_id ?? "",
+        card_id: item.card_id,
+        payment_method: item.payment_method,
+        transaction_id: item.transaction_id,
+      }));
+
+      return new Response(JSON.stringify(confirmedPending), { status: 201 });
     }
 
     if (
@@ -449,6 +629,8 @@ function installAppFetchMock(initialState?: {
       state.accounts = [];
       state.cards = [];
       state.transactions = [];
+      state.recurringRules = [];
+      state.pendingExpenses = [];
       state.investmentMovements = [];
       state.investmentOverview = buildInvestmentOverview({
         totals: {
@@ -2336,6 +2518,50 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: /gerenciar contas/i }));
 
     expect(await screen.findByRole("region", { name: /gerenciar contas/i })).toBeInTheDocument();
+  });
+
+  it("opens the fixed expenses workspace and confirms a monthly pending", async () => {
+    const pending = buildPendingExpense();
+    const fetchMock = installAppFetchMock({
+      recurringRules: [buildRecurringRule()],
+      pendingExpenses: [pending],
+      dashboard: buildDashboard({
+        monthly_fixed_expenses: [
+          {
+            pending_id: pending.pending_id,
+            rule_id: pending.rule_id,
+            title: pending.name,
+            category_id: pending.category_id,
+            amount: pending.amount,
+            due_date: pending.due_date,
+            status: pending.status,
+            account_id: pending.account_id ?? "",
+            payment_method: pending.payment_method,
+            transaction_id: pending.transaction_id,
+          },
+        ],
+      }),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /gastos fixos/i }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: /gastos fixos/i })).toBeInTheDocument();
+    expect(screen.getByText(/internet/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /pendencias/i }));
+    await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => {
+          return String(url).includes("/api/pendings/") && String(url).endsWith("/confirm") && init?.method === "POST";
+        }),
+      ).toBe(true);
+    });
+
+    expect(await screen.findByText(/confirmado/i)).toBeInTheDocument();
   });
 });
 

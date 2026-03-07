@@ -1084,7 +1084,11 @@ function matchesTransactionPreset(
   }
 
   if (preset === "fixed") {
-    return transaction.ledger_event_type === "recurring_expense";
+    return (
+      transaction.ledger_event_type === "recurring_expense" ||
+      transaction.ledger_event_type === "recurring_card_purchase" ||
+      transaction.ledger_event_type === "recurring_card_installment"
+    );
   }
 
   if (preset === "cards") {

@@ -67,6 +67,7 @@ def build_services(
         event_store=event_store,
         projector=projector,
         account_reader=account_service,
+        card_reader=card_service,
     )
     budget_service = BudgetService(
         event_store=event_store,

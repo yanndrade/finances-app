@@ -238,7 +238,8 @@ class RecurringRuleProjection:
     name: str
     amount: int
     due_day: int
-    account_id: str
+    account_id: str | None
+    card_id: str | None
     payment_method: str
     category_id: str
     description: str | None
@@ -251,6 +252,7 @@ class RecurringRuleProjection:
             "amount": self.amount,
             "due_day": self.due_day,
             "account_id": self.account_id,
+            "card_id": self.card_id,
             "payment_method": self.payment_method,
             "category_id": self.category_id,
             "description": self.description,
@@ -266,7 +268,8 @@ class PendingProjection:
     name: str
     amount: int
     due_date: str
-    account_id: str
+    account_id: str | None
+    card_id: str | None
     payment_method: str
     category_id: str
     description: str | None
@@ -282,6 +285,7 @@ class PendingProjection:
             "amount": self.amount,
             "due_date": self.due_date,
             "account_id": self.account_id,
+            "card_id": self.card_id,
             "payment_method": self.payment_method,
             "category_id": self.category_id,
             "description": self.description,

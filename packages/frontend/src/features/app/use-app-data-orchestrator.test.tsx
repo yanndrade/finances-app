@@ -121,6 +121,8 @@ describe("useAppDataOrchestrator", () => {
     vi.spyOn(api, "fetchInvoices").mockResolvedValue([]);
     vi.spyOn(api, "fetchAccounts").mockResolvedValue([]);
     vi.spyOn(api, "fetchTransactions").mockResolvedValue([]);
+    vi.spyOn(api, "fetchRecurringRules").mockResolvedValue([]);
+    vi.spyOn(api, "fetchPendings").mockResolvedValue([]);
     vi.spyOn(api, "fetchInvestmentOverview").mockResolvedValue(buildInvestmentOverview());
     vi.spyOn(api, "fetchInvestmentMovements").mockResolvedValue([]);
     vi.spyOn(api, "fetchReportSummary").mockResolvedValue(buildReportSummary());

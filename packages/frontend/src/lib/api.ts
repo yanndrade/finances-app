@@ -92,6 +92,8 @@ export type PendingReimbursementSummary = {
   receipt_transaction_id: string | null;
 };
 
+export type RecurringPaymentMethod = "PIX" | "CASH" | "OTHER" | "CARD";
+
 export type DashboardCommitmentSummary = {
   commitment_id: string;
   kind: "recurring" | "invoice";
@@ -115,7 +117,8 @@ export type DashboardFixedExpenseSummary = {
   due_date: string;
   status: string;
   account_id: string;
-  payment_method: string;
+  card_id?: string | null;
+  payment_method: RecurringPaymentMethod;
   transaction_id: string | null;
 };
 
@@ -332,6 +335,50 @@ export type CategoryBudgetPayload = {
   limitInCents: number;
 };
 
+export type RecurringRuleSummary = {
+  rule_id: string;
+  name: string;
+  amount: number;
+  due_day: number;
+  account_id: string | null;
+  card_id: string | null;
+  payment_method: RecurringPaymentMethod;
+  category_id: string;
+  description: string | null;
+  is_active: boolean;
+};
+
+export type PendingExpenseSummary = {
+  pending_id: string;
+  rule_id: string;
+  month: string;
+  name: string;
+  amount: number;
+  due_date: string;
+  account_id: string | null;
+  card_id: string | null;
+  payment_method: RecurringPaymentMethod;
+  category_id: string;
+  description: string | null;
+  status: string;
+  transaction_id: string | null;
+};
+
+export type RecurringRulePayload = {
+  name: string;
+  amountInCents: number;
+  dueDay: number;
+  paymentMethod: RecurringPaymentMethod;
+  accountId?: string;
+  cardId?: string;
+  categoryId: string;
+  description?: string;
+};
+
+export type RecurringRuleUpdatePayload = Partial<RecurringRulePayload> & {
+  isActive?: boolean;
+};
+
 export type InvestmentOverviewParams = {
   view: InvestmentView;
   from: string;
@@ -479,6 +526,22 @@ export async function fetchAccounts(): Promise<AccountSummary[]> {
 
 export async function fetchCards(): Promise<CardSummary[]> {
   return requestJson<CardSummary[]>("/api/cards");
+}
+
+export async function fetchRecurringRules(
+  active?: boolean,
+): Promise<RecurringRuleSummary[]> {
+  const query =
+    typeof active === "boolean" ? `?active=${encodeURIComponent(String(active))}` : "";
+  return requestJson<RecurringRuleSummary[]>(
+    query.length > 0 ? `/api/recurring-rules${query}` : "/api/recurring-rules",
+  );
+}
+
+export async function fetchPendings(month: string): Promise<PendingExpenseSummary[]> {
+  return requestJson<PendingExpenseSummary[]>(
+    `/api/pendings?month=${encodeURIComponent(month)}`,
+  );
 }
 
 export async function fetchInvoices(cardId?: string): Promise<InvoiceSummary[]> {
@@ -638,6 +701,25 @@ export async function createCard(payload: CardPayload): Promise<CardSummary> {
   });
 }
 
+export async function createRecurringRule(
+  payload: RecurringRulePayload,
+): Promise<RecurringRuleSummary> {
+  return requestJson<RecurringRuleSummary>("/api/recurring-rules", {
+    method: "POST",
+    body: JSON.stringify({
+      id: `rec-${Date.now()}`,
+      name: payload.name,
+      amount: payload.amountInCents,
+      due_day: payload.dueDay,
+      payment_method: payload.paymentMethod,
+      account_id: payload.paymentMethod === "CARD" ? undefined : payload.accountId || undefined,
+      card_id: payload.paymentMethod === "CARD" ? payload.cardId || undefined : undefined,
+      category_id: payload.categoryId,
+      description: payload.description || undefined,
+    }),
+  });
+}
+
 export async function updateCard(
   cardId: string,
   payload: CardUpdatePayload,
@@ -652,6 +734,28 @@ export async function updateCard(
       payment_account_id: payload.paymentAccountId,
       is_active: payload.isActive,
     }),
+  });
+}
+
+export async function updateRecurringRule(
+  ruleId: string,
+  payload: RecurringRuleUpdatePayload,
+): Promise<RecurringRuleSummary> {
+  const body = {
+    ...(payload.name !== undefined ? { name: payload.name } : {}),
+    ...(payload.amountInCents !== undefined ? { amount: payload.amountInCents } : {}),
+    ...(payload.dueDay !== undefined ? { due_day: payload.dueDay } : {}),
+    ...(payload.paymentMethod !== undefined ? { payment_method: payload.paymentMethod } : {}),
+    ...(payload.categoryId !== undefined ? { category_id: payload.categoryId } : {}),
+    ...(payload.description !== undefined ? { description: payload.description || null } : {}),
+    ...(payload.isActive !== undefined ? { is_active: payload.isActive } : {}),
+    ...(payload.accountId !== undefined ? { account_id: payload.accountId || null } : {}),
+    ...(payload.cardId !== undefined ? { card_id: payload.cardId || null } : {}),
+  };
+
+  return requestJson<RecurringRuleSummary>(`/api/recurring-rules/${ruleId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
   });
 }
 
@@ -767,6 +871,17 @@ export async function markReimbursementReceived(
         received_at: normalizeTimestampForApi(payload.receivedAt),
         account_id: payload.accountId || undefined,
       }),
+    },
+  );
+}
+
+export async function confirmPendingExpense(
+  pendingId: string,
+): Promise<PendingExpenseSummary> {
+  return requestJson<PendingExpenseSummary>(
+    `/api/pendings/${encodeURIComponent(pendingId)}/confirm`,
+    {
+      method: "POST",
     },
   );
 }

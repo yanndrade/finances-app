@@ -8,7 +8,9 @@ import {
   fetchInvestmentMovements,
   fetchInvestmentOverview,
   fetchInvoices,
+  fetchPendings,
   fetchReportSummary,
+  fetchRecurringRules,
   fetchTransactions,
   type AccountSummary,
   type CardSummary,
@@ -17,6 +19,8 @@ import {
   type InvestmentOverview,
   type InvestmentView,
   type InvoiceSummary,
+  type PendingExpenseSummary,
+  type RecurringRuleSummary,
   type ReportSummary,
   type TransactionFilters,
   type TransactionSummary,
@@ -56,6 +60,8 @@ export function useAppDataOrchestrator({
   const [cards, setCards] = useState<CardSummary[]>([]);
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
   const [transactions, setTransactions] = useState<TransactionSummary[]>([]);
+  const [recurringRules, setRecurringRules] = useState<RecurringRuleSummary[]>([]);
+  const [pendingExpenses, setPendingExpenses] = useState<PendingExpenseSummary[]>([]);
   const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
   const [investmentOverview, setInvestmentOverview] = useState<InvestmentOverview | null>(null);
   const [investmentMovements, setInvestmentMovements] = useState<InvestmentMovementSummary[]>([]);
@@ -89,6 +95,8 @@ export function useAppDataOrchestrator({
           nextDashboard,
           nextAccounts,
           nextTransactions,
+          nextRecurringRules,
+          nextPendingExpenses,
           nextInvestmentOverview,
           nextInvestmentMovements,
         ] = await Promise.all([
@@ -97,6 +105,8 @@ export function useAppDataOrchestrator({
           fetchDashboardSummary(month),
           fetchAccounts(),
           fetchTransactions(transactionApiFilters),
+          fetchRecurringRules(),
+          fetchPendings(month),
           fetchInvestmentOverview({
             view: activeInvestmentView,
             from: toIsoFromDate(activeFromDate, false),
@@ -121,6 +131,8 @@ export function useAppDataOrchestrator({
         setDashboard(nextDashboard);
         setAccounts(nextAccounts);
         setTransactions(nextTransactions);
+        setRecurringRules(nextRecurringRules);
+        setPendingExpenses(nextPendingExpenses);
         setInvestmentOverview(nextInvestmentOverview);
         setInvestmentMovements(nextInvestmentMovements);
         if (nextReportSummary !== undefined) {
@@ -157,6 +169,8 @@ export function useAppDataOrchestrator({
     cards,
     invoices,
     transactions,
+    recurringRules,
+    pendingExpenses,
     reportSummary,
     investmentOverview,
     investmentMovements,
