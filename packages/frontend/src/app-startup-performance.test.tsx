@@ -56,6 +56,7 @@ describe("App startup performance", () => {
     installStartupFetchMock();
 
     const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+    const tailwindConfigSource = readFileSync(join(process.cwd(), "tailwind.config.js"), "utf8");
 
     expect(appSource).toContain('const DashboardView = lazy(async () => {');
     expect(appSource).toContain('const CardsView = lazy(async () => {');
@@ -67,6 +68,8 @@ describe("App startup performance", () => {
     expect(appSource).not.toContain(
       'import { QuickAddComposer } from "./components/quick-add-composer";',
     );
+    expect(tailwindConfigSource).toContain('"!./src/**/node_modules/**"');
+    expect(tailwindConfigSource).toContain('"!./src/my-app/**"');
 
     await act(async () => {
       render(<App />);

@@ -2009,6 +2009,103 @@ def test_card_purchase_endpoint_allocates_purchases_into_prd_invoice_cycles(tmp_
     assert next_cycle_response.json()["due_date"] == "2026-04-20"
 
 
+def test_card_purchase_endpoint_can_reassign_purchase_to_another_card(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Reserve", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card(
+        client,
+        {
+            "id": "card-2",
+            "name": "Inter",
+            "limit": 150_000,
+            "closing_day": 15,
+            "due_day": 25,
+            "payment_account_id": "acc-2",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-11T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Lunch",
+        },
+    )
+
+    response = client.patch(
+        "/api/card-purchases/purchase-1",
+        json={
+            "card_id": "card-2",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "purchase_id": "purchase-1",
+        "purchase_date": "2026-03-11T12:00:00Z",
+        "amount": 90_00,
+        "category_id": "food",
+        "card_id": "card-2",
+        "description": "Lunch",
+        "installments_count": 1,
+        "invoice_id": "card-2:2026-03",
+        "reference_month": "2026-03",
+        "closing_date": "2026-03-15",
+        "due_date": "2026-03-25",
+    }
+
+    assert client.get("/api/invoices", params={"card": "card-1"}).json() == []
+    assert client.get("/api/invoices", params={"card": "card-2"}).json() == [
+        {
+            "invoice_id": "card-2:2026-03",
+            "card_id": "card-2",
+            "reference_month": "2026-03",
+            "closing_date": "2026-03-15",
+            "due_date": "2026-03-25",
+            "total_amount": 90_00,
+            "paid_amount": 0,
+            "remaining_amount": 90_00,
+            "purchase_count": 1,
+            "status": "open",
+        }
+    ]
+    assert client.get("/api/card-purchases", params={"card": "card-1"}).json() == []
+    assert client.get("/api/card-purchases", params={"card": "card-2"}).json() == [
+        {
+            "purchase_id": "purchase-1",
+            "purchase_date": "2026-03-11T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "food",
+            "card_id": "card-2",
+            "description": "Lunch",
+            "installments_count": 1,
+            "invoice_id": "card-2:2026-03",
+            "reference_month": "2026-03",
+            "closing_date": "2026-03-15",
+            "due_date": "2026-03-25",
+        }
+    ]
+
+
 def test_invoice_list_aggregates_card_purchases_without_zero_value_rows(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",

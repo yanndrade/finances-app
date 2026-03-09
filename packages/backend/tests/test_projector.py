@@ -812,6 +812,113 @@ def test_projector_distributes_installments_into_future_invoice_cycles(tmp_path:
     ]
 
 
+def test_projector_reassigns_card_purchase_without_duplicating_invoices(tmp_path: Path) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "card-2",
+                "name": "Inter",
+                "limit": 150_000,
+                "closing_day": 15,
+                "due_day": 25,
+                "payment_account_id": "acc-2",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-11T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-11T12:00:00Z",
+                "amount": 90_00,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Lunch",
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    projector.run()
+
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseUpdated",
+            timestamp="2026-03-12T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "card_id": "card-2",
+            },
+            version=1,
+        )
+    )
+
+    applied = projector.run()
+
+    assert applied == 1
+    assert projector.list_card_purchases(card_id="card-1") == []
+    assert projector.list_card_purchases(card_id="card-2") == [
+        {
+            "purchase_id": "purchase-1",
+            "purchase_date": "2026-03-11T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "food",
+            "card_id": "card-2",
+            "description": "Lunch",
+            "installments_count": 1,
+            "invoice_id": "card-2:2026-03",
+            "reference_month": "2026-03",
+            "closing_date": "2026-03-15",
+            "due_date": "2026-03-25",
+        }
+    ]
+    assert projector.list_invoices(card_id="card-1") == []
+    assert projector.list_invoices(card_id="card-2") == [
+        {
+            "invoice_id": "card-2:2026-03",
+            "card_id": "card-2",
+            "reference_month": "2026-03",
+            "closing_date": "2026-03-15",
+            "due_date": "2026-03-25",
+            "total_amount": 90_00,
+            "paid_amount": 0,
+            "remaining_amount": 90_00,
+            "purchase_count": 1,
+            "status": "open",
+        }
+    ]
+
+
 def test_projector_tracks_card_purchase_reimbursements_by_installment_month(tmp_path: Path) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",

@@ -1759,6 +1759,10 @@ class Projector:
             self._apply_card_purchase_created(session, event.payload)
             return
 
+        if event.type == "CardPurchaseUpdated":
+            self._apply_card_purchase_updated(session, event.payload)
+            return
+
         if event.type == "RecurringRuleCreated":
             self._apply_recurring_rule_created(session, event.payload)
             return
@@ -1975,6 +1979,88 @@ class Projector:
                 allocation=allocation,
             )
 
+    def _apply_card_purchase_updated(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        purchase_id = str(payload["id"])
+        existing = session.get(CardPurchaseProjectionRecord, purchase_id)
+        if existing is None:
+            return
+
+        new_card_id = _optional_string(payload.get("card_id")) or existing.card_id
+        if new_card_id == existing.card_id:
+            return
+
+        card = session.get(CardProjectionRecord, new_card_id)
+        if card is None:
+            return
+
+        installments = list(
+            session.query(CardPurchaseInstallmentRecord)
+            .filter(CardPurchaseInstallmentRecord.purchase_id == purchase_id)
+            .all()
+        )
+        current_person_id = self._card_purchase_person_id(session, purchase_id=purchase_id)
+        self._remove_card_purchase_installments(
+            session,
+            purchase_id=purchase_id,
+            installments=installments,
+        )
+
+        allocations = allocate_purchase_installments(
+            purchase_date=existing.purchase_date,
+            total_amount=existing.amount,
+            installments_count=existing.installments_count,
+            closing_day=card.closing_day,
+            due_day=card.due_day,
+        )
+        visible_allocations = [
+            allocation for allocation in allocations if allocation.amount > 0
+        ]
+        if not visible_allocations:
+            return
+
+        first_allocation = visible_allocations[0]
+        existing.card_id = new_card_id
+        existing.invoice_id = f"{new_card_id}:{first_allocation.reference_month}"
+        existing.reference_month = first_allocation.reference_month
+        existing.closing_date = first_allocation.closing_date
+        existing.due_date = first_allocation.due_date
+
+        self._sync_reimbursement_from_card_purchase(
+            session,
+            purchase_id=purchase_id,
+            person_id=current_person_id,
+            account_id=card.payment_account_id,
+            allocations=visible_allocations,
+        )
+
+        for allocation in visible_allocations:
+            installment_id = f"{purchase_id}:{allocation.installment_number}"
+            session.add(
+                CardPurchaseInstallmentRecord(
+                    installment_id=installment_id,
+                    purchase_id=purchase_id,
+                    card_id=new_card_id,
+                    purchase_date=existing.purchase_date,
+                    category_id=existing.category_id,
+                    installment_number=allocation.installment_number,
+                    installments_count=existing.installments_count,
+                    amount=allocation.amount,
+                    invoice_id=f"{new_card_id}:{allocation.reference_month}",
+                    reference_month=allocation.reference_month,
+                    closing_date=allocation.closing_date,
+                    due_date=allocation.due_date,
+                )
+            )
+            self._apply_invoice_item(
+                session,
+                card_id=new_card_id,
+                allocation=allocation,
+            )
+
     def _apply_recurring_rule_created(
         self,
         session: Session,
@@ -2108,6 +2194,45 @@ class Projector:
         invoice.remaining_amount += allocation.amount
         invoice.purchase_count += 1
         self._sync_invoice_status(invoice)
+
+    def _remove_card_purchase_installments(
+        self,
+        session: Session,
+        *,
+        purchase_id: str,
+        installments: Sequence[CardPurchaseInstallmentRecord],
+    ) -> None:
+        for installment in installments:
+            invoice = session.get(InvoiceProjectionRecord, installment.invoice_id)
+            if invoice is not None:
+                invoice.total_amount = max(invoice.total_amount - installment.amount, 0)
+                invoice.purchase_count = max(invoice.purchase_count - 1, 0)
+                invoice.remaining_amount = max(
+                    invoice.total_amount - invoice.paid_amount,
+                    0,
+                )
+                if invoice.purchase_count == 0 and invoice.paid_amount == 0:
+                    session.delete(invoice)
+                else:
+                    self._sync_invoice_status(invoice)
+
+            session.delete(installment)
+
+    def _card_purchase_person_id(
+        self,
+        session: Session,
+        *,
+        purchase_id: str,
+    ) -> str | None:
+        existing = (
+            session.query(ReimbursementProjectionRecord)
+            .filter(ReimbursementProjectionRecord.source_transaction_id == purchase_id)
+            .order_by(ReimbursementProjectionRecord.transaction_id.asc())
+            .first()
+        )
+        if existing is None:
+            return None
+        return existing.person_id
 
     def _apply_invoice_paid(
         self,

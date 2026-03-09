@@ -171,6 +171,38 @@ describe("api timestamp normalization", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/card-purchases?card=card-1");
   });
 
+  it("sends card_id when reassigning a card purchase", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          purchase_id: "purchase-1",
+          purchase_date: "2026-03-11T03:30:00Z",
+          amount: 50_00,
+          category_id: "transport",
+          card_id: "card-2",
+          description: "Taxi",
+          installments_count: 3,
+          invoice_id: "card-2:2026-03",
+          reference_month: "2026-03",
+          closing_date: "2026-03-15",
+          due_date: "2026-03-25",
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.updateCardPurchase("purchase-1", {
+      cardId: "card-2",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PATCH");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/card-purchases/purchase-1");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      card_id: "card-2",
+    });
+  });
+
   it("requests future card installments for a specific card and month", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(JSON.stringify([])),

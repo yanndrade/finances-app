@@ -48,6 +48,7 @@ function renderTransactionsView(
       }
       isSubmitting={overrides?.isSubmitting ?? false}
       onApplyFilters={overrides?.onApplyFilters ?? vi.fn(async () => undefined)}
+      onUpdateCardPurchase={overrides?.onUpdateCardPurchase ?? vi.fn(async () => undefined)}
       onUpdateTransaction={overrides?.onUpdateTransaction ?? vi.fn(async () => undefined)}
       onVoidTransaction={overrides?.onVoidTransaction ?? vi.fn(async () => undefined)}
       transactions={transactions}
@@ -85,7 +86,7 @@ describe("TransactionsView copy", () => {
       },
     ]);
 
-    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
+    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avan/i }));
 
     expect(screen.getByRole("option", { name: "Dinheiro" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Outro" })).toBeInTheDocument();
@@ -116,7 +117,7 @@ describe("TransactionsView copy", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /editar/i }));
 
-    expect(screen.getByLabelText(/categoria da transacao/i).tagName).toBe("SELECT");
+    expect(screen.getByLabelText(/categoria da transa/i).tagName).toBe("SELECT");
     expect(screen.getByRole("option", { name: "Outros" })).toBeInTheDocument();
   });
 
@@ -213,7 +214,7 @@ describe("TransactionsView copy", () => {
     expect(
       within(investmentRow as HTMLTableRowElement).queryByRole("button", { name: /^estornar$/i }),
     ).not.toBeInTheDocument();
-    expect(within(investmentRow as HTMLTableRowElement).getByText("Sem acoes")).toBeInTheDocument();
+    expect(within(investmentRow as HTMLTableRowElement).getByText(/sem a/i)).toBeInTheDocument();
 
     await userEvent.selectOptions(
       screen.getByRole("combobox", { name: /tipo do filtro/i }),
@@ -254,9 +255,66 @@ describe("TransactionsView copy", () => {
       },
     ]);
 
-    await userEvent.click(screen.getByRole("button", { name: /parcelas do mes/i }));
+    await userEvent.click(screen.getByRole("button", { name: /parcelas do m/i }));
 
     expect(screen.getByText(/notebook - parcela 1\/3/i)).toBeInTheDocument();
     expect(screen.queryByText("Mercado")).not.toBeInTheDocument();
+  });
+
+  it("allows reassigning a card purchase to another card from history", async () => {
+    const onUpdateCardPurchase = vi.fn(async () => undefined);
+
+    renderTransactionsView(
+      [
+        {
+          transaction_id: "purchase-1:1:card-installment",
+          occurred_at: "2026-03-10T12:00:00Z",
+          type: "expense",
+          amount: 3_000,
+          account_id: "acc-1",
+          payment_method: "OTHER",
+          category_id: "electronics",
+          description: "Notebook - Parcela 1/3",
+          person_id: null,
+          status: "readonly",
+          ledger_event_type: "card_installment",
+          ledger_source: "card_liability:card-1",
+          ledger_destination: "category:electronics",
+        },
+      ],
+      {
+        cards: [
+          {
+            card_id: "card-1",
+            name: "Nubank",
+            limit: 100_000,
+            closing_day: 10,
+            due_day: 20,
+            payment_account_id: "acc-1",
+            is_active: true,
+            future_installment_total: 0,
+          },
+          {
+            card_id: "card-2",
+            name: "Inter",
+            limit: 80_000,
+            closing_day: 15,
+            due_day: 25,
+            payment_account_id: "acc-1",
+            is_active: true,
+            future_installment_total: 0,
+          },
+        ],
+        onUpdateCardPurchase,
+      },
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^editar$/i }));
+    await userEvent.selectOptions(screen.getByLabelText(/cartao da compra/i), "card-2");
+    await userEvent.click(screen.getByRole("button", { name: /salvar altera/i }));
+
+    expect(onUpdateCardPurchase).toHaveBeenCalledWith("purchase-1", {
+      cardId: "card-2",
+    });
   });
 });

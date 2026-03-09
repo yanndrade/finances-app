@@ -28,6 +28,7 @@ import { MoneyValue } from "../../components/ui/money-value";
 
 import type {
   AccountSummary,
+  CardPurchaseUpdatePayload,
   CardSummary,
   TransactionFilters,
   TransactionSummary,
@@ -54,6 +55,10 @@ type TransactionsViewProps = {
   filters: TransactionFilters;
   isSubmitting: boolean;
   onApplyFilters: (filters: TransactionFilters) => Promise<void>;
+  onUpdateCardPurchase: (
+    purchaseId: string,
+    payload: CardPurchaseUpdatePayload,
+  ) => Promise<void>;
   onUpdateTransaction: (
     transactionId: string,
     payload: TransactionUpdatePayload,
@@ -71,6 +76,12 @@ type TransactionEditForm = {
   categoryId: string;
   description: string;
   personId: string;
+};
+
+type CardPurchaseEditForm = {
+  purchaseId: string;
+  cardId: string;
+  description: string;
 };
 
 type RequiredTransactionFilters = TransactionFilters & {
@@ -123,6 +134,7 @@ export function TransactionsView({
   filters,
   isSubmitting,
   onApplyFilters,
+  onUpdateCardPurchase,
   onUpdateTransaction,
   onVoidTransaction,
   uiDensity,
@@ -140,6 +152,8 @@ export function TransactionsView({
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<TransactionEditForm | null>(null);
+  const [cardPurchaseEditForm, setCardPurchaseEditForm] =
+    useState<CardPurchaseEditForm | null>(null);
   const [transactionSplits, setTransactionSplits] = useState<Record<string, SplitLine[]>>({});
   const [splitDraft, setSplitDraft] = useState<SplitDraftLine[] | null>(null);
   const [splitFeedback, setSplitFeedback] = useState<string | null>(null);
@@ -200,6 +214,20 @@ export function TransactionsView({
 
     setEditingTransactionId(null);
     setEditForm(null);
+  }
+
+  async function handleCardPurchaseEditSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (cardPurchaseEditForm === null) {
+      return;
+    }
+
+    await onUpdateCardPurchase(cardPurchaseEditForm.purchaseId, {
+      cardId: cardPurchaseEditForm.cardId,
+    });
+
+    setCardPurchaseEditForm(null);
   }
 
   const filteredTransactions = useMemo(() => {
@@ -350,10 +378,28 @@ export function TransactionsView({
   }
 
   function openEditForm(transaction: TransactionSummary) {
+    if (isEditableCardPurchaseTransaction(transaction)) {
+      const purchaseId = extractPurchaseId(transaction);
+      const cardId = extractCardId(transaction);
+      if (purchaseId === null || cardId === null) {
+        return;
+      }
+
+      setEditingTransactionId(null);
+      setEditForm(null);
+      setCardPurchaseEditForm({
+        purchaseId,
+        cardId,
+        description: transaction.description ?? formatCategoryName(transaction.category_id),
+      });
+      return;
+    }
+
     if (transaction.type !== "income" && transaction.type !== "expense") {
       return;
     }
 
+    setCardPurchaseEditForm(null);
     setEditingTransactionId(transaction.transaction_id);
     setEditForm({
       occurredAt: toDateTimeInputValue(transaction.occurred_at),
@@ -368,6 +414,10 @@ export function TransactionsView({
   }
 
   function canEditTransaction(transaction: TransactionSummary): boolean {
+    if (isEditableCardPurchaseTransaction(transaction)) {
+      return true;
+    }
+
     return (
       transaction.status === "active" &&
       (transaction.type === "income" || transaction.type === "expense")
@@ -855,6 +905,64 @@ export function TransactionsView({
         </form>
       ) : null}
 
+      {cardPurchaseEditForm !== null ? (
+        <form className="panel-card panel-card--nested" onSubmit={handleCardPurchaseEditSubmit}>
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">EdiÃ§Ã£o</p>
+              <h3 className="section-title">Trocar cartÃ£o da compra</h3>
+            </div>
+          </div>
+          <div className="form-grid">
+            <label>
+              Compra
+              <input disabled value={cardPurchaseEditForm.description} />
+            </label>
+            <label>
+              Novo cartÃ£o
+              <select
+                aria-label="Cartao da compra"
+                onChange={(event) =>
+                  setCardPurchaseEditForm((current) =>
+                    current === null
+                      ? null
+                      : {
+                          ...current,
+                          cardId: event.target.value,
+                        },
+                  )
+                }
+                required
+                value={cardPurchaseEditForm.cardId}
+              >
+                {cards.map((card) => (
+                  <option key={card.card_id} value={card.card_id}>
+                    {card.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="field-hint">
+            A compra serÃ¡ movida para o novo cartÃ£o sem duplicar parcelas nem alterar o total.
+          </p>
+          <div className="inline-actions">
+            <button className="primary-button" disabled={isSubmitting} type="submit">
+              Salvar alteraÃ§Ã£o
+            </button>
+            <button
+              className="ghost-button"
+              onClick={() => {
+                setCardPurchaseEditForm(null);
+              }}
+              type="button"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      ) : null}
+
       {visibleTransactions.length === 0 ? (
         <EmptyState 
           icon={Calendar} 
@@ -1186,6 +1294,33 @@ function extractCardId(transaction: TransactionSummary): string | null {
   }
 
   return null;
+}
+
+function extractPurchaseId(transaction: TransactionSummary): string | null {
+  if (!isEditableCardPurchaseTransaction(transaction)) {
+    return null;
+  }
+
+  if (transaction.transaction_id.endsWith(":card-purchase")) {
+    return transaction.transaction_id.slice(0, -":card-purchase".length);
+  }
+
+  if (transaction.transaction_id.endsWith(":card-installment")) {
+    const installmentId = transaction.transaction_id.slice(0, -":card-installment".length);
+    const lastSeparator = installmentId.lastIndexOf(":");
+    return lastSeparator >= 0 ? installmentId.slice(0, lastSeparator) : installmentId;
+  }
+
+  return null;
+}
+
+function isEditableCardPurchaseTransaction(transaction: TransactionSummary): boolean {
+  return (
+    transaction.ledger_event_type === "card_purchase" ||
+    transaction.ledger_event_type === "card_installment" ||
+    transaction.ledger_event_type === "recurring_card_purchase" ||
+    transaction.ledger_event_type === "recurring_card_installment"
+  );
 }
 
 function resolveLedgerEndpointLabel(

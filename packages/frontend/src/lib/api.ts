@@ -306,6 +306,10 @@ export type CardPurchasePayload = {
   personId?: string;
 };
 
+export type CardPurchaseUpdatePayload = {
+  cardId: string;
+};
+
 export type InvoicePaymentPayload = {
   invoiceId: string;
   amountInCents: number;
@@ -775,6 +779,21 @@ export async function createCardPurchase(
       person_id: payload.personId || undefined,
     }),
   });
+}
+
+export async function updateCardPurchase(
+  purchaseId: string,
+  payload: CardPurchaseUpdatePayload,
+): Promise<CardPurchaseSummary> {
+  return requestJson<CardPurchaseSummary>(
+    `/api/card-purchases/${encodeURIComponent(purchaseId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        card_id: payload.cardId,
+      }),
+    },
+  );
 }
 
 export async function payInvoice(payload: InvoicePaymentPayload): Promise<InvoiceSummary> {

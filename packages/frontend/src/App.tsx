@@ -29,6 +29,7 @@ import {
   resetApplicationData,
   updateAccount,
   updateCard,
+  updateCardPurchase,
   updateRecurringRule,
   updateTransaction,
   voidTransaction,
@@ -38,6 +39,7 @@ import {
   type CardSummary,
   type CardPayload,
   type CardPurchasePayload,
+  type CardPurchaseUpdatePayload,
   type CardUpdatePayload,
   type CashTransactionPayload,
   type InvoicePaymentPayload,
@@ -439,6 +441,16 @@ export function App() {
     }
   }
 
+  async function handleUpdateCardPurchase(
+    purchaseId: string,
+    payload: CardPurchaseUpdatePayload,
+  ): Promise<void> {
+    await runMutation(
+      () => updateCardPurchase(purchaseId, payload),
+      "Cartão da compra atualizado com sucesso.",
+    );
+  }
+
   async function handlePayInvoice(payload: InvoicePaymentPayload): Promise<void> {
     const wasSuccessful = await runMutation(
       () => payInvoice(payload),
@@ -697,6 +709,7 @@ export function App() {
             filters={transactionFilters}
             isSubmitting={isSubmitting}
             onApplyFilters={handleApplyTransactionFilters}
+            onUpdateCardPurchase={handleUpdateCardPurchase}
             onUpdateTransaction={handleUpdateTransaction}
             onVoidTransaction={handleVoidTransaction}
             transactions={transactions}
@@ -864,5 +877,4 @@ function getErrorMessage(error: unknown): string {
 
   return "Nao foi possivel concluir a operacao.";
 }
-
 

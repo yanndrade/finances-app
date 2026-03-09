@@ -56,6 +56,10 @@ class CreateCardPurchaseRequest(BaseModel):
     person_id: str | None = None
 
 
+class UpdateCardPurchaseRequest(BaseModel):
+    card_id: str = Field(min_length=1)
+
+
 class CreateInvoicePaymentRequest(BaseModel):
     id: str = Field(min_length=1)
     amount: int = Field(gt=0)
@@ -156,6 +160,32 @@ def build_cards_router(
         except CardPurchaseAlreadyExistsError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+        except CardPurchaseServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.patch("/api/card-purchases/{purchase_id}")
+    def update_card_purchase(
+        purchase_id: str,
+        payload: UpdateCardPurchaseRequest,
+    ) -> dict[str, str | int | None]:
+        try:
+            return card_purchase_service.update_card_purchase(
+                purchase_id,
+                card_id=payload.card_id,
+            )
+        except (AccountNotFoundError, CardNotFoundError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except CardPurchaseNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(exc),
             ) from exc
         except CardPurchaseServiceError as exc:

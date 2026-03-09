@@ -57,11 +57,12 @@ export function TransactionDetailDrawer({
 }: TransactionDetailDrawerProps) {
   if (!transaction) return null;
 
+  const isEditableCardPurchase = isEditableCardPurchaseTransaction(transaction);
   const isReadOnly =
-    transaction.status === "readonly" ||
     transaction.ledger_event_type === "invoice_payment" ||
-    transaction.ledger_event_type === "card_purchase";
+    (transaction.status === "readonly" && !isEditableCardPurchase);
   const isVoided = transaction.status === "voided";
+  const canEdit = !isVoided && (isEditableCardPurchase || !isReadOnly);
 
   const cardId = extractCardId(transaction);
   const card = cards.find((candidate) => candidate.card_id === cardId);
@@ -187,7 +188,7 @@ export function TransactionDetailDrawer({
                 <Split className="h-3.5 w-3.5" />
                 Classificação & Split
               </h3>
-              {!isReadOnly && onStartSplit ? (
+              {!isReadOnly && !isEditableCardPurchase && onStartSplit ? (
                 <Button
                   variant="outline"
                   size="sm"
@@ -207,7 +208,7 @@ export function TransactionDetailDrawer({
         </div>
 
         <footer className="px-6 py-6 border-t bg-white flex items-center gap-3">
-          {!isReadOnly && !isVoided ? (
+          {canEdit ? (
             <>
               <Button
                 onClick={() => onEdit?.(transaction)}
@@ -215,13 +216,15 @@ export function TransactionDetailDrawer({
               >
                 Editar Transação
               </Button>
-              <Button
-                variant="ghost"
-                onClick={() => onVoid?.(transaction.transaction_id)}
-                className="text-rose-600 hover:bg-rose-50 rounded-xl h-11 px-6 border border-rose-100"
-              >
-                Estornar
-              </Button>
+              {!isEditableCardPurchase ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => onVoid?.(transaction.transaction_id)}
+                  className="text-rose-600 hover:bg-rose-50 rounded-xl h-11 px-6 border border-rose-100"
+                >
+                  Estornar
+                </Button>
+              ) : null}
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center gap-2 py-2 text-slate-400 text-sm font-medium">
@@ -265,5 +268,14 @@ function extractCardId(transaction: TransactionSummary): string | null {
     return ledgerSource.slice("card_liability:".length);
   }
   return null;
+}
+
+function isEditableCardPurchaseTransaction(transaction: TransactionSummary): boolean {
+  return (
+    transaction.ledger_event_type === "card_purchase" ||
+    transaction.ledger_event_type === "card_installment" ||
+    transaction.ledger_event_type === "recurring_card_purchase" ||
+    transaction.ledger_event_type === "recurring_card_installment"
+  );
 }
 

@@ -119,6 +119,35 @@ class CardPurchaseService:
             )
         return purchase
 
+    def update_card_purchase(
+        self,
+        purchase_id: str,
+        *,
+        card_id: str,
+    ) -> dict[str, str | int | None]:
+        self._sync_projections()
+        existing = self._find_card_purchase(purchase_id)
+        if existing is None:
+            raise CardPurchaseNotFoundError(
+                f"Card purchase '{purchase_id}' was not found."
+            )
+
+        if not card_id.strip():
+            raise CardPurchaseServiceError("card_id is required.")
+
+        if str(existing["card_id"]) == card_id:
+            return existing
+
+        self._card_reader.get_card(card_id)
+        self._append_event(
+            "CardPurchaseUpdated",
+            {
+                "id": purchase_id,
+                "card_id": card_id,
+            },
+        )
+        return self.get_card_purchase(purchase_id)
+
     def list_card_purchases(
         self,
         *,
