@@ -142,6 +142,7 @@ export type DashboardSummary = {
   net_flow: number;
   current_balance: number;
   fixed_expenses_total: number;
+  variable_expenses_total: number;
   installment_total: number;
   invoices_due_total: number;
   free_to_spend: number;

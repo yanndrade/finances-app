@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 
 import { MOBILE_NAV_ITEMS, Sidebar, isMobileEssentialView, type AppView } from "./sidebar";
 import { Button } from "./ui/button";
+import { MonthPicker } from "./ui/month-picker";
 import { cn } from "../lib/utils";
 import type { UiDensity } from "../lib/ui-density";
 
@@ -138,18 +139,10 @@ export function AppShell({
               {actions ? <div className="page-actions">{actions}</div> : null}
               {month && onMonthChange && activeView === "dashboard" ? (
                 <div className="flex-shrink-0">
-                  <input
-                    onChange={(event) => onMonthChange(event.target.value)}
-                    type="month"
-                    className={cn(
-                      "bg-muted/70 border border-input rounded-xl font-semibold text-slate-700 cursor-pointer outline-none transition-colors hover:bg-muted focus:ring-1 focus:ring-ring focus:bg-background",
-                      uiDensity === "dense"
-                        ? "px-2.5 py-2 text-xs"
-                        : uiDensity === "compact"
-                          ? "px-3 py-2 text-sm"
-                          : "px-3 py-2.5 text-sm",
-                    )}
-                    value={month}
+                  <MonthPicker
+                    month={month}
+                    onMonthChange={onMonthChange}
+                    uiDensity={uiDensity}
                   />
                 </div>
               ) : null}

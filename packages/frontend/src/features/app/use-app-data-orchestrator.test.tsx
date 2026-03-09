@@ -23,6 +23,7 @@ function buildDashboard(month: string): DashboardSummary {
     net_flow: month === "2026-01" ? 111_00 : 222_00,
     current_balance: month === "2026-01" ? 111_00 : 222_00,
     fixed_expenses_total: 0,
+    variable_expenses_total: 0,
     installment_total: 0,
     invoices_due_total: 0,
     free_to_spend: month === "2026-01" ? 111_00 : 222_00,

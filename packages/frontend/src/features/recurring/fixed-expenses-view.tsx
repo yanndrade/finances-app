@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { EmptyState } from "../../components/ui/empty-state";
 import { MoneyValue } from "../../components/ui/money-value";
+import { MonthPicker } from "../../components/ui/month-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import type {
   AccountSummary,
@@ -197,11 +198,11 @@ export function FixedExpensesView({
 
           <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
             <span>Mes</span>
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              onChange={(event) => onMonthChange(event.target.value)}
-              type="month"
-              value={month}
+            <MonthPicker
+              month={month}
+              onMonthChange={onMonthChange}
+              uiDensity={uiDensity}
+              className="bg-white hover:bg-slate-50 border-slate-200"
             />
           </label>
         </div>

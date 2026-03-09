@@ -81,6 +81,7 @@ function buildDashboard(
     net_flow: 132_500,
     current_balance: 132_500,
     fixed_expenses_total: 35_000,
+    variable_expenses_total: 0,
     installment_total: 12_500,
     invoices_due_total: 10_000,
     free_to_spend: 97_500,

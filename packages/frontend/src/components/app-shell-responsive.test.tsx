@@ -57,6 +57,7 @@ function renderShell(overrides?: Partial<ComponentProps<typeof AppShell>>) {
   const onNavigate = vi.fn<(view: AppView) => void>();
   const onOpenQuickAdd = vi.fn();
   const onOpenCommandPalette = vi.fn();
+  const onMonthChange = vi.fn();
 
   render(
     <AppShell
@@ -67,13 +68,15 @@ function renderShell(overrides?: Partial<ComponentProps<typeof AppShell>>) {
       onOpenQuickAdd={onOpenQuickAdd}
       onOpenCommandPalette={onOpenCommandPalette}
       uiDensity="compact"
+      month="2026-03"
+      onMonthChange={onMonthChange}
       {...overrides}
     >
       <section>Conteudo</section>
     </AppShell>,
   );
 
-  return { onNavigate, onOpenQuickAdd, onOpenCommandPalette };
+  return { onNavigate, onOpenQuickAdd, onOpenCommandPalette, onMonthChange };
 }
 
 describe("AppShell responsive behavior", () => {
@@ -150,5 +153,24 @@ describe("AppShell responsive behavior", () => {
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     expect(onOpenCommandPalette).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders MonthPicker on dashboard and handles month changes", () => {
+    installMatchMedia(false);
+    const { onMonthChange } = renderShell();
+
+    const monthInput = screen.getByDisplayValue("2026-03");
+    expect(monthInput).toBeInTheDocument();
+    expect(monthInput).toHaveAttribute("type", "month");
+
+    fireEvent.change(monthInput, { target: { value: "2026-04" } });
+    expect(onMonthChange).toHaveBeenCalledWith("2026-04");
+  });
+
+  it("hides MonthPicker when not on dashboard", () => {
+    installMatchMedia(false);
+    renderShell({ activeView: "cards" });
+
+    expect(screen.queryByDisplayValue("2026-03")).not.toBeInTheDocument();
   });
 });

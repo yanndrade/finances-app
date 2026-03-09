@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -138,5 +138,34 @@ describe("FixedExpensesView", () => {
     await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
 
     expect(onConfirmPending).toHaveBeenCalledWith("rec-1:2026-03");
+  });
+
+  it("allows changing the month via MonthPicker", () => {
+    const onMonthChange = vi.fn();
+
+    render(
+      <FixedExpensesView
+        accounts={accounts}
+        cards={cards}
+        categories={categories}
+        isSubmitting={false}
+        month="2026-03"
+        pendingExpenses={[]}
+        recurringRules={[]}
+        onConfirmPending={vi.fn().mockResolvedValue(undefined)}
+        onCreateRule={vi.fn().mockResolvedValue(undefined)}
+        onMonthChange={onMonthChange}
+        onOpenLedgerFiltered={vi.fn()}
+        onUpdateRule={vi.fn().mockResolvedValue(undefined)}
+        uiDensity="compact"
+      />,
+    );
+
+    const monthInput = screen.getByDisplayValue("2026-03");
+    expect(monthInput).toBeInTheDocument();
+    expect(monthInput).toHaveAttribute("type", "month");
+
+    fireEvent.change(monthInput, { target: { value: "2026-04" } });
+    expect(onMonthChange).toHaveBeenCalledWith("2026-04");
   });
 });
