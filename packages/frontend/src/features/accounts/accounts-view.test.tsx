@@ -60,7 +60,7 @@ describe("AccountsView", () => {
     vi.stubGlobal("confirm", confirmMock);
     const { onSetAccountActive } = renderAccountsView();
 
-    await user.click(screen.getByRole("button", { name: /excluir conta/i }));
+    await user.click(screen.getByRole("button", { name: /excluir/i }));
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
     await waitFor(() => {
@@ -74,7 +74,7 @@ describe("AccountsView", () => {
     vi.stubGlobal("confirm", confirmMock);
     const { onSetAccountActive } = renderAccountsView();
 
-    await user.click(screen.getByRole("button", { name: /reativar conta/i }));
+    await user.click(screen.getByRole("button", { name: /^entrar$/i }));
 
     expect(confirmMock).not.toHaveBeenCalled();
     await waitFor(() => {

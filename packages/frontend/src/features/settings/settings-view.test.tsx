@@ -28,12 +28,12 @@ describe("SettingsView", () => {
       />,
     );
 
-    expect(screen.getByText(/contas, cart(õ|o)es e estrutura base/i)).toBeInTheDocument();
+    expect(screen.getByText(/^estrutura base$/i)).toBeInTheDocument();
     expect(screen.getByText(/^categorias$/i)).toBeInTheDocument();
     expect(screen.queryByText(/^regras de auto-categorizacao$/i)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /gerenciar cart(õ|o)es/i }));
-    await userEvent.click(screen.getByRole("button", { name: /exportar backup json/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cart(õ|o)es$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^backup json$/i }));
 
     expect(onOpenCards).toHaveBeenCalledTimes(1);
     expect(onExportBackup).toHaveBeenCalledTimes(1);
@@ -59,8 +59,8 @@ describe("SettingsView", () => {
     );
 
     await userEvent.type(screen.getByLabelText(/nova categoria/i), "Viagens");
-    await userEvent.click(screen.getByRole("button", { name: /adicionar categoria/i }));
-    await userEvent.click(screen.getAllByRole("button", { name: /excluir categoria/i })[0]);
+    await userEvent.click(screen.getByRole("button", { name: "+" }));
+    await userEvent.click(screen.getAllByRole("button", { name: /×/i })[0]);
 
     expect(onCreateCategory).toHaveBeenCalledWith("Viagens");
     expect(onRemoveCategory).toHaveBeenCalledWith("pets");
@@ -82,7 +82,7 @@ describe("SettingsView", () => {
       />,
     );
 
-    expect(screen.getByText(/nenhuma categoria cadastrada ainda/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/lista de categorias/i)).not.toBeInTheDocument();
   });
 
   it("keeps danger zone collapsed until the user expands it", async () => {
@@ -102,13 +102,13 @@ describe("SettingsView", () => {
     );
 
     expect(
-      screen.queryByRole("button", { name: /apagar todos os dados/i }),
+      screen.queryByRole("button", { name: /zerar tudo/i }),
     ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /zona de perigo/i }));
 
     expect(
-      screen.getByRole("button", { name: /apagar todos os dados/i }),
+      screen.getByRole("button", { name: /zerar tudo/i }),
     ).toBeInTheDocument();
   });
 });
