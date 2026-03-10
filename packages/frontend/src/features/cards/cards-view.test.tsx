@@ -137,10 +137,10 @@ describe("CardsView", () => {
     const { onCreateCard } = renderCardsView();
 
     await user.click(screen.getByRole("tab", { name: /carteira/i }));
-    await user.click(screen.getAllByRole("button", { name: /^novo cartao$/i })[0]);
+    await user.click(screen.getAllByRole("button", { name: /^novo cartão$/i })[0]);
     expect((screen.getByLabelText(/limite total/i) as HTMLInputElement).value).toMatch(/R\$\s*0,00/);
     expect(screen.getByText(/opcional\./i)).toBeInTheDocument();
-    await user.type(screen.getByLabelText(/nome do cartao/i), "Cartao Verde");
+    await user.type(screen.getByLabelText(/nome do cart.o/i), "Cartao Verde");
     await user.clear(screen.getByLabelText(/limite total/i));
     await user.type(screen.getByLabelText(/limite total/i), "250000");
     await user.clear(screen.getByLabelText(/dia de fechamento/i));
@@ -191,7 +191,7 @@ describe("CardsView", () => {
     const { onSetCardActive } = renderCardsView();
 
     await user.click(screen.getByRole("tab", { name: /carteira/i }));
-    await user.click(screen.getByRole("button", { name: /excluir cartao/i }));
+    await user.click(screen.getByRole("button", { name: /excluir cartão/i }));
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
     await waitFor(() => {

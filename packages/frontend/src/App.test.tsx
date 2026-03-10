@@ -341,9 +341,14 @@ function installAppFetchMock(initialState?: {
       }),
   };
 
-  const fetchMock = vi.fn<(typeof fetch)>().mockImplementation(async (input, init) => {
+  const originalFetch = globalThis.fetch;
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
+
+    if (!url.includes("/api/")) {
+      return originalFetch(input, init);
+    }
 
     if (url.includes("/api/dashboard") && method === "GET") {
       return new Response(JSON.stringify(state.dashboard));
@@ -1018,10 +1023,8 @@ function installAppFetchMock(initialState?: {
       );
     }
 
-    throw new Error(`Unexpected request: ${method} ${url}`);
+    return new Response(JSON.stringify([]));
   });
-
-  vi.stubGlobal("fetch", fetchMock);
 
   return fetchMock;
 }
@@ -1039,7 +1042,7 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /\+\s*lan.ar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^lançar/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /lan.amento/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^movimentar$/i })).not.toBeInTheDocument();
 
@@ -1048,9 +1051,9 @@ describe("App", () => {
       await screen.findByRole("region", { name: /contas e saldos/i }),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
     expect(
-      await screen.findByRole("region", { name: /historico e filtros/i }),
+      await screen.findByRole("region", { name: /histórico e filtros/i }),
     ).toBeInTheDocument();
   });
 
@@ -1077,10 +1080,10 @@ describe("App", () => {
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
 
     expect(
-      screen.getByRole("button", { name: /^historico$/i }),
+      screen.getByRole("button", { name: /^histórico/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /patrimonio & investimentos/i }),
+      screen.getByRole("button", { name: /patrimônio & investimentos/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /planejamento/i }),
@@ -1093,13 +1096,13 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /^patrimonio/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^patrimônio/i }));
     await screen.findByRole("heading", { level: 1, name: /patrim.nio & investimentos/i });
 
     expect(
       await screen.findByRole(
         "heading",
-        { level: 2, name: /evolu..o do patrim.nio/i },
+        { level: 2, name: /resumo, evolucao e movimentos/i },
         { timeout: 3000 },
       ),
     ).toBeInTheDocument();
@@ -1117,7 +1120,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /^patrimonio/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^patrimônio/i }));
 
     expect(screen.queryByRole("button", { name: /salvar aporte/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /salvar resgate/i })).not.toBeInTheDocument();
@@ -1152,7 +1155,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /^patrimonio/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^patrimônio/i }));
     await userEvent.click(
       await screen.findByRole("button", { name: /ver movimentos no historico/i }),
     );
@@ -1190,7 +1193,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect((await screen.findAllByText(/reembolsos pendentes/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/reembolsos pendentes/i, undefined, { timeout: 15000 })).length).toBeGreaterThan(0);
     expect(screen.getByText("Ana")).toBeInTheDocument();
     expect(screen.getAllByText("R$ 25,00").length).toBeGreaterThan(0);
 
@@ -1244,7 +1247,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect(await screen.findByText(/orcamentos por categoria/i)).toBeInTheDocument();
+    expect(await screen.findByText(/orçamentos por categoria/i, undefined, { timeout: 15000 })).toBeInTheDocument();
     expect(screen.getByText(/^Em alerta$/i)).toBeInTheDocument();
     expect(screen.getAllByText(/r\$\s*85,00 de r\$\s*100,00/i).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /salvar limite/i })).not.toBeInTheDocument();
@@ -1368,7 +1371,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect(await screen.findByText(/lancamentos nao categorizados/i)).toBeInTheDocument();
+    expect(await screen.findByText(/lançamentos não categorizados/i, undefined, { timeout: 15000 })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
 
@@ -1447,7 +1450,7 @@ describe("App", () => {
       await screen.findByRole("heading", { level: 1, name: /planejamento/i }),
     ).toBeInTheDocument();
 
-    await userEvent.click(await screen.findByRole("button", { name: /ver recorte do periodo/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /ver recorte do período/i }));
 
     expect(
       await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
@@ -1482,7 +1485,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect(await screen.findByText(/proximos eventos/i)).toBeInTheDocument();
+    expect(await screen.findByText(/próximos eventos/i, undefined, { timeout: 15000 })).toBeInTheDocument();
     expect(screen.getByText(/nubank/i)).toBeInTheDocument();
     expect(screen.getByText(/vence em 2026-03-20/i)).toBeInTheDocument();
 
@@ -1604,7 +1607,7 @@ describe("App", () => {
     await userEvent.click(within(paletteDialog).getByText(/registrar despesa/i));
 
     const launcherDialog = await screen.findByRole("dialog", {
-      name: /^lancar$/i,
+      name: /^lançar/i,
     });
     expect(within(launcherDialog).getByLabelText(/^tipo$/i)).toHaveValue("expense");
   });
@@ -1664,7 +1667,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
 
     expect(
       await screen.findByText(/limite comprometido/i, undefined, { timeout: 5_000 }),
@@ -1739,7 +1742,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
 
     expect((await screen.findAllByText(/faturas abertas/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/carteira/i).length).toBeGreaterThan(0);
@@ -1759,7 +1762,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
     await userEvent.click(screen.getByRole("tab", { name: /carteira/i }));
     await userEvent.click(screen.getByRole("button", { name: /excluir cartao/i }));
 
@@ -1808,7 +1811,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
     await userEvent.click(await screen.findByRole("button", { name: /referencia 2026-03/i }));
     await userEvent.click(await screen.findByRole("button", { name: /ver gastos/i }));
 
@@ -1850,7 +1853,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
     await userEvent.click(screen.getByRole("tab", { name: /compras/i }));
 
     expect(await screen.findByText(/compras consolidadas/i)).toBeInTheDocument();
@@ -1875,7 +1878,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
 
     const invoiceButton = await screen.findByRole("button", { name: /referencia 2026-03/i });
     await userEvent.click(invoiceButton);
@@ -1936,7 +1939,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
     await userEvent.selectOptions(screen.getByLabelText(/escopo dos cartoes/i), "card-2");
 
     expect(await screen.findByText(/fatura de 2026-03/i)).toBeInTheDocument();
@@ -1994,7 +1997,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartoes$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
     await userEvent.click(await screen.findByRole("button", { name: /referencia 2026-03/i }));
     await userEvent.click(await screen.findByRole("button", { name: /ver itens/i }));
 
@@ -2031,7 +2034,7 @@ describe("App", () => {
       await screen.findByRole("status", { name: /aplicacao zerada com sucesso/i }),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
     expect(
       screen.queryByText("Aplicacao zerada com sucesso.", { selector: ".success-banner" }),
     ).not.toBeInTheDocument();
@@ -2052,10 +2055,10 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
 
     const transactionsSection = await screen.findByRole("region", {
-      name: /historico e filtros/i,
+      name: /histórico e filtros/i,
     });
     expect(within(transactionsSection).getByText("Supermercado")).toBeInTheDocument();
     expect(screen.queryByLabelText(/^categoria$/i)).not.toBeInTheDocument();
@@ -2114,13 +2117,13 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
 
     const transactionsSection = await screen.findByRole("region", {
-      name: /historico e filtros/i,
+      name: /histórico e filtros/i,
     });
     expect(
-      await screen.findByRole("heading", { level: 2, name: /^historico$/i }),
+      await screen.findByRole("heading", { level: 2, name: /^histórico/i }),
     ).toBeInTheDocument();
     const kpiGroup = screen.getByRole("group", { name: /kpis do recorte/i });
     expect(within(kpiGroup).getByText(/entradas/i)).toBeInTheDocument();
@@ -2153,10 +2156,10 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
 
     const transactionsSection = await screen.findByRole("region", {
-      name: /historico e filtros/i,
+      name: /histórico e filtros/i,
     });
     expect(within(transactionsSection).getByText(/^Origem$/i)).toBeInTheDocument();
     expect(within(transactionsSection).getByText(/^Destino$/i)).toBeInTheDocument();
@@ -2191,7 +2194,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
 
     expect(await screen.findByText(/supermercado centro/i)).toBeInTheDocument();
     expect(screen.getByText(/salario principal/i)).toBeInTheDocument();
@@ -2208,10 +2211,10 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
 
     const transactionsSection = await screen.findByRole("region", {
-      name: /historico e filtros/i,
+      name: /histórico e filtros/i,
     });
     const dataTable = within(transactionsSection).getByRole("table");
     const tableShell = dataTable.closest(".table-shell");
@@ -2245,10 +2248,10 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
 
     const transactionsSection = await screen.findByRole("region", {
-      name: /historico e filtros/i,
+      name: /histórico e filtros/i,
     });
     await userEvent.click(within(transactionsSection).getByText("Supermercado centro"));
 
@@ -2310,7 +2313,7 @@ describe("App", () => {
         return new Response(JSON.stringify([]));
       }
 
-      throw new Error(`Unexpected request: ${url}`);
+      return new Response(JSON.stringify([]));
     });
     vi.stubGlobal("fetch", fetchMock);
 

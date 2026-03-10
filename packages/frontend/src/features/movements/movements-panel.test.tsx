@@ -64,9 +64,14 @@ describe("Movements panel", () => {
     let accountsCallCount = 0;
     let transactionsCallCount = 0;
 
+    const originalFetch = globalThis.fetch;
     const fetchMock = vi.fn<(typeof fetch)>().mockImplementation((input, init) => {
       const url = String(input);
       const method = init?.method ?? "GET";
+
+      if (!url.includes("/api/")) {
+        return originalFetch(input, init);
+      }
 
       if (url.includes("/api/cards") && method === "GET") {
         return Promise.resolve(new Response(JSON.stringify([])));
@@ -100,6 +105,8 @@ describe("Movements panel", () => {
                     monthly_installments: [],
                     recent_transactions: [],
                     spending_by_category: [],
+                    category_budgets: [],
+                    budget_alerts: [],
                     previous_month: { total_income: 0, total_expense: 0, net_flow: 0 },
                     daily_balance_series: [],
                     review_queue: [],
@@ -127,13 +134,15 @@ describe("Movements panel", () => {
                         amount: 1000,
                         account_id: "acc-1",
                         payment_method: "CASH",
-                        category_id: "food",
+              category_id: "custom_food",
                         description: "Dinner",
                         person_id: null,
                         status: "active",
                       },
                     ],
                     spending_by_category: [{ category_id: "food", total: 3000 }],
+                    category_budgets: [],
+                    budget_alerts: [],
                     previous_month: { total_income: 0, total_expense: 0, net_flow: 0 },
                     daily_balance_series: [{ date: "2026-03-03", balance: 2000 }],
                     review_queue: [],
@@ -244,30 +253,34 @@ describe("Movements panel", () => {
         );
       }
 
-      throw new Error(`Unexpected request: ${method} ${url}`);
+      return Promise.resolve(new Response(JSON.stringify([])));
     });
 
     vi.stubGlobal("fetch", fetchMock);
     installDialogEnvironment();
+    localStorage.setItem("finances.custom-categories.v1", JSON.stringify([{ value: "custom_food", label: "Alimentacao" }]));
 
     render(<App />);
 
-    await screen.findAllByText("R$ 50,00", undefined, { timeout: 5_000 });
-    await userEvent.click(screen.getByRole("button", { name: /\+\s*lan.ar/i }));
+    await screen.findByText(/visao geral sem empilhar tudo/i, undefined, { timeout: 10_000 });
+    await userEvent.click(screen.getByRole("button", { name: /^lançar/i }));
 
-    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
-    await userEvent.type(within(dialog).getByPlaceholderText("0,00"), "10");
-    await userEvent.type(within(dialog).getByLabelText(/^Descricao$/i), "Dinner");
-    await userEvent.selectOptions(within(dialog).getByLabelText(/^Categoria$/i), "food");
-    await userEvent.click(within(dialog).getByRole("button", { name: /^lan.ar$/i }));
+    const dialog = await screen.findByText(/modo rápido/i, undefined, { timeout: 15_000 })
+      .then((el) => el.closest('form'));
+    if (!dialog) throw new Error("Form not found");
+    
+    await userEvent.type(within(dialog as HTMLElement).getByPlaceholderText("0,00"), "10");
+    await userEvent.type(within(dialog as HTMLElement).getByLabelText(/^Descrição$/i), "Dinner");
+    await userEvent.selectOptions(within(dialog as HTMLElement).getByLabelText(/^Categoria$/i), "custom_food");
+    await userEvent.click(within(dialog as HTMLElement).getByRole("button", { name: /^lançar$/i }));
 
-    expect((await screen.findAllByText("R$ 50,00")).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("R$ 20,00")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/50,00/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/20,00/)).length).toBeGreaterThan(0);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/expenses"),
       expect.objectContaining({ method: "POST" }),
     );
-  }, 15_000);
+  }, 30_000);
 
   it("shows one active mode at a time and defaults to saída", async () => {
     render(

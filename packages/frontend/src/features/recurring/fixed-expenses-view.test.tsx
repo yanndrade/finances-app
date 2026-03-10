@@ -111,7 +111,7 @@ describe("FixedExpensesView", () => {
       categoryId: "rent",
       description: undefined,
     });
-  });
+  }, 15_000);
 
   it("confirms a pending expense", async () => {
     const onConfirmPending = vi.fn<(pendingId: string) => Promise<void>>().mockResolvedValue();
@@ -138,7 +138,7 @@ describe("FixedExpensesView", () => {
     await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
 
     expect(onConfirmPending).toHaveBeenCalledWith("rec-1:2026-03");
-  });
+  }, 15_000);
 
   it("allows changing the month via MonthPicker", () => {
     const onMonthChange = vi.fn();

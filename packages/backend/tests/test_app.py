@@ -918,6 +918,7 @@ def test_dashboard_endpoint_returns_monthly_summary_from_projections(tmp_path) -
         "current_balance": 155_00,
         "fixed_expenses_total": 0,
         "installment_total": 0,
+        "variable_expenses_total": 20_00,
         "invoices_due_total": 0,
         "free_to_spend": 30_00,
         "pending_reimbursements_total": 0,
@@ -1749,6 +1750,7 @@ def test_dev_reset_endpoint_clears_accounts_transfers_and_card_purchases(tmp_pat
         "current_balance": 0,
         "fixed_expenses_total": 0,
         "installment_total": 0,
+        "variable_expenses_total": 0,
         "invoices_due_total": 0,
         "free_to_spend": 0,
         "pending_reimbursements_total": 0,
@@ -1800,6 +1802,7 @@ def test_cards_endpoints_support_create_list_and_update(tmp_path) -> None:
         "due_day": 20,
         "payment_account_id": "acc-1",
         "is_active": True,
+        "future_installment_total": 0,
     }
 
     list_response = client.get("/api/cards")
@@ -1814,6 +1817,7 @@ def test_cards_endpoints_support_create_list_and_update(tmp_path) -> None:
             "due_day": 20,
             "payment_account_id": "acc-1",
             "is_active": True,
+            "future_installment_total": 0,
         }
     ]
 
@@ -1838,6 +1842,7 @@ def test_cards_endpoints_support_create_list_and_update(tmp_path) -> None:
         "due_day": 18,
         "payment_account_id": "acc-2",
         "is_active": False,
+        "future_installment_total": 0,
     }
 
 

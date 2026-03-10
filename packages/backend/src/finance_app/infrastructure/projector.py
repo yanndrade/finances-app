@@ -1597,6 +1597,7 @@ class Projector:
             for row in invoice_rows
             if row.status in {"open", "partial"}
         )
+        variable_expenses_total = total_expense - fixed_expenses_total - installment_total
         free_to_spend = (
             total_income
             - total_expense
@@ -1611,6 +1612,7 @@ class Projector:
             "current_balance": int(balance_total or 0),
             "fixed_expenses_total": fixed_expenses_total,
             "installment_total": installment_total,
+            "variable_expenses_total": variable_expenses_total,
             "invoices_due_total": invoices_due_total,
             "free_to_spend": free_to_spend,
             "pending_reimbursements_total": sum(

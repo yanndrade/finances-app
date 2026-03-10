@@ -4,9 +4,19 @@ export type CategorySpending = {
 };
 
 export type ReportPeriod = "day" | "week" | "month" | "custom";
-export type TransactionTypeFilter = "income" | "expense" | "transfer" | "investment";
+export type TransactionTypeFilter =
+  | "income"
+  | "expense"
+  | "transfer"
+  | "investment";
 
-export type InvestmentView = "daily" | "weekly" | "monthly" | "bimonthly" | "quarterly" | "yearly";
+export type InvestmentView =
+  | "daily"
+  | "weekly"
+  | "monthly"
+  | "bimonthly"
+  | "quarterly"
+  | "yearly";
 
 export type InvestmentMovementSummary = {
   movement_id: string;
@@ -142,8 +152,8 @@ export type DashboardSummary = {
   net_flow: number;
   current_balance: number;
   fixed_expenses_total: number;
-  variable_expenses_total: number;
   installment_total: number;
+  variable_expenses_total: number;
   invoices_due_total: number;
   free_to_spend: number;
   pending_reimbursements_total?: number;
@@ -502,8 +512,8 @@ export type TransactionUpdatePayload = {
 export type TransactionPatchPayload = Partial<TransactionUpdatePayload>;
 
 export const API_BASE_URL =
-  (globalThis as { __FINANCES_API_BASE_URL__?: string }).__FINANCES_API_BASE_URL__ ??
-  "http://127.0.0.1:8000";
+  (globalThis as { __FINANCES_API_BASE_URL__?: string })
+    .__FINANCES_API_BASE_URL__ ?? "http://127.0.0.1:8000";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -517,7 +527,9 @@ export class ApiError extends Error {
   }
 }
 
-export async function fetchDashboardSummary(month: string): Promise<DashboardSummary> {
+export async function fetchDashboardSummary(
+  month: string,
+): Promise<DashboardSummary> {
   return requestJson<DashboardSummary>(`/api/dashboard?month=${month}`);
 }
 
@@ -537,25 +549,33 @@ export async function fetchRecurringRules(
   active?: boolean,
 ): Promise<RecurringRuleSummary[]> {
   const query =
-    typeof active === "boolean" ? `?active=${encodeURIComponent(String(active))}` : "";
+    typeof active === "boolean"
+      ? `?active=${encodeURIComponent(String(active))}`
+      : "";
   return requestJson<RecurringRuleSummary[]>(
     query.length > 0 ? `/api/recurring-rules${query}` : "/api/recurring-rules",
   );
 }
 
-export async function fetchPendings(month: string): Promise<PendingExpenseSummary[]> {
+export async function fetchPendings(
+  month: string,
+): Promise<PendingExpenseSummary[]> {
   return requestJson<PendingExpenseSummary[]>(
     `/api/pendings?month=${encodeURIComponent(month)}`,
   );
 }
 
-export async function fetchInvoices(cardId?: string): Promise<InvoiceSummary[]> {
+export async function fetchInvoices(
+  cardId?: string,
+): Promise<InvoiceSummary[]> {
   const query = cardId ? `?card=${encodeURIComponent(cardId)}` : "";
 
   return requestJson<InvoiceSummary[]>(`/api/invoices${query}`);
 }
 
-export async function fetchCardPurchases(cardId?: string): Promise<CardPurchaseSummary[]> {
+export async function fetchCardPurchases(
+  cardId?: string,
+): Promise<CardPurchaseSummary[]> {
   const query = cardId ? `?card=${encodeURIComponent(cardId)}` : "";
 
   return requestJson<CardPurchaseSummary[]>(
@@ -577,11 +597,15 @@ export async function fetchCardInstallments(params?: {
 
   const query = searchParams.toString();
   return requestJson<CardInstallmentSummary[]>(
-    query.length > 0 ? `/api/card-installments?${query}` : "/api/card-installments",
+    query.length > 0
+      ? `/api/card-installments?${query}`
+      : "/api/card-installments",
   );
 }
 
-export async function fetchInvoiceItems(invoiceId: string): Promise<InvoiceItemSummary[]> {
+export async function fetchInvoiceItems(
+  invoiceId: string,
+): Promise<InvoiceItemSummary[]> {
   return requestJson<InvoiceItemSummary[]>(
     `/api/invoices/${encodeURIComponent(invoiceId)}/items`,
   );
@@ -662,10 +686,14 @@ export async function fetchReportSummary(
     searchParams.set("text", filters.text);
   }
 
-  return requestJson<ReportSummary>(`/api/reports/summary?${searchParams.toString()}`);
+  return requestJson<ReportSummary>(
+    `/api/reports/summary?${searchParams.toString()}`,
+  );
 }
 
-export async function createAccount(payload: AccountPayload): Promise<AccountSummary> {
+export async function createAccount(
+  payload: AccountPayload,
+): Promise<AccountSummary> {
   return requestJson<AccountSummary>("/api/accounts", {
     method: "POST",
     body: JSON.stringify({
@@ -717,8 +745,14 @@ export async function createRecurringRule(
       amount: payload.amountInCents,
       due_day: payload.dueDay,
       payment_method: payload.paymentMethod,
-      account_id: payload.paymentMethod === "CARD" ? undefined : payload.accountId || undefined,
-      card_id: payload.paymentMethod === "CARD" ? payload.cardId || undefined : undefined,
+      account_id:
+        payload.paymentMethod === "CARD"
+          ? undefined
+          : payload.accountId || undefined,
+      card_id:
+        payload.paymentMethod === "CARD"
+          ? payload.cardId || undefined
+          : undefined,
       category_id: payload.categoryId,
       description: payload.description || undefined,
     }),
@@ -748,14 +782,26 @@ export async function updateRecurringRule(
 ): Promise<RecurringRuleSummary> {
   const body = {
     ...(payload.name !== undefined ? { name: payload.name } : {}),
-    ...(payload.amountInCents !== undefined ? { amount: payload.amountInCents } : {}),
+    ...(payload.amountInCents !== undefined
+      ? { amount: payload.amountInCents }
+      : {}),
     ...(payload.dueDay !== undefined ? { due_day: payload.dueDay } : {}),
-    ...(payload.paymentMethod !== undefined ? { payment_method: payload.paymentMethod } : {}),
-    ...(payload.categoryId !== undefined ? { category_id: payload.categoryId } : {}),
-    ...(payload.description !== undefined ? { description: payload.description || null } : {}),
+    ...(payload.paymentMethod !== undefined
+      ? { payment_method: payload.paymentMethod }
+      : {}),
+    ...(payload.categoryId !== undefined
+      ? { category_id: payload.categoryId }
+      : {}),
+    ...(payload.description !== undefined
+      ? { description: payload.description || null }
+      : {}),
     ...(payload.isActive !== undefined ? { is_active: payload.isActive } : {}),
-    ...(payload.accountId !== undefined ? { account_id: payload.accountId || null } : {}),
-    ...(payload.cardId !== undefined ? { card_id: payload.cardId || null } : {}),
+    ...(payload.accountId !== undefined
+      ? { account_id: payload.accountId || null }
+      : {}),
+    ...(payload.cardId !== undefined
+      ? { card_id: payload.cardId || null }
+      : {}),
   };
 
   return requestJson<RecurringRuleSummary>(`/api/recurring-rules/${ruleId}`, {
@@ -797,7 +843,9 @@ export async function updateCardPurchase(
   );
 }
 
-export async function payInvoice(payload: InvoicePaymentPayload): Promise<InvoiceSummary> {
+export async function payInvoice(
+  payload: InvoicePaymentPayload,
+): Promise<InvoiceSummary> {
   return requestJson<InvoiceSummary>(
     `/api/invoices/${encodeURIComponent(payload.invoiceId)}/payments`,
     {
@@ -821,7 +869,8 @@ export async function createCashTransaction(
     method: "POST",
     body: JSON.stringify({
       id: `ui-${Date.now()}`,
-      occurred_at: payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
+      occurred_at:
+        payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
       amount: payload.amountInCents,
       account_id: payload.accountId,
       payment_method: payload.paymentMethod,
@@ -832,12 +881,15 @@ export async function createCashTransaction(
   });
 }
 
-export async function createTransfer(payload: TransferPayload): Promise<TransactionSummary[]> {
+export async function createTransfer(
+  payload: TransferPayload,
+): Promise<TransactionSummary[]> {
   return requestJson<TransactionSummary[]>("/api/transfers", {
     method: "POST",
     body: JSON.stringify({
       id: `trf-${Date.now()}`,
-      occurred_at: payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
+      occurred_at:
+        payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
       from_account_id: payload.fromAccountId,
       to_account_id: payload.toAccountId,
       amount: payload.amountInCents,
@@ -851,14 +903,28 @@ export async function updateTransaction(
   payload: TransactionPatchPayload,
 ): Promise<TransactionSummary> {
   const body = {
-    ...(payload.occurredAt !== undefined ? { occurred_at: payload.occurredAt } : {}),
+    ...(payload.occurredAt !== undefined
+      ? { occurred_at: payload.occurredAt }
+      : {}),
     ...(payload.type !== undefined ? { type: payload.type } : {}),
-    ...(payload.amountInCents !== undefined ? { amount: payload.amountInCents } : {}),
-    ...(payload.accountId !== undefined ? { account_id: payload.accountId } : {}),
-    ...(payload.paymentMethod !== undefined ? { payment_method: payload.paymentMethod } : {}),
-    ...(payload.categoryId !== undefined ? { category_id: payload.categoryId } : {}),
-    ...(payload.description !== undefined ? { description: payload.description } : {}),
-    ...(payload.personId !== undefined ? { person_id: payload.personId || undefined } : {}),
+    ...(payload.amountInCents !== undefined
+      ? { amount: payload.amountInCents }
+      : {}),
+    ...(payload.accountId !== undefined
+      ? { account_id: payload.accountId }
+      : {}),
+    ...(payload.paymentMethod !== undefined
+      ? { payment_method: payload.paymentMethod }
+      : {}),
+    ...(payload.categoryId !== undefined
+      ? { category_id: payload.categoryId }
+      : {}),
+    ...(payload.description !== undefined
+      ? { description: payload.description }
+      : {}),
+    ...(payload.personId !== undefined
+      ? { person_id: payload.personId || undefined }
+      : {}),
   };
 
   return requestJson<TransactionSummary>(`/api/transactions/${transactionId}`, {
@@ -871,12 +937,15 @@ export async function voidTransaction(
   transactionId: string,
   reason?: string,
 ): Promise<TransactionSummary> {
-  return requestJson<TransactionSummary>(`/api/transactions/${transactionId}/void`, {
-    method: "POST",
-    body: JSON.stringify({
-      reason: reason || undefined,
-    }),
-  });
+  return requestJson<TransactionSummary>(
+    `/api/transactions/${transactionId}/void`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        reason: reason || undefined,
+      }),
+    },
+  );
 }
 
 export async function markReimbursementReceived(
@@ -970,13 +1039,19 @@ export async function fetchInvestmentOverview(
   return requestJson<InvestmentOverview>(`/api/investments/overview?${query}`);
 }
 
-export async function resetApplicationData(): Promise<{ status: string; message: string }> {
+export async function resetApplicationData(): Promise<{
+  status: string;
+  message: string;
+}> {
   return requestJson<{ status: string; message: string }>("/api/dev/reset", {
     method: "POST",
   });
 }
 
-export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+export async function requestJson<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -1033,7 +1108,8 @@ export function normalizeTimestampForApi(
     /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/,
   );
   if (match !== null) {
-    const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match;
+    const [, yearText, monthText, dayText, hourText, minuteText, secondText] =
+      match;
     const year = parseInt(yearText, 10);
     const month = parseInt(monthText, 10);
     const day = parseInt(dayText, 10);

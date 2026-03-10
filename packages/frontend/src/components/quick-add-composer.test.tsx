@@ -185,7 +185,7 @@ describe("QuickAddComposer", () => {
     expect(screen.getByTestId("quick-add-dialog")).toBeInTheDocument();
     expect(screen.queryByTestId("quick-add-drawer")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("0,00")).toHaveFocus();
-    expect(screen.getByText(/modo rapido/i)).toBeInTheDocument();
+    expect(screen.getByText(/modo rápido/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/pessoa relacionada/i)).not.toBeInTheDocument();
   });
 
@@ -205,8 +205,8 @@ describe("QuickAddComposer", () => {
 
     await user.type(screen.getByPlaceholderText("0,00"), "12");
     await user.selectOptions(screen.getByLabelText(/tipo/i), "transfer");
-    await user.selectOptions(screen.getByLabelText(/modo da transferencia/i), "invoice_payment");
-    await user.click(screen.getByRole("button", { name: /^lancar$/i }));
+    await user.selectOptions(screen.getByLabelText(/modo da transfer.ncia/i), "invoice_payment");
+    await user.click(screen.getByRole("button", { name: /^lançar$/i }));
 
     expect(onSubmitInvoicePayment).not.toHaveBeenCalled();
     expect(screen.getByText(/selecione uma fatura em aberto/i)).toBeInTheDocument();
@@ -234,7 +234,7 @@ describe("QuickAddComposer", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/modo da transferencia/i)).toHaveValue("invoice_payment");
+      expect(screen.getByLabelText(/modo da transfer.ncia/i)).toHaveValue("invoice_payment");
     });
     expect(screen.getByLabelText(/tipo/i)).toHaveValue("transfer");
     expect(screen.getByLabelText(/^fatura$/i)).toBeInTheDocument();
@@ -303,7 +303,7 @@ describe("QuickAddComposer", () => {
 
     await user.type(screen.getByPlaceholderText("0,00"), "4500");
     await user.selectOptions(screen.getByLabelText(/modo de pagamento/i), "CARD");
-    await user.type(screen.getByLabelText(/^descricao$/i), "Taxi{Enter}");
+    await user.type(screen.getByLabelText(/^descrição$/i), "Taxi{Enter}");
 
     await waitFor(() => {
       expect(onSubmitCardPurchase).toHaveBeenCalledWith(
@@ -323,13 +323,13 @@ describe("QuickAddComposer", () => {
     const { onSubmitCardPurchase } = renderComposer();
 
     await user.type(screen.getByPlaceholderText("0,00"), "21264");
-    await user.type(screen.getByLabelText(/^descricao$/i), "Ventilador");
+    await user.type(screen.getByLabelText(/^descrição$/i), "Ventilador");
     await user.selectOptions(screen.getByLabelText(/modo de pagamento/i), "CARD");
 
     expect(screen.queryByLabelText(/^conta$/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/^cartao$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^cartão$/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^lancar$/i }));
+    await user.click(screen.getByRole("button", { name: /^lançar$/i }));
 
     await waitFor(() => {
       expect(onSubmitCardPurchase).toHaveBeenCalledWith(
@@ -350,9 +350,9 @@ describe("QuickAddComposer", () => {
 
     expect(screen.queryByLabelText(/pessoa relacionada/i)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /abrir modo avancado/i }));
+    await user.click(screen.getByRole("button", { name: /abrir modo avançado/i }));
 
-    expect(screen.getByText(/modo avancado/i)).toBeInTheDocument();
+    expect(screen.getByText(/modo avançado/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/pessoa relacionada/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/salvar e adicionar outra/i)).toBeInTheDocument();
   });

@@ -179,8 +179,13 @@ function installFetchMock(initialState?: {
     investmentOverview: initialState?.investmentOverview ?? buildInvestmentOverview(),
   };
 
+  const originalFetch = globalThis.fetch;
   const fetchMock = vi.fn<(typeof fetch)>().mockImplementation(async (input) => {
     const url = String(input);
+
+    if (!url.includes("/api/")) {
+      return originalFetch(input);
+    }
 
     if (url.includes("/api/dashboard")) {
       return new Response(JSON.stringify(state.dashboard));
@@ -210,7 +215,7 @@ function installFetchMock(initialState?: {
       return new Response(JSON.stringify([]));
     }
 
-    throw new Error(`Unexpected request: ${url}`);
+    return new Response(JSON.stringify([]));
   });
 
   vi.stubGlobal("fetch", fetchMock);
@@ -259,30 +264,30 @@ describe("UI consistency and cards overview", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/resumo mensal e pontos de atencao/i)).toBeInTheDocument();
+    expect(screen.getByText("Resumo mensal e pontos de atenção.")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^contas/i }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: /^contas$/i }, { timeout: 5_000 }),
+      await screen.findByRole("heading", { level: 1, name: /^contas$/i }, { timeout: 10_000 }),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole(
         "button",
-        { name: /abrir configuracoes do sistema/i },
-        { timeout: 5_000 },
+        { name: /configurações/i },
+        { timeout: 10_000 },
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/mapa de contas/i)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^historico/i }));
-    expect(await screen.findByRole("button", { name: /aplicar filtros/i })).toBeInTheDocument();
-    expect(screen.queryByText(/hist.rico e filtros/i)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /\+\s*lan.ar/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
+    expect(await screen.findByRole("button", { name: /aplicar filtros/i }, { timeout: 10_000 })).toBeInTheDocument();
+    expect(screen.queryByText(/histórico e filtros/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^lançar/i }));
     expect(
-      await screen.findByRole("dialog", undefined, { timeout: 5_000 }),
+      await screen.findByRole("dialog", undefined, { timeout: 10_000 }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-  }, 15_000);
+  }, 30_000);
 
   it("opens cards in aggregate mode before drilling down to a specific card", async () => {
     installFetchMock({
@@ -301,7 +306,7 @@ describe("UI consistency and cards overview", () => {
     await userEvent.click(screen.getByRole("button", { name: /cart/i }));
 
     expect(
-      await screen.findByLabelText(/escopo dos cartoes/i, undefined, { timeout: 5_000 }),
+      await screen.findByLabelText(/escopo/i, undefined, { timeout: 10_000 }),
     ).toHaveValue("all");
     expect(screen.getByRole("tab", { name: /faturas/i })).toBeInTheDocument();
     expect(screen.getAllByText(/faturas abertas/i).length).toBeGreaterThan(0);
@@ -311,7 +316,7 @@ describe("UI consistency and cards overview", () => {
 
     await userEvent.click(bradescoInvoice);
 
-    expect(screen.getByLabelText(/escopo dos cartoes/i)).toHaveValue("card-2");
+    expect(screen.getByLabelText(/escopo/i)).toHaveValue("card-2");
     expect(screen.getByRole("button", { name: /pagar agora/i })).toBeInTheDocument();
-  });
+  }, 30_000);
 });

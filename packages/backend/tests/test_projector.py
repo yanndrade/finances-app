@@ -1794,6 +1794,7 @@ def test_projector_summarizes_dashboard_month_from_projections(tmp_path: Path) -
         "current_balance": 76_00,
         "fixed_expenses_total": 0,
         "installment_total": 0,
+        "variable_expenses_total": 15_00,
         "invoices_due_total": 0,
         "free_to_spend": 25_00,
         "pending_reimbursements_total": 0,

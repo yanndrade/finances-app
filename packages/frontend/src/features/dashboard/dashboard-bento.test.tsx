@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import type {
   AccountSummary,
@@ -55,8 +56,8 @@ const dashboard: DashboardSummary = {
   net_flow: 132_500,
   current_balance: 132_500,
   fixed_expenses_total: 35_000,
-  variable_expenses_total: 0,
   installment_total: 12_500,
+  variable_expenses_total: 70_000,
   invoices_due_total: 10_000,
   free_to_spend: 97_500,
   pending_reimbursements_total: 4_000,
@@ -174,18 +175,12 @@ const dashboard: DashboardSummary = {
 };
 
 describe("DashboardBento", () => {
-  it("prioritizes the radar tab and exposes the commitments tab on demand", async () => {
-    const user = userEvent.setup();
-
+  it("renders the main sections of the overview page", () => {
     render(
       <DashboardBento
         dashboard={dashboard}
         investmentOverview={null}
-        accounts={accounts}
         cards={cards}
-        invoices={invoices}
-        isSubmitting={false}
-        onMarkReimbursementReceived={vi.fn(async () => undefined)}
         onNavigate={vi.fn()}
         onOpenLedgerFiltered={vi.fn()}
         onOpenQuickAdd={vi.fn()}
@@ -193,46 +188,59 @@ describe("DashboardBento", () => {
       />,
     );
 
-    expect(screen.getByRole("tab", { name: /radar/i })).toHaveAttribute("data-state", "active");
+    // Hero metrics
+    expect(screen.getByText(/entradas/i)).toBeInTheDocument();
+    expect(screen.getByText(/gasto do mês/i)).toBeInTheDocument();
+    expect(screen.getByText(/resultado/i)).toBeInTheDocument();
+
+    // Metric strip
+    expect(screen.getAllByText(/gastos fixos/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/parceladas/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/variáveis/i).length).toBeGreaterThan(0);
+
+    // Features
     expect(screen.getByText(/raio-x de despesas/i)).toBeInTheDocument();
-    expect(screen.queryByText(/compromissos do m.s/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/próximos compromissos/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /compromissos/i }));
-
-    expect(screen.getByText(/compromissos do m.s/i)).toBeInTheDocument();
-    expect(screen.getByText(/fatura nubank/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/pix/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/conta principal/i)).toBeInTheDocument();
-    expect(screen.getByText(/faltam 2 parcela\(s\)/i)).toBeInTheDocument();
+    // Check for some data
+    expect(screen.getByText(/nubank/i)).toBeInTheDocument();
+    expect(screen.getByText(/aluguel/i)).toBeInTheDocument();
   });
 
-  it("routes alert actions to the filtered ledger from the radar tab", async () => {
+  it("handles navigation interactions correctly", async () => {
     const user = userEvent.setup();
+    const onNavigate = vi.fn();
     const onOpenLedgerFiltered = vi.fn();
 
     render(
       <DashboardBento
         dashboard={dashboard}
         investmentOverview={null}
-        accounts={accounts}
         cards={cards}
-        invoices={invoices}
-        isSubmitting={false}
-        onMarkReimbursementReceived={vi.fn(async () => undefined)}
-        onNavigate={vi.fn()}
+        onNavigate={onNavigate}
         onOpenLedgerFiltered={onOpenLedgerFiltered}
         onOpenQuickAdd={vi.fn()}
         uiDensity="compact"
       />,
     );
 
-    await user.click(screen.getByRole("tab", { name: /compromissos/i }));
-    await user.click(screen.getByRole("button", { name: /resolver/i }));
+    // Click Gastos Fixos in MetricStrip
+    const fixedExpensesBtn = screen.getByRole("button", {
+      name: /gastos fixos/i,
+    });
+    await user.click(fixedExpensesBtn);
+    expect(onNavigate).toHaveBeenCalledWith("fixedExpenses");
 
+    // Click category in ExpenseXray
+    const foodCategoryBtn = screen.getByRole("button", {
+      name: /alimentacao/i,
+    });
+    await user.click(foodCategoryBtn);
     expect(onOpenLedgerFiltered).toHaveBeenCalledWith(
       expect.objectContaining({
         period: "month",
-        preset: "uncategorized",
+        category: "food",
+        type: "expense",
       }),
       "2026-03",
     );

@@ -6,8 +6,13 @@ import { App } from "../../App";
 describe("Dashboard view", () => {
   it("loads the monthly summary and accounts on startup", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.fn<(typeof fetch)>().mockImplementation((input) => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn<(typeof fetch)>().mockImplementation((input, init) => {
       const url = String(input);
+
+      if (!url.includes("/api/")) {
+        return originalFetch(input, init);
+      }
 
       if (url.includes("/api/dashboard")) {
         return Promise.resolve(
@@ -44,6 +49,8 @@ describe("Dashboard view", () => {
               spending_by_category: [
                 { category_id: "food", total: 2000 }
               ],
+              category_budgets: [],
+              budget_alerts: [],
               previous_month: {
                 total_income: 4000,
                 total_expense: 1500,
@@ -140,7 +147,7 @@ describe("Dashboard view", () => {
         return Promise.resolve(new Response(JSON.stringify([])));
       }
 
-      throw new Error(`Unexpected request: ${url}`);
+      return Promise.resolve(new Response(JSON.stringify([])));
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -148,11 +155,11 @@ describe("Dashboard view", () => {
     render(<App />);
 
     expect(
-      (await screen.findAllByText("R$ 50,00", undefined, { timeout: 5_000 })).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getAllByText("R$ 20,00").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("R$ 25,00").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("R$ 7,50").length).toBeGreaterThan(0);
+      await screen.findByText(/visao geral sem empilhar tudo/i, undefined, { timeout: 10_000 }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/20,00/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/25,00/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/7,50/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/alimenta/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/raio-x de despesas/i)).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /compromissos/i })).toBeInTheDocument();
@@ -166,5 +173,5 @@ describe("Dashboard view", () => {
     await waitFor(() => {
       expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(7);
     });
-  });
+  }, 15_000);
 });

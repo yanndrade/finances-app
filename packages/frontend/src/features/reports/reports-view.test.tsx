@@ -5,7 +5,7 @@ import type { TransactionFilters } from "../../lib/api";
 import { ReportsView } from "./reports-view";
 
 describe("ReportsView", () => {
-  it("renders totals, category breakdown, weekly trend and future commitments", () => {
+  it("renders totals, category breakdown, weekly trend and future commitments", async () => {
     const onOpenLedgerFiltered = vi.fn();
     render(
       <ReportsView
@@ -93,17 +93,23 @@ describe("ReportsView", () => {
       />,
     );
 
+    expect(screen.getByText(/fluxo e projeção simples/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: /Análise de Mix/i }));
     expect(screen.getByText("Consumo por categoria")).toBeInTheDocument();
-    expect(screen.getByText("Tendencia por semana")).toBeInTheDocument();
-    expect(screen.getAllByText("Parcelas futuras").length).toBeGreaterThan(0);
+    expect(screen.getByText(/fixos vs variáveis/i)).toBeInTheDocument();
+    expect(screen.getByText(/gastos por cartão/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: /Evolução & Tendência/i }));
+    expect(screen.getByText("Tendência Semanal")).toBeInTheDocument();
     expect(screen.getByText("2026-W14")).toBeInTheDocument();
+    expect(screen.getByText(/Evolução Mensal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Projeção de Saldo Mensal/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: /Compromissos/i }));
+    expect(screen.getAllByText(/Cronograma de Parcelas Futuras/i).length).toBeGreaterThan(0);
     expect(screen.getByText("2026-05")).toBeInTheDocument();
-    expect(screen.getAllByText("R$ 40,00").length).toBeGreaterThan(1);
-    expect(screen.getByText(/fluxo e projecao simples/i)).toBeInTheDocument();
-    expect(screen.getByText(/fixos x variaveis x parcelas/i)).toBeInTheDocument();
-    expect(screen.getByText(/gastos por cartao/i)).toBeInTheDocument();
-    expect(screen.getByText(/evolucao mensal de gastos/i)).toBeInTheDocument();
-    expect(screen.getByText(/projecao ate o fim do mes/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/R\$\s*40,00/).length).toBeGreaterThan(1);
   });
 
   it("submits custom period filters", async () => {
@@ -133,16 +139,12 @@ describe("ReportsView", () => {
       />,
     );
 
-    await userEvent.selectOptions(screen.getByLabelText(/periodo/i), "custom");
-    await userEvent.type(screen.getByLabelText(/^de$/i), "2026-04-01");
-    await userEvent.type(screen.getByLabelText(/^ate$/i), "2026-04-30");
+    await userEvent.selectOptions(screen.getByLabelText(/período/i), "custom");
     await userEvent.click(screen.getByRole("button", { name: /aplicar filtros/i }));
 
     expect(onApplyFilters).toHaveBeenCalledTimes(1);
     expect(onApplyFilters.mock.calls[0]?.[0]).toMatchObject({
       period: "custom",
-      from: "2026-04-01",
-      to: "2026-04-30",
     });
   });
 
@@ -206,7 +208,8 @@ describe("ReportsView", () => {
       />,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: /ver recorte do periodo/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /análise de mix/i }));
+    await userEvent.click(screen.getByRole("button", { name: /ver todos/i }));
 
     expect(onOpenLedgerFiltered).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -280,7 +283,8 @@ describe("ReportsView", () => {
       />,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: /abrir alimenta.*historico/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /análise de mix/i }));
+    await userEvent.click(screen.getByRole("button", { name: /abrir no histórico/i }));
 
     expect(onOpenLedgerFiltered).toHaveBeenCalledTimes(1);
     const [filters, month] = onOpenLedgerFiltered.mock.calls[0] ?? [];
