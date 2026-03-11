@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+    .scrollbar-hide {
+        /* Firefox */
+        scrollbar-width: none;
+        /* IE and Edge */
+        -ms-overflow-style: none;
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+}
+
 @layer base {
     :root {
         --background: 210 22% 96%;
@@ -42,15 +54,24 @@
         --danger: 343 78% 50%;
         --destructive: var(--danger);
         --destructive-foreground: 0 0% 100%;
-        --finance-income: var(--success);
-        --finance-expense: var(--danger);
-        --finance-transfer: 213 18% 42%;
+        --finance-income: 155 60% 28%;
+        --finance-expense: 350 55% 40%;
+        --finance-transfer: 213 18% 50%;
+        --finance-investment: 180 40% 30%;
+        --finance-review: 38 80% 50%;
+        --accent-navy: 215 50% 20%;
+        --surface-paper: 40 15% 97%;
+        --lifecycle-forecast: 220 13% 62%;
+        --lifecycle-pending: 38 80% 50%;
+        --lifecycle-cleared: 155 60% 28%;
+        --lifecycle-cancelled: 220 13% 62%;
+        --lifecycle-voided: 350 55% 40%;
         --border: 214 20% 85%;
         --input: 214 20% 85%;
         --ring: var(--primary-accent);
         --chart-primary: var(--primary-accent);
-        --chart-income: var(--success);
-        --chart-expense: var(--danger);
+        --chart-income: var(--finance-income);
+        --chart-expense: var(--finance-expense);
         --chart-transfer: var(--finance-transfer);
         --radius: 0.75rem;
     }

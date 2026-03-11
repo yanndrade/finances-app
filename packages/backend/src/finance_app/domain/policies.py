@@ -10,5 +10,9 @@ def budget_status(*, spent: int, limit: int) -> str:
     return "ok"
 
 
-def requires_review(*, description: str | None) -> bool:
-    return description is None or description.strip() == ""
+def requires_review(
+    *, description: str | None, category_id: str | None = None
+) -> bool:
+    del description
+    del category_id
+    return False

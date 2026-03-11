@@ -15,7 +15,9 @@ def test_budget_status_respects_warning_and_exceeded_thresholds() -> None:
     assert budget_status(spent=10_001, limit=10_000) == "exceeded"
 
 
-def test_requires_review_when_description_is_empty() -> None:
-    assert requires_review(description=None) is True
-    assert requires_review(description="") is True
-    assert requires_review(description="Internet") is False
+def test_requires_review_is_disabled() -> None:
+    assert requires_review(description=None, category_id="other") is False
+    assert requires_review(description="", category_id="uncategorized") is False
+    assert requires_review(description="Internet", category_id="internet") is False
+    assert requires_review(description=None, category_id="food") is False
+    assert requires_review(description="", category_id="food") is False

@@ -1,30 +1,22 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date
-from datetime import datetime
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from threading import RLock
 
-from sqlalchemy import Boolean
-from sqlalchemy import Integer
-from sqlalchemy import String
-from sqlalchemy import and_
-from sqlalchemy import func
+from sqlalchemy import Boolean, Integer, String, and_, func, inspect, or_
 from sqlalchemy.exc import NoSuchTableError
-from sqlalchemy import inspect
-from sqlalchemy import or_
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
-from finance_app.domain.cards import PurchaseInstallmentAllocation
-from finance_app.domain.cards import allocate_purchase_installments
+from finance_app.domain.cards import (
+    PurchaseInstallmentAllocation,
+    allocate_purchase_installments,
+)
 from finance_app.domain.events import StoredEvent
 from finance_app.domain.policies import (
     budget_status as domain_budget_status,
+)
+from finance_app.domain.policies import (
     investment_goal_target,
     requires_review,
 )
@@ -32,8 +24,8 @@ from finance_app.domain.projections import (
     AccountProjection,
     BalanceStateProjection,
     BudgetProjection,
-    CardProjection,
     CardInstallmentProjection,
+    CardProjection,
     CardPurchaseProjection,
     InvestmentMovementProjection,
     InvoiceItemProjection,
@@ -42,6 +34,7 @@ from finance_app.domain.projections import (
     RecurringRuleProjection,
     ReimbursementProjection,
     TransactionProjection,
+    UnifiedMovementProjection,
 )
 from finance_app.infrastructure.db import get_engine
 from finance_app.infrastructure.event_store import EventStore
@@ -236,6 +229,32 @@ class InvestmentMovementRecord(ProjectionBase):
     invested_delta: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class UnifiedMovementRecord(ProjectionBase):
+    __tablename__ = "unified_movements"
+
+    movement_id: Mapped[str] = mapped_column(String, primary_key=True)
+    kind: Mapped[str] = mapped_column(String)
+    origin_type: Mapped[str] = mapped_column(String)
+    title: Mapped[str] = mapped_column(String)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    posted_at: Mapped[str] = mapped_column(String)
+    competence_month: Mapped[str] = mapped_column(String)
+    account_id: Mapped[str] = mapped_column(String)
+    card_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    payment_method: Mapped[str] = mapped_column(String)
+    category_id: Mapped[str] = mapped_column(String)
+    counterparty: Mapped[str | None] = mapped_column(String, nullable=True)
+    lifecycle_status: Mapped[str] = mapped_column(String)
+    edit_policy: Mapped[str] = mapped_column(String)
+    parent_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    group_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    transfer_direction: Mapped[str | None] = mapped_column(String, nullable=True)
+    installment_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    installment_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_event_type: Mapped[str] = mapped_column(String)
+
+
 class Projector:
     def __init__(
         self,
@@ -250,11 +269,13 @@ class Projector:
             autoflush=False,
             autocommit=False,
         )
+        self._projection_consistency_checked = False
 
     def bootstrap(self) -> None:
         with self._lock:
             if self._projection_schema_requires_rebuild():
                 ProjectionBase.metadata.drop_all(self._engine)
+                self._projection_consistency_checked = False
 
             ProjectionBase.metadata.create_all(self._engine)
             with self._session_factory.begin() as session:
@@ -263,6 +284,73 @@ class Projector:
                     session.add(
                         EventCursorRecord(singleton_id=1, last_applied_event_id=0)
                     )
+                if not self._projection_consistency_checked:
+                    self._repair_card_purchase_projection_consistency(session)
+                    self._projection_consistency_checked = True
+
+    def _repair_card_purchase_projection_consistency(
+        self,
+        session: Session,
+    ) -> None:
+        rows = (
+            session.query(
+                UnifiedMovementRecord,
+                CardPurchaseProjectionRecord.installments_count,
+                CardPurchaseInstallmentRecord.installment_number,
+                CardPurchaseInstallmentRecord.installments_count,
+            )
+            .join(
+                CardPurchaseProjectionRecord,
+                UnifiedMovementRecord.parent_id
+                == CardPurchaseProjectionRecord.purchase_id,
+            )
+            .outerjoin(
+                CardPurchaseInstallmentRecord,
+                UnifiedMovementRecord.movement_id
+                == CardPurchaseInstallmentRecord.installment_id,
+            )
+            .filter(
+                UnifiedMovementRecord.source_event_type.in_(
+                    ["CardPurchaseCreated", "CardPurchaseUpdated"]
+                )
+            )
+            .all()
+        )
+
+        for (
+            movement,
+            purchase_installments_count,
+            installment_number,
+            installment_row_count,
+        ) in rows:
+            expected_installments_count = int(
+                installment_row_count or purchase_installments_count or 1
+            )
+            expected_origin_type = (
+                "installment"
+                if expected_installments_count > 1
+                else "card_purchase"
+            )
+            expected_payment_method = (
+                "CREDIT_INSTALLMENT"
+                if expected_installments_count > 1
+                else "CREDIT_CASH"
+            )
+            expected_installment_number = (
+                int(installment_number)
+                if expected_installments_count > 1 and installment_number is not None
+                else None
+            )
+            expected_installment_total = (
+                expected_installments_count
+                if expected_installments_count > 1
+                else None
+            )
+
+            movement.origin_type = expected_origin_type
+            movement.payment_method = expected_payment_method
+            movement.installment_number = expected_installment_number
+            movement.installment_total = expected_installment_total
 
     def run(self) -> int:
         with self._lock:
@@ -1364,7 +1452,7 @@ class Projector:
                     .all()
                 )
 
-                # Review queue: transactions missing description or with placeholder category
+                # Review queue: transactions with placeholder categories
                 review_rows: Sequence[TransactionProjectionRecord] = (
                     session.query(TransactionProjectionRecord)
                     .filter(TransactionProjectionRecord.occurred_at.like(f"{month}-%"))
@@ -1451,10 +1539,15 @@ class Projector:
             if row.payment_method == "CARD" and row.transaction_id is not None
         }
         display_installment_rows = [
-            row for row in installment_rows if row.purchase_id not in fixed_card_purchase_ids
+            row
+            for row in installment_rows
+            if row.installments_count > 1
+            and row.purchase_id not in fixed_card_purchase_ids
         ]
         installment_total = sum(row.amount for row in display_installment_rows)
-        total_expense = expense_from_transactions + sum(row.amount for row in installment_rows)
+        total_expense = expense_from_transactions + sum(
+            row.amount for row in installment_rows
+        )
 
         # Spending by category (expenses only, excluding transfers)
         category_totals: dict[str, int] = {}
@@ -1510,7 +1603,10 @@ class Projector:
                 direction=row.direction,
             ).to_dict()
             for row in review_rows
-            if requires_review(description=row.description)
+            if requires_review(
+                description=row.description,
+                category_id=row.category_id,
+            )
         ]
         pending_reimbursements = [
             ReimbursementProjection(
@@ -1597,7 +1693,9 @@ class Projector:
             for row in invoice_rows
             if row.status in {"open", "partial"}
         )
-        variable_expenses_total = total_expense - fixed_expenses_total - installment_total
+        variable_expenses_total = (
+            total_expense - fixed_expenses_total - installment_total
+        )
         free_to_spend = (
             total_income
             - total_expense
@@ -1957,6 +2055,13 @@ class Projector:
             allocations=visible_allocations,
         )
 
+        _purchase_description = _optional_string(payload.get("description"))
+        _purchase_category_id = str(payload["category_id"])
+        _installments_count = int(payload.get("installments_count", 1))
+        _purchase_method = (
+            "CREDIT_INSTALLMENT" if _installments_count > 1 else "CREDIT_CASH"
+        )
+        _origin_type = "installment" if _installments_count > 1 else "card_purchase"
         for allocation in visible_allocations:
             installment_id = f"{purchase_id}:{allocation.installment_number}"
             session.add(
@@ -1967,7 +2072,7 @@ class Projector:
                     purchase_date=str(payload["purchase_date"]),
                     category_id=str(payload["category_id"]),
                     installment_number=allocation.installment_number,
-                    installments_count=int(payload.get("installments_count", 1)),
+                    installments_count=_installments_count,
                     amount=allocation.amount,
                     invoice_id=f"{card_id}:{allocation.reference_month}",
                     reference_month=allocation.reference_month,
@@ -1979,6 +2084,36 @@ class Projector:
                 session,
                 card_id=card_id,
                 allocation=allocation,
+            )
+            self._upsert_unified_movement(
+                session,
+                movement_id=installment_id,
+                kind="expense",
+                origin_type=_origin_type,
+                title=_purchase_description or _purchase_category_id,
+                description=_purchase_description,
+                amount=allocation.amount,
+                posted_at=allocation.due_date + "T00:00:00Z",
+                competence_month=allocation.reference_month,
+                account_id=card.payment_account_id,
+                card_id=card_id,
+                payment_method=_purchase_method,
+                category_id=_purchase_category_id,
+                counterparty=None,
+                lifecycle_status="pending",
+                edit_policy="locked",
+                parent_id=purchase_id,
+                group_id=None,
+                transfer_direction=None,
+                installment_number=(
+                    allocation.installment_number
+                    if _installments_count > 1
+                    else None
+                ),
+                installment_total=(
+                    _installments_count if _installments_count > 1 else None
+                ),
+                source_event_type="CardPurchaseCreated",
             )
 
     def _apply_card_purchase_updated(
@@ -2004,7 +2139,9 @@ class Projector:
             .filter(CardPurchaseInstallmentRecord.purchase_id == purchase_id)
             .all()
         )
-        current_person_id = self._card_purchase_person_id(session, purchase_id=purchase_id)
+        current_person_id = self._card_purchase_person_id(
+            session, purchase_id=purchase_id
+        )
         self._remove_card_purchase_installments(
             session,
             purchase_id=purchase_id,
@@ -2038,7 +2175,15 @@ class Projector:
             account_id=card.payment_account_id,
             allocations=visible_allocations,
         )
+        # Remove stale unified movements before recreating
+        self._remove_unified_movements_by_parent(session, parent_id=purchase_id)
 
+        _upd_method = (
+            "CREDIT_INSTALLMENT" if existing.installments_count > 1 else "CREDIT_CASH"
+        )
+        _origin_type = (
+            "installment" if existing.installments_count > 1 else "card_purchase"
+        )
         for allocation in visible_allocations:
             installment_id = f"{purchase_id}:{allocation.installment_number}"
             session.add(
@@ -2061,6 +2206,38 @@ class Projector:
                 session,
                 card_id=new_card_id,
                 allocation=allocation,
+            )
+            self._upsert_unified_movement(
+                session,
+                movement_id=installment_id,
+                kind="expense",
+                origin_type=_origin_type,
+                title=existing.description or existing.category_id,
+                description=existing.description,
+                amount=allocation.amount,
+                posted_at=allocation.due_date + "T00:00:00Z",
+                competence_month=allocation.reference_month,
+                account_id=card.payment_account_id,
+                card_id=new_card_id,
+                payment_method=_upd_method,
+                category_id=existing.category_id,
+                counterparty=None,
+                lifecycle_status="pending",
+                edit_policy="locked",
+                parent_id=purchase_id,
+                group_id=None,
+                transfer_direction=None,
+                installment_number=(
+                    allocation.installment_number
+                    if existing.installments_count > 1
+                    else None
+                ),
+                installment_total=(
+                    existing.installments_count
+                    if existing.installments_count > 1
+                    else None
+                ),
+                source_event_type="CardPurchaseCreated",
             )
 
     def _apply_recurring_rule_created(
@@ -2164,6 +2341,36 @@ class Projector:
             session,
             account_id=str(payload["account_id"]),
             delta=cash_delta,
+        )
+        _inv_type = str(payload["type"])
+        _inv_description = _optional_string(payload.get("description"))
+        _inv_occurred_at = str(payload["occurred_at"])
+        _inv_title = _inv_description or (
+            "Aporte" if _inv_type == "contribution" else "Resgate"
+        )
+        self._upsert_unified_movement(
+            session,
+            movement_id=movement_id,
+            kind="investment",
+            origin_type="investment",
+            title=_inv_title,
+            description=_inv_description,
+            amount=abs(cash_delta),
+            posted_at=_inv_occurred_at,
+            competence_month=_inv_occurred_at[:7],
+            account_id=str(payload["account_id"]),
+            card_id=None,
+            payment_method="BALANCE",
+            category_id="investment",
+            counterparty=None,
+            lifecycle_status="cleared",
+            edit_policy="locked",
+            parent_id=None,
+            group_id=None,
+            transfer_direction=None,
+            installment_number=None,
+            installment_total=None,
+            source_event_type="InvestmentMovementRecorded",
         )
 
     def _apply_invoice_item(
@@ -2328,6 +2535,37 @@ class Projector:
             account_id=str(payload["account_id"]),
             occurred_at=str(payload["occurred_at"]),
         )
+        _tx_type = str(payload["type"])
+        _occurred_at = str(payload["occurred_at"])
+        _tx_status = str(payload.get("status", "active"))
+        _description = _optional_string(payload.get("description"))
+        _category_id = str(payload["category_id"])
+        self._upsert_unified_movement(
+            session,
+            movement_id=transaction_id,
+            kind=_tx_type,
+            origin_type="manual",
+            title=_description or _category_id,
+            description=_description,
+            amount=int(payload["amount"]),
+            posted_at=_occurred_at,
+            competence_month=_occurred_at[:7],
+            account_id=str(payload["account_id"]),
+            card_id=None,
+            payment_method=str(payload["payment_method"]),
+            category_id=_category_id,
+            counterparty=_optional_string(payload.get("person_id")),
+            lifecycle_status="cleared" if _tx_status == "active" else "voided",
+            edit_policy="editable" if _tx_status == "active" else "locked",
+            parent_id=None,
+            group_id=None,
+            transfer_direction=None,
+            installment_number=None,
+            installment_total=None,
+            source_event_type=(
+                "IncomeCreated" if _tx_type == "income" else "ExpenseCreated"
+            ),
+        )
 
     def _apply_transaction_updated(
         self,
@@ -2393,6 +2631,32 @@ class Projector:
             account_id=existing.account_id,
             occurred_at=existing.occurred_at,
         )
+        self._upsert_unified_movement(
+            session,
+            movement_id=transaction_id,
+            kind=existing.type,
+            origin_type="manual",
+            title=existing.description or existing.category_id,
+            description=existing.description,
+            amount=existing.amount,
+            posted_at=existing.occurred_at,
+            competence_month=existing.occurred_at[:7],
+            account_id=existing.account_id,
+            card_id=None,
+            payment_method=existing.payment_method,
+            category_id=existing.category_id,
+            counterparty=existing.person_id,
+            lifecycle_status="cleared" if existing.status == "active" else "voided",
+            edit_policy="editable" if existing.status == "active" else "locked",
+            parent_id=None,
+            group_id=None,
+            transfer_direction=None,
+            installment_number=None,
+            installment_total=None,
+            source_event_type=(
+                "IncomeCreated" if existing.type == "income" else "ExpenseCreated"
+            ),
+        )
 
     def _apply_transaction_voided(
         self,
@@ -2420,6 +2684,32 @@ class Projector:
             status=existing.status,
             account_id=existing.account_id,
             occurred_at=existing.occurred_at,
+        )
+        self._upsert_unified_movement(
+            session,
+            movement_id=transaction_id,
+            kind=existing.type,
+            origin_type="manual",
+            title=existing.description or existing.category_id,
+            description=existing.description,
+            amount=existing.amount,
+            posted_at=existing.occurred_at,
+            competence_month=existing.occurred_at[:7],
+            account_id=existing.account_id,
+            card_id=None,
+            payment_method=existing.payment_method,
+            category_id=existing.category_id,
+            counterparty=existing.person_id,
+            lifecycle_status="voided",
+            edit_policy="locked",
+            parent_id=None,
+            group_id=None,
+            transfer_direction=None,
+            installment_number=None,
+            installment_total=None,
+            source_event_type=(
+                "IncomeCreated" if existing.type == "income" else "ExpenseCreated"
+            ),
         )
 
     def _apply_reimbursement_received(
@@ -2459,6 +2749,11 @@ class Projector:
         pending.status = "confirmed"
         pending.transaction_id = _optional_string(payload.get("transaction_id"))
         pending.confirmed_at = _optional_string(payload.get("confirmed_at"))
+        # Promote forecast → cleared in unified movements
+        existing_um = session.get(UnifiedMovementRecord, pending_id)
+        if existing_um is not None:
+            existing_um.lifecycle_status = "cleared"
+            existing_um.edit_policy = "inherited"
 
     def _apply_transfer_created(
         self,
@@ -2517,6 +2812,31 @@ class Projector:
                 account_id=str(payload["to_account_id"]),
                 delta=amount,
             )
+        # One unified movement per transfer (debit side; counterparty = destination)
+        self._upsert_unified_movement(
+            session,
+            movement_id=transfer_id,
+            kind="transfer",
+            origin_type="transfer",
+            title=description or "Transferência",
+            description=description,
+            amount=amount,
+            posted_at=occurred_at,
+            competence_month=occurred_at[:7],
+            account_id=str(payload["from_account_id"]),
+            card_id=None,
+            payment_method="TRANSFER",
+            category_id="transfer",
+            counterparty=str(payload["to_account_id"]),
+            lifecycle_status="cleared",
+            edit_policy="locked",
+            parent_id=None,
+            group_id=transfer_id,
+            transfer_direction="out",
+            installment_number=None,
+            installment_total=None,
+            source_event_type="TransferCreated",
+        )
 
     def _sync_reimbursement_from_transaction(
         self,
@@ -2645,6 +2965,7 @@ class Projector:
             if session.get(PendingProjectionRecord, pending_id) is not None:
                 continue
 
+            _pending_due_date = self._due_date_for_month(month, row.due_day)
             session.add(
                 PendingProjectionRecord(
                     pending_id=pending_id,
@@ -2652,7 +2973,7 @@ class Projector:
                     month=month,
                     name=row.name,
                     amount=row.amount,
-                    due_date=self._due_date_for_month(month, row.due_day),
+                    due_date=_pending_due_date,
                     account_id=row.account_id,
                     card_id=row.card_id,
                     payment_method=row.payment_method,
@@ -2662,6 +2983,30 @@ class Projector:
                     transaction_id=None,
                     confirmed_at=None,
                 )
+            )
+            self._upsert_unified_movement(
+                session,
+                movement_id=pending_id,
+                kind="expense",
+                origin_type="recurring",
+                title=row.name,
+                description=row.description,
+                amount=row.amount,
+                posted_at=_pending_due_date + "T00:00:00Z",
+                competence_month=month,
+                account_id=row.account_id or "",
+                card_id=row.card_id,
+                payment_method=row.payment_method,
+                category_id=row.category_id,
+                counterparty=None,
+                lifecycle_status="forecast",
+                edit_policy="inherited",
+                parent_id=None,
+                group_id=row.rule_id,
+                transfer_direction=None,
+                installment_number=None,
+                installment_total=None,
+                source_event_type="RecurringRuleCreated",
             )
 
     def _pending_to_dict(
@@ -3520,6 +3865,9 @@ class Projector:
         if investment_columns != expected_investment_columns:
             return True
 
+        if not self._unified_movements_schema_ok(inspector):
+            return True
+
         return False
 
     def _safe_column_names(
@@ -3654,6 +4002,368 @@ class Projector:
             return
 
         invoice.status = "open"
+
+    # ------------------------------------------------------------------ #
+    #  Unified Movement helpers                                            #
+    # ------------------------------------------------------------------ #
+
+    def _upsert_unified_movement(
+        self,
+        session: Session,
+        *,
+        movement_id: str,
+        kind: str,
+        origin_type: str,
+        title: str,
+        description: str | None,
+        amount: int,
+        posted_at: str,
+        competence_month: str,
+        account_id: str,
+        card_id: str | None,
+        payment_method: str,
+        category_id: str,
+        counterparty: str | None,
+        lifecycle_status: str,
+        edit_policy: str,
+        parent_id: str | None,
+        group_id: str | None,
+        transfer_direction: str | None,
+        installment_number: int | None,
+        installment_total: int | None,
+        source_event_type: str,
+    ) -> None:
+        existing = session.get(UnifiedMovementRecord, movement_id)
+        if existing is None:
+            session.add(
+                UnifiedMovementRecord(
+                    movement_id=movement_id,
+                    kind=kind,
+                    origin_type=origin_type,
+                    title=title,
+                    description=description,
+                    amount=amount,
+                    posted_at=posted_at,
+                    competence_month=competence_month,
+                    account_id=account_id,
+                    card_id=card_id,
+                    payment_method=payment_method,
+                    category_id=category_id,
+                    counterparty=counterparty,
+                    lifecycle_status=lifecycle_status,
+                    edit_policy=edit_policy,
+                    parent_id=parent_id,
+                    group_id=group_id,
+                    transfer_direction=transfer_direction,
+                    installment_number=installment_number,
+                    installment_total=installment_total,
+                    source_event_type=source_event_type,
+                )
+            )
+        else:
+            existing.kind = kind
+            existing.origin_type = origin_type
+            existing.title = title
+            existing.description = description
+            existing.amount = amount
+            existing.posted_at = posted_at
+            existing.competence_month = competence_month
+            existing.account_id = account_id
+            existing.card_id = card_id
+            existing.payment_method = payment_method
+            existing.category_id = category_id
+            existing.counterparty = counterparty
+            existing.lifecycle_status = lifecycle_status
+            existing.edit_policy = edit_policy
+            existing.parent_id = parent_id
+            existing.group_id = group_id
+            existing.transfer_direction = transfer_direction
+            existing.installment_number = installment_number
+            existing.installment_total = installment_total
+            existing.source_event_type = source_event_type
+
+    def _remove_unified_movements_by_parent(
+        self, session: Session, *, parent_id: str
+    ) -> None:
+        session.query(UnifiedMovementRecord).filter(
+            UnifiedMovementRecord.parent_id == parent_id
+        ).delete(synchronize_session=False)
+
+    def _unified_movement_to_dict(
+        self, row: UnifiedMovementRecord
+    ) -> dict[str, object]:
+        return {
+            **UnifiedMovementProjection(
+                movement_id=row.movement_id,
+                kind=row.kind,
+                origin_type=row.origin_type,
+                title=row.title,
+                description=row.description,
+                amount=row.amount,
+                posted_at=row.posted_at,
+                competence_month=row.competence_month,
+                account_id=row.account_id,
+                card_id=row.card_id,
+                payment_method=row.payment_method,
+                category_id=row.category_id,
+                counterparty=row.counterparty,
+                lifecycle_status=row.lifecycle_status,
+                edit_policy=row.edit_policy,
+                parent_id=row.parent_id,
+                group_id=row.group_id,
+                transfer_direction=row.transfer_direction,
+                installment_number=row.installment_number,
+                installment_total=row.installment_total,
+                source_event_type=row.source_event_type,
+            ).to_dict(),
+            "needs_review": False,
+        }
+
+    # ------------------------------------------------------------------ #
+    #  Unified Movement public queries                                     #
+    # ------------------------------------------------------------------ #
+
+    def list_unified_movements(
+        self,
+        *,
+        competence_month: str | None = None,
+        kind: str | None = None,
+        origin_type: str | None = None,
+        lifecycle_status: str | None = None,
+        account_id: str | None = None,
+        card_id: str | None = None,
+        category_id: str | None = None,
+        payment_method: str | None = None,
+        counterparty: str | None = None,
+        text: str | None = None,
+        scope: str | None = None,
+        needs_review: bool | None = None,
+        sort_by: str = "posted_at",
+        sort_dir: str = "desc",
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict[str, object]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                query = session.query(UnifiedMovementRecord)
+
+                # Scope shortcuts
+                if scope == "fixed":
+                    query = query.filter(
+                        UnifiedMovementRecord.origin_type == "recurring"
+                    )
+                elif scope == "installments":
+                    query = query.filter(
+                        UnifiedMovementRecord.origin_type == "installment"
+                    )
+                elif scope == "variable":
+                    query = query.filter(
+                        and_(
+                            UnifiedMovementRecord.kind == "expense",
+                            UnifiedMovementRecord.origin_type.in_(
+                                ["manual", "card_purchase"]
+                            ),
+                        )
+                    )
+                elif scope == "transfers":
+                    query = query.filter(UnifiedMovementRecord.kind == "transfer")
+                elif scope == "investments":
+                    query = query.filter(UnifiedMovementRecord.kind == "investment")
+                elif scope == "reimbursements":
+                    query = query.filter(UnifiedMovementRecord.kind == "reimbursement")
+                elif scope == "review":
+                    query = query.filter(
+                        UnifiedMovementRecord.movement_id == "__review_disabled__"
+                    )
+
+                # Individual filters
+                if competence_month is not None:
+                    query = query.filter(
+                        UnifiedMovementRecord.competence_month == competence_month
+                    )
+                if kind is not None:
+                    query = query.filter(UnifiedMovementRecord.kind == kind)
+                if origin_type is not None:
+                    query = query.filter(
+                        UnifiedMovementRecord.origin_type == origin_type
+                    )
+                if lifecycle_status is not None:
+                    query = query.filter(
+                        UnifiedMovementRecord.lifecycle_status == lifecycle_status
+                    )
+                if account_id is not None:
+                    query = query.filter(UnifiedMovementRecord.account_id == account_id)
+                if card_id is not None:
+                    query = query.filter(UnifiedMovementRecord.card_id == card_id)
+                if category_id is not None:
+                    query = query.filter(
+                        UnifiedMovementRecord.category_id == category_id
+                    )
+                if payment_method is not None:
+                    query = query.filter(
+                        UnifiedMovementRecord.payment_method == payment_method
+                    )
+                if counterparty is not None:
+                    query = query.filter(
+                        UnifiedMovementRecord.counterparty == counterparty
+                    )
+                if text is not None:
+                    text_pattern = f"%{text.lower()}%"
+                    query = query.filter(
+                        or_(
+                            func.lower(UnifiedMovementRecord.title).like(text_pattern),
+                            func.lower(UnifiedMovementRecord.description).like(
+                                text_pattern
+                            ),
+                        )
+                    )
+                if needs_review is True:
+                    query = query.filter(
+                        UnifiedMovementRecord.movement_id == "__review_disabled__"
+                    )
+
+                total = query.count()
+
+                valid_sort_columns = {
+                    "posted_at": UnifiedMovementRecord.posted_at,
+                    "competence_month": UnifiedMovementRecord.competence_month,
+                    "amount": UnifiedMovementRecord.amount,
+                    "title": UnifiedMovementRecord.title,
+                    "category_id": UnifiedMovementRecord.category_id,
+                }
+                sort_col = valid_sort_columns.get(
+                    sort_by, UnifiedMovementRecord.posted_at
+                )
+                if sort_dir == "asc":
+                    query = query.order_by(
+                        sort_col.asc(), UnifiedMovementRecord.movement_id.asc()
+                    )
+                else:
+                    query = query.order_by(
+                        sort_col.desc(), UnifiedMovementRecord.movement_id.desc()
+                    )
+
+                offset = max(0, (page - 1) * page_size)
+                rows = query.offset(offset).limit(page_size).all()
+                items = [self._unified_movement_to_dict(row) for row in rows]
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": max(1, (total + page_size - 1) // page_size),
+        }
+
+    def get_movements_summary(
+        self,
+        *,
+        competence_month: str,
+    ) -> dict[str, object]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                base = session.query(UnifiedMovementRecord).filter(
+                    UnifiedMovementRecord.competence_month == competence_month,
+                    UnifiedMovementRecord.lifecycle_status.notin_(
+                        ["voided", "cancelled"]
+                    ),
+                )
+
+                income_q = base.filter(UnifiedMovementRecord.kind == "income")
+                expense_q = base.filter(UnifiedMovementRecord.kind == "expense")
+                fixed_q = base.filter(UnifiedMovementRecord.origin_type == "recurring")
+                installment_q = base.filter(
+                    UnifiedMovementRecord.origin_type == "installment"
+                )
+                variable_q = base.filter(
+                    and_(
+                        UnifiedMovementRecord.kind == "expense",
+                        UnifiedMovementRecord.origin_type.in_(
+                            ["manual", "card_purchase"]
+                        ),
+                    )
+                )
+                transfer_q = base.filter(UnifiedMovementRecord.kind == "transfer")
+                investment_q = base.filter(UnifiedMovementRecord.kind == "investment")
+                reimbursement_q = base.filter(
+                    UnifiedMovementRecord.kind == "reimbursement"
+                )
+                def _sum(q) -> int:  # type: ignore[no-untyped-def]
+                    return (
+                        q.with_entities(func.sum(UnifiedMovementRecord.amount)).scalar()
+                        or 0
+                    )
+
+                total_income = _sum(income_q)
+                total_expenses = _sum(expense_q)
+                total_fixed = _sum(fixed_q)
+                total_installments = _sum(installment_q)
+                total_variable = _sum(variable_q)
+                total_investments = _sum(investment_q)
+                total_reimbursements = _sum(reimbursement_q)
+
+                counts = {
+                    "all": base.count(),
+                    "fixed": fixed_q.count(),
+                    "installments": installment_q.count(),
+                    "variable": variable_q.count(),
+                    "transfers": transfer_q.count(),
+                    "investments": investment_q.count(),
+                    "reimbursements": reimbursement_q.count(),
+                    "review": 0,
+                }
+
+        return {
+            "total_income": total_income,
+            "total_fixed": total_fixed,
+            "total_installments": total_installments,
+            "total_variable": total_variable,
+            "total_investments": total_investments,
+            "total_reimbursements": total_reimbursements,
+            "total_expenses": total_expenses,
+            "total_result": total_income - total_expenses,
+            "counts": counts,
+        }
+
+    # ------------------------------------------------------------------ #
+    #  Schema version check – include unified_movements                   #
+    # ------------------------------------------------------------------ #
+
+    def _unified_movements_schema_ok(self, inspector: object) -> bool:
+        try:
+            cols = {
+                str(c["name"])
+                for c in inspector.get_columns("unified_movements")  # type: ignore[attr-defined]
+            }
+        except NoSuchTableError:
+            return False
+
+        expected = {
+            "movement_id",
+            "kind",
+            "origin_type",
+            "title",
+            "description",
+            "amount",
+            "posted_at",
+            "competence_month",
+            "account_id",
+            "card_id",
+            "payment_method",
+            "category_id",
+            "counterparty",
+            "lifecycle_status",
+            "edit_policy",
+            "parent_id",
+            "group_id",
+            "transfer_direction",
+            "installment_number",
+            "installment_total",
+            "source_event_type",
+        }
+        return expected.issubset(cols)
 
 
 def _optional_string(value: object | None) -> str | None:

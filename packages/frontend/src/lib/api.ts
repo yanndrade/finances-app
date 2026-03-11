@@ -511,6 +511,133 @@ export type TransactionUpdatePayload = {
 
 export type TransactionPatchPayload = Partial<TransactionUpdatePayload>;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Unified Movement Ledger — types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type MovementKind =
+  | "income"
+  | "expense"
+  | "transfer"
+  | "investment"
+  | "reimbursement"
+  | "adjustment";
+
+export type MovementOriginType =
+  | "manual"
+  | "recurring"
+  | "installment"
+  | "card_purchase"
+  | "transfer"
+  | "investment"
+  | "reimbursement"
+  | "imported";
+
+export type MovementLifecycleStatus =
+  | "forecast"
+  | "pending"
+  | "cleared"
+  | "cancelled"
+  | "voided";
+
+export type MovementScope =
+  | "all"
+  | "fixed"
+  | "installments"
+  | "variable"
+  | "transfers"
+  | "investments"
+  | "reimbursements";
+
+export type MovementPaymentMethod =
+  | "PIX"
+  | "CASH"
+  | "DEBIT"
+  | "CREDIT_CASH"
+  | "CREDIT_INSTALLMENT"
+  | "BOLETO"
+  | "AUTO_DEBIT"
+  | "TRANSFER"
+  | "BALANCE"
+  | "OTHER";
+
+export type UnifiedMovement = {
+  movement_id: string;
+  kind: MovementKind;
+  origin_type: MovementOriginType;
+  title: string;
+  description: string | null;
+  amount: number;
+  posted_at: string;
+  competence_month: string;
+  account_id: string;
+  card_id: string | null;
+  payment_method: string;
+  category_id: string;
+  counterparty: string | null;
+  lifecycle_status: MovementLifecycleStatus;
+  edit_policy: "editable" | "inherited" | "locked";
+  parent_id: string | null;
+  group_id: string | null;
+  transfer_direction: string | null;
+  installment_number: number | null;
+  installment_total: number | null;
+  source_event_type: string;
+};
+
+export type MovementFilters = {
+  competence_month?: string;
+  kind?: MovementKind;
+  origin_type?: MovementOriginType;
+  lifecycle_status?: MovementLifecycleStatus;
+  account_id?: string;
+  card_id?: string;
+  category_id?: string;
+  payment_method?: string;
+  counterparty?: string;
+  text?: string;
+  scope?: MovementScope;
+  sort_by?:
+    | "posted_at"
+    | "competence_month"
+    | "amount"
+    | "title"
+    | "category_id";
+  sort_dir?: "asc" | "desc";
+  page?: number;
+  page_size?: number;
+};
+
+export type ScopeCount = {
+  all: number;
+  fixed: number;
+  installments: number;
+  variable: number;
+  transfers: number;
+  investments: number;
+  reimbursements: number;
+};
+
+export type MovementSummary = {
+  total_income: number;
+  total_fixed: number;
+  total_installments: number;
+  total_variable: number;
+  total_investments: number;
+  total_reimbursements: number;
+  total_expenses: number;
+  total_result: number;
+  counts: ScopeCount;
+};
+
+export type MovementPage = {
+  items: UnifiedMovement[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+};
+
 export const API_BASE_URL =
   (globalThis as { __FINANCES_API_BASE_URL__?: string })
     .__FINANCES_API_BASE_URL__ ?? "http://127.0.0.1:8000";
@@ -1037,6 +1164,44 @@ export async function fetchInvestmentOverview(
   }).toString();
 
   return requestJson<InvestmentOverview>(`/api/investments/overview?${query}`);
+}
+
+export async function fetchMovements(
+  filters?: MovementFilters,
+): Promise<MovementPage> {
+  const params = new URLSearchParams();
+  if (filters?.competence_month)
+    params.set("competence_month", filters.competence_month);
+  if (filters?.kind) params.set("kind", filters.kind);
+  if (filters?.origin_type) params.set("origin_type", filters.origin_type);
+  if (filters?.lifecycle_status)
+    params.set("lifecycle_status", filters.lifecycle_status);
+  if (filters?.account_id) params.set("account_id", filters.account_id);
+  if (filters?.card_id) params.set("card_id", filters.card_id);
+  if (filters?.category_id) params.set("category_id", filters.category_id);
+  if (filters?.payment_method)
+    params.set("payment_method", filters.payment_method);
+  if (filters?.counterparty) params.set("counterparty", filters.counterparty);
+  if (filters?.text) params.set("text", filters.text);
+  if (filters?.scope && filters.scope !== "all")
+    params.set("scope", filters.scope);
+  if (filters?.sort_by) params.set("sort_by", filters.sort_by);
+  if (filters?.sort_dir) params.set("sort_dir", filters.sort_dir);
+  if (filters?.page != null) params.set("page", String(filters.page));
+  if (filters?.page_size != null)
+    params.set("page_size", String(filters.page_size));
+  const qs = params.toString();
+  return requestJson<MovementPage>(
+    qs ? `/api/movements?${qs}` : "/api/movements",
+  );
+}
+
+export async function fetchMovementsSummary(
+  competenceMonth: string,
+): Promise<MovementSummary> {
+  return requestJson<MovementSummary>(
+    `/api/movements/summary?competence_month=${encodeURIComponent(competenceMonth)}`,
+  );
 }
 
 export async function resetApplicationData(): Promise<{

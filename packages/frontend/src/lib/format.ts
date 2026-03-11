@@ -122,9 +122,89 @@ export function formatCategoryName(categoryId: string): string {
   return resolveCategoryLabel(categoryId);
 }
 
-export function humanizeLedgerId(value: string | undefined | null, accounts: { account_id: string; name: string }[]): string {
+export function formatKind(kind: string): string {
+  const labels: Record<string, string> = {
+    income: "Entrada",
+    expense: "Saída",
+    transfer: "Transferência",
+    investment: "Investimento",
+    reimbursement: "Reembolso",
+    adjustment: "Ajuste",
+  };
+  return labels[kind] ?? kind;
+}
+
+export function formatOriginType(originType: string): string {
+  const labels: Record<string, string> = {
+    manual: "Manual",
+    recurring: "Recorrente",
+    installment: "Parcelado",
+    card_purchase: "Compra no Cartão",
+    transfer: "Transferência",
+    investment: "Investimento",
+    reimbursement: "Reembolso",
+    imported: "Importado",
+  };
+  return labels[originType] ?? originType;
+}
+
+export function formatLifecycleStatus(status: string): string {
+  const labels: Record<string, string> = {
+    forecast: "Prevista",
+    pending: "Pendente",
+    cleared: "Compensada",
+    cancelled: "Cancelada",
+    voided: "Estornada",
+    // legacy
+    active: "Compensada",
+    readonly: "Automática",
+  };
+  return labels[status] ?? status;
+}
+
+export function formatPaymentMethodExpanded(method: string): string {
+  const labels: Record<string, string> = {
+    PIX: "PIX",
+    CASH: "Dinheiro",
+    DEBIT: "Débito",
+    CREDIT_CASH: "Crédito à vista",
+    CREDIT_INSTALLMENT: "Crédito parcelado",
+    BOLETO: "Boleto",
+    AUTO_DEBIT: "Débito automático",
+    TRANSFER: "Transferência",
+    BALANCE: "Saldo",
+    OTHER: "Outro",
+    // legacy
+    INVOICE: "Fatura",
+    CARD: "Cartão",
+  };
+  return labels[method] ?? method;
+}
+
+export function formatCompetenceMonth(month: string): string {
+  const normalized = month.includes("T") ? month : `${month}-01T12:00:00Z`;
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(normalized));
+}
+
+export function formatShortDate(isoOrDateValue: string): string {
+  const normalized = isoOrDateValue.includes("T")
+    ? isoOrDateValue
+    : `${isoOrDateValue}T12:00:00Z`;
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(new Date(normalized));
+}
+
+export function humanizeLedgerId(
+  value: string | undefined | null,
+  accounts: { account_id: string; name: string }[],
+): string {
   if (!value) return "--";
-  
+
   const separatorIndex = value.indexOf(":");
   const kind = separatorIndex >= 0 ? value.slice(0, separatorIndex) : value;
   const id = separatorIndex >= 0 ? value.slice(separatorIndex + 1).trim() : "";

@@ -58,7 +58,11 @@ import {
   monthFirstDay,
   monthLastDay,
 } from "./lib/date-filters";
-import { readStoredUiDensity, UI_DENSITY_STORAGE_KEY, type UiDensity } from "./lib/ui-density";
+import {
+  readStoredUiDensity,
+  UI_DENSITY_STORAGE_KEY,
+  type UiDensity,
+} from "./lib/ui-density";
 
 const QuickAddComposer = lazy(async () => {
   const module = await import("./components/quick-add-composer");
@@ -103,6 +107,11 @@ const InvestmentsView = lazy(async () => {
 const TransactionsView = lazy(async () => {
   const module = await import("./features/transactions/transactions-view");
   return { default: module.TransactionsView };
+});
+
+const HistoryPage = lazy(async () => {
+  const module = await import("./features/history/history-page");
+  return { default: module.HistoryPage };
 });
 
 const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
@@ -174,10 +183,16 @@ export function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [quickAddPreset, setQuickAddPreset] = useState<QuickAddPreset | undefined>(undefined);
-  const [quickAddInvoiceId, setQuickAddInvoiceId] = useState<string | undefined>(undefined);
+  const [quickAddPreset, setQuickAddPreset] = useState<
+    QuickAddPreset | undefined
+  >(undefined);
+  const [quickAddInvoiceId, setQuickAddInvoiceId] = useState<
+    string | undefined
+  >(undefined);
   const [toast, setToast] = useState<AppToast>(null);
-  const [uiDensity, setUiDensity] = useState<UiDensity>(() => readStoredUiDensity());
+  const [uiDensity, setUiDensity] = useState<UiDensity>(() =>
+    readStoredUiDensity(),
+  );
 
   const {
     dashboard,
@@ -312,7 +327,9 @@ export function App() {
     }
   }
 
-  async function handleTransactionSubmit(payload: CashTransactionPayload): Promise<void> {
+  async function handleTransactionSubmit(
+    payload: CashTransactionPayload,
+  ): Promise<void> {
     const wasSuccessful = await runMutation(
       () => createCashTransaction(payload),
       "Transação registrada com sucesso.",
@@ -368,7 +385,11 @@ export function App() {
     account: AccountSummary,
     isActive: boolean,
   ): Promise<void> {
-    if (!isActive && account.is_active && accounts.filter((item) => item.is_active).length === 1) {
+    if (
+      !isActive &&
+      account.is_active &&
+      accounts.filter((item) => item.is_active).length === 1
+    ) {
       showToast("error", "Mantenha ao menos uma conta ativa.");
       return;
     }
@@ -381,7 +402,9 @@ export function App() {
           initialBalanceInCents: account.initial_balance,
           isActive,
         }),
-      isActive ? "Conta reativada com sucesso." : "Conta removida da operação ativa.",
+      isActive
+        ? "Conta reativada com sucesso."
+        : "Conta removida da operação ativa.",
     );
 
     if (!wasSuccessful) {
@@ -400,7 +423,10 @@ export function App() {
     }
   }
 
-  async function handleUpdateCard(cardId: string, payload: CardUpdatePayload): Promise<void> {
+  async function handleUpdateCard(
+    cardId: string,
+    payload: CardUpdatePayload,
+  ): Promise<void> {
     const wasSuccessful = await runMutation(
       () => updateCard(cardId, payload),
       "Cartão atualizado com sucesso.",
@@ -411,7 +437,10 @@ export function App() {
     }
   }
 
-  async function handleSetCardActive(card: CardSummary, isActive: boolean): Promise<void> {
+  async function handleSetCardActive(
+    card: CardSummary,
+    isActive: boolean,
+  ): Promise<void> {
     const wasSuccessful = await runMutation(
       () =>
         updateCard(card.card_id, {
@@ -422,7 +451,9 @@ export function App() {
           paymentAccountId: card.payment_account_id,
           isActive,
         }),
-      isActive ? "Cartão reativado com sucesso." : "Cartão removido da operação ativa.",
+      isActive
+        ? "Cartão reativado com sucesso."
+        : "Cartão removido da operação ativa.",
     );
 
     if (!wasSuccessful) {
@@ -430,7 +461,9 @@ export function App() {
     }
   }
 
-  async function handleCreateCardPurchase(payload: CardPurchasePayload): Promise<void> {
+  async function handleCreateCardPurchase(
+    payload: CardPurchasePayload,
+  ): Promise<void> {
     const wasSuccessful = await runMutation(
       () => createCardPurchase(payload),
       "Compra no cartão registrada com sucesso.",
@@ -451,7 +484,9 @@ export function App() {
     );
   }
 
-  async function handlePayInvoice(payload: InvoicePaymentPayload): Promise<void> {
+  async function handlePayInvoice(
+    payload: InvoicePaymentPayload,
+  ): Promise<void> {
     const wasSuccessful = await runMutation(
       () => payInvoice(payload),
       "Pagamento de fatura registrado com sucesso.",
@@ -462,7 +497,9 @@ export function App() {
     }
   }
 
-  async function handleCreateRecurringRule(payload: RecurringRulePayload): Promise<void> {
+  async function handleCreateRecurringRule(
+    payload: RecurringRulePayload,
+  ): Promise<void> {
     const wasSuccessful = await runMutation(
       () => createRecurringRule(payload),
       "Gasto fixo criado com sucesso.",
@@ -498,11 +535,15 @@ export function App() {
     }
   }
 
-  async function handleApplyTransactionFilters(filters: TransactionFilters): Promise<void> {
+  async function handleApplyTransactionFilters(
+    filters: TransactionFilters,
+  ): Promise<void> {
     await refreshData({ filters, includeReport: false });
   }
 
-  async function handleApplyReportFilters(filters: TransactionFilters): Promise<void> {
+  async function handleApplyReportFilters(
+    filters: TransactionFilters,
+  ): Promise<void> {
     await refreshData({ filters, includeReport: true });
   }
 
@@ -548,7 +589,9 @@ export function App() {
     }
   }
 
-  async function handleInvestmentViewChange(nextView: InvestmentView): Promise<void> {
+  async function handleInvestmentViewChange(
+    nextView: InvestmentView,
+  ): Promise<void> {
     await refreshData({
       investmentView: nextView,
     });
@@ -630,7 +673,9 @@ export function App() {
   }
 
   function handleRemoveCategory(categoryId: string): void {
-    setCategoryOptions(categoryOptions.filter((option) => option.value !== categoryId));
+    setCategoryOptions(
+      categoryOptions.filter((option) => option.value !== categoryId),
+    );
   }
 
   const activeMeta = VIEW_META[activeView];
@@ -703,17 +748,10 @@ export function App() {
         ) : null}
 
         {activeView === "transactions" ? (
-          <TransactionsView
+          <HistoryPage
             accounts={accounts}
             cards={cards}
-            filters={transactionFilters}
-            isSubmitting={isSubmitting}
-            onApplyFilters={handleApplyTransactionFilters}
-            onUpdateCardPurchase={handleUpdateCardPurchase}
-            onUpdateTransaction={handleUpdateTransaction}
-            onVoidTransaction={handleVoidTransaction}
-            transactions={transactions}
-            uiDensity={uiDensity}
+            initialCompetenceMonth={selectedMonth}
           />
         ) : null}
 
@@ -781,10 +819,7 @@ export function App() {
         ) : null}
       </Suspense>
 
-      <ToastViewport
-        onDismiss={() => setToast(null)}
-        toast={toast}
-      />
+      <ToastViewport onDismiss={() => setToast(null)} toast={toast} />
 
       <CommandPalette
         open={isCommandPaletteOpen}
@@ -850,7 +885,10 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
   if (activeView === "accounts") {
     return (
       <section aria-label="Contas e saldos" className="panel-card">
-        <div className="h-5 w-48 rounded-full bg-slate-200 animate-pulse" aria-hidden="true" />
+        <div
+          className="h-5 w-48 rounded-full bg-slate-200 animate-pulse"
+          aria-hidden="true"
+        />
       </section>
     );
   }
@@ -858,7 +896,10 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
   if (activeView === "transactions") {
     return (
       <section aria-label="Historico e filtros" className="panel-card">
-        <div className="h-5 w-56 rounded-full bg-slate-200 animate-pulse" aria-hidden="true" />
+        <div
+          className="h-5 w-56 rounded-full bg-slate-200 animate-pulse"
+          aria-hidden="true"
+        />
       </section>
     );
   }
@@ -877,4 +918,3 @@ function getErrorMessage(error: unknown): string {
 
   return "Nao foi possivel concluir a operacao.";
 }
-

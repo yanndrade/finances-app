@@ -342,3 +342,52 @@ class InvestmentMovementProjection:
             "cash_delta": self.cash_delta,
             "invested_delta": self.invested_delta,
         }
+
+@dataclass(frozen=True)
+class UnifiedMovementProjection:
+    movement_id: str
+    kind: str
+    origin_type: str
+    title: str
+    description: str | None
+    amount: int
+    posted_at: str
+    competence_month: str
+    account_id: str
+    card_id: str | None
+    payment_method: str
+    category_id: str
+    counterparty: str | None
+    lifecycle_status: str
+    edit_policy: str
+    parent_id: str | None
+    group_id: str | None
+    transfer_direction: str | None
+    installment_number: int | None
+    installment_total: int | None
+    source_event_type: str
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        return {
+            "movement_id": self.movement_id,
+            "kind": self.kind,
+            "origin_type": self.origin_type,
+            "title": self.title,
+            "description": self.description,
+            "amount": self.amount,
+            "posted_at": self.posted_at,
+            "competence_month": self.competence_month,
+            "account_id": self.account_id,
+            "card_id": self.card_id,
+            "payment_method": self.payment_method,
+            "category_id": self.category_id,
+            "counterparty": self.counterparty,
+            "lifecycle_status": self.lifecycle_status,
+            "edit_policy": self.edit_policy,
+            "parent_id": self.parent_id,
+            "group_id": self.group_id,
+            "transfer_direction": self.transfer_direction,
+            "installment_number": self.installment_number,
+            "installment_total": self.installment_total,
+            "source_event_type": self.source_event_type,
+        }

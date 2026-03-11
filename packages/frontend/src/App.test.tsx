@@ -1334,57 +1334,6 @@ describe("App", () => {
     });
   });
 
-  it("opens the unified ledger with review-queue context from dashboard quick corrections", async () => {
-    installAppFetchMock({
-      transactions: [
-        buildTransaction({
-          transaction_id: "tx-review",
-          category_id: "other",
-          description: "Compra sem categoria",
-        }),
-        buildTransaction({
-          transaction_id: "tx-salary",
-          type: "income",
-          category_id: "salary",
-          description: "Salario principal",
-          amount: 7_500_00,
-        }),
-      ],
-      dashboard: buildDashboard({
-        review_queue: [
-          {
-            transaction_id: "tx-review",
-            occurred_at: "2026-03-03T12:00:00Z",
-            type: "expense",
-            amount: 12_000,
-            account_id: "acc-1",
-            payment_method: "PIX",
-            category_id: "other",
-            description: "Compra sem categoria",
-            person_id: null,
-            status: "active",
-          },
-        ],
-      }),
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect(await screen.findByText(/lançamentos não categorizados/i, undefined, { timeout: 15000 })).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /^resolver$/i }));
-
-    expect(
-      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
-    ).toBeInTheDocument();
-    const searchInput = await screen.findByLabelText(/buscar/i);
-    expect(searchInput).toHaveValue("Compra sem categoria");
-    expect(await screen.findByText(/compra sem categoria/i)).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
-    });
-  });
 
   it("opens the unified ledger from reports category shortcuts", async () => {
     installAppFetchMock({
@@ -2609,6 +2558,7 @@ function allocateMockInvoices({
     });
   });
 }
+
 
 
 

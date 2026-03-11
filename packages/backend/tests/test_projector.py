@@ -1306,6 +1306,287 @@ def test_projector_lists_invoice_items_for_a_single_invoice(tmp_path: Path) -> N
     ]
 
 
+def test_projector_classifies_single_card_purchase_as_variable_in_unified_history(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-15T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-15T12:00:00Z",
+                "amount": 100_00,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Sorvete",
+                "installments_count": 1,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+
+    variable_page = projector.list_unified_movements(
+        competence_month="2026-04",
+        scope="variable",
+    )
+    installments_page = projector.list_unified_movements(
+        competence_month="2026-04",
+        scope="installments",
+    )
+    summary = projector.get_movements_summary(competence_month="2026-04")
+
+    assert variable_page["items"] == [
+        {
+            "movement_id": "purchase-1:1",
+            "kind": "expense",
+            "origin_type": "card_purchase",
+            "title": "Sorvete",
+            "description": "Sorvete",
+            "amount": 100_00,
+            "posted_at": "2026-04-20T00:00:00Z",
+            "competence_month": "2026-04",
+            "account_id": "acc-1",
+            "card_id": "card-1",
+            "payment_method": "CREDIT_CASH",
+            "category_id": "food",
+            "counterparty": None,
+            "lifecycle_status": "pending",
+            "edit_policy": "locked",
+            "parent_id": "purchase-1",
+            "group_id": None,
+            "transfer_direction": None,
+            "installment_number": None,
+            "installment_total": None,
+            "source_event_type": "CardPurchaseCreated",
+            "needs_review": False,
+        }
+    ]
+    assert installments_page["items"] == []
+    assert summary["total_variable"] == 100_00
+    assert summary["total_installments"] == 0
+    assert summary["counts"]["variable"] == 1
+    assert summary["counts"]["installments"] == 0
+
+
+def test_projector_keeps_single_card_purchase_out_of_dashboard_installments(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-04-04T12:00:00Z",
+            payload={
+                "id": "tx-1",
+                "occurred_at": "2026-04-04T12:00:00Z",
+                "amount": 15_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "food",
+                "description": "Almoco",
+                "person_id": None,
+                "type": "expense",
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-15T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-15T12:00:00Z",
+                "amount": 100_00,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Sorvete",
+                "installments_count": 1,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+
+    dashboard = projector.get_dashboard_summary(month="2026-04")
+
+    assert dashboard["total_expense"] == 115_00
+    assert dashboard["installment_total"] == 0
+    assert dashboard["variable_expenses_total"] == 115_00
+    assert dashboard["monthly_installments"] == []
+
+
+def test_projector_repairs_stale_single_card_purchase_history_classification(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-15T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-15T12:00:00Z",
+                "amount": 100_00,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Sorvete",
+                "installments_count": 1,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+
+    with projector._session_factory.begin() as session:
+        movement = session.get(
+            projector_module.UnifiedMovementRecord,
+            "purchase-1:1",
+        )
+        assert movement is not None
+        movement.origin_type = "installment"
+        movement.payment_method = "CREDIT_CASH"
+        movement.installment_number = 1
+        movement.installment_total = 1
+
+    repaired_projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    variable_page = repaired_projector.list_unified_movements(
+        competence_month="2026-04",
+        scope="variable",
+    )
+    installments_page = repaired_projector.list_unified_movements(
+        competence_month="2026-04",
+        scope="installments",
+    )
+
+    assert [item["movement_id"] for item in variable_page["items"]] == ["purchase-1:1"]
+    assert installments_page["items"] == []
+
 def test_projector_updates_voids_and_filters_transactions(tmp_path: Path) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
