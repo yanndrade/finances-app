@@ -262,7 +262,7 @@ describe("Movements panel", () => {
 
     render(<App />);
 
-    await screen.findByText(/visao geral sem empilhar tudo/i, undefined, { timeout: 10_000 });
+    await screen.findByText(/Entradas/i, undefined, { timeout: 10_000 });
     await userEvent.click(screen.getByRole("button", { name: /^lançar/i }));
 
     const dialog = await screen.findByText(/modo rápido/i, undefined, { timeout: 15_000 })

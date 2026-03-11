@@ -14,6 +14,7 @@ type Segment = {
   label: string;
   value: number;
   variant: "income" | "expense" | "neutral" | "result-positive" | "result-negative" | "investment" | "review";
+  sublabel?: string;
 };
 
 function SegmentCell({

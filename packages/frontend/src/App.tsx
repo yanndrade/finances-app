@@ -84,10 +84,6 @@ const DashboardView = lazy(async () => {
   return { default: module.DashboardView };
 });
 
-const ReportsView = lazy(async () => {
-  const module = await import("./features/reports/reports-view");
-  return { default: module.ReportsView };
-});
 
 const FixedExpensesView = lazy(async () => {
   const module = await import("./features/recurring/fixed-expenses-view");
@@ -138,10 +134,6 @@ const VIEW_META: Record<
   dashboard: {
     title: "Visão geral",
     description: "Resumo mensal e pontos de atenção.",
-  },
-  reports: {
-    title: "Planejamento",
-    description: "Orçamento, compromissos e relatórios prontos do mês.",
   },
   investments: {
     title: "Patrimônio & investimentos",
@@ -202,7 +194,6 @@ export function App() {
     transactions,
     recurringRules,
     pendingExpenses,
-    reportSummary,
     investmentOverview,
     investmentMovements,
     investmentView,
@@ -226,14 +217,6 @@ export function App() {
   useEffect(() => {
     void refreshData({ month: selectedMonth });
   }, [selectedMonth]);
-
-  useEffect(() => {
-    if (activeView !== "reports") {
-      return;
-    }
-
-    void refreshData({ includeReport: true });
-  }, [activeView]);
 
   useEffect(() => {
     storeCategoryOptions(categoryOptions);
@@ -296,7 +279,6 @@ export function App() {
     void refreshData({
       month: targetMonth,
       filters: nextFilters,
-      includeReport: false,
     });
   }
 
@@ -305,7 +287,6 @@ export function App() {
     successMessage: string,
     options?: {
       filters?: TransactionFilters;
-      includeReport?: boolean;
     },
   ): Promise<boolean> {
     setIsSubmitting(true);
@@ -315,7 +296,6 @@ export function App() {
       await action();
       await refreshData({
         filters: options?.filters,
-        includeReport: options?.includeReport,
       });
       showToast("success", successMessage);
       return true;
@@ -538,13 +518,7 @@ export function App() {
   async function handleApplyTransactionFilters(
     filters: TransactionFilters,
   ): Promise<void> {
-    await refreshData({ filters, includeReport: false });
-  }
-
-  async function handleApplyReportFilters(
-    filters: TransactionFilters,
-  ): Promise<void> {
-    await refreshData({ filters, includeReport: true });
+    await refreshData({ filters });
   }
 
   async function handleUpdateTransaction(
@@ -712,19 +686,6 @@ export function App() {
           />
         ) : null}
 
-        {activeView === "reports" ? (
-          <ReportsView
-            accounts={accounts}
-            categories={categoryOptions}
-            filters={transactionFilters}
-            loading={isDataLoading}
-            onApplyFilters={handleApplyReportFilters}
-            onOpenLedgerFiltered={openLedgerWithFilters}
-            summary={reportSummary}
-            uiDensity={uiDensity}
-          />
-        ) : null}
-
         {activeView === "investments" ? (
           <InvestmentsView
             accounts={accounts}
@@ -751,7 +712,7 @@ export function App() {
           <HistoryPage
             accounts={accounts}
             cards={cards}
-            initialCompetenceMonth={selectedMonth}
+            month={selectedMonth}
           />
         ) : null}
 
@@ -789,12 +750,12 @@ export function App() {
             accounts={accounts}
             cards={cards}
             invoices={invoices}
+            selectedMonth={selectedMonth}
             isSubmitting={isSubmitting}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={(preset, options) => openQuickAdd(preset, options)}
             onOpenSettings={() => setActiveView("settings")}
             onCreateCard={handleCreateCard}
-            onCreateCardPurchase={handleCreateCardPurchase}
             onSetCardActive={handleSetCardActive}
             onUpdateCard={handleUpdateCard}
             uiDensity={uiDensity}
@@ -852,6 +813,9 @@ export function App() {
             }}
             onSubmitCardPurchase={async (payload) => {
               await handleCreateCardPurchase(payload);
+            }}
+            onSubmitRecurringRule={async (payload) => {
+              await handleCreateRecurringRule(payload);
             }}
             onSubmitInvoicePayment={async (payload) => {
               await handlePayInvoice(payload);

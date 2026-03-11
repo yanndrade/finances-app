@@ -1,4 +1,343 @@
-function installAppFetchMock(initialState?: {
+import { vi } from "vitest";
+
+import type {
+  AccountSummary,
+  CardPurchaseSummary,
+  CardSummary,
+  DashboardSummary,
+  InvestmentMovementSummary,
+  InvestmentOverview,
+  PendingExpenseSummary,
+  ReportSummary,
+  RecurringRuleSummary,
+  TransactionSummary,
+  InvoiceSummary,
+  InvoiceItemSummary,
+} from "./lib/api";
+
+export function buildAccount(overrides: Partial<AccountSummary> = {}): AccountSummary {
+  return {
+    account_id: "acc-1",
+    name: "Conta principal",
+    type: "checking",
+    initial_balance: 100_000,
+    is_active: true,
+    current_balance: 132_500,
+    ...overrides,
+  };
+}
+
+export function buildTransaction(
+  overrides: Partial<TransactionSummary> = {},
+): TransactionSummary {
+  return {
+    transaction_id: "tx-1",
+    occurred_at: "2026-03-03T12:00:00Z",
+    type: "expense",
+    amount: 2_500,
+    account_id: "acc-1",
+    payment_method: "PIX",
+    category_id: "mercado",
+    description: "Supermercado",
+    person_id: null,
+    status: "active",
+    ...overrides,
+  };
+}
+
+export function buildDashboard(
+  overrides: Partial<DashboardSummary> = {},
+): DashboardSummary {
+  return {
+    month: "2026-03",
+    total_income: 250_000,
+    total_expense: 117_500,
+    net_flow: 132_500,
+    current_balance: 132_500,
+    fixed_expenses_total: 35_000,
+    variable_expenses_total: 0,
+    installment_total: 12_500,
+    invoices_due_total: 10_000,
+    free_to_spend: 97_500,
+    pending_reimbursements_total: 0,
+    pending_reimbursements: [],
+    monthly_commitments: [],
+    monthly_fixed_expenses: [],
+    monthly_installments: [],
+    recent_transactions: [buildTransaction()],
+    spending_by_category: [{ category_id: "mercado", total: 2_500 }],
+    category_budgets: [],
+    budget_alerts: [],
+    previous_month: { total_income: 200_000, total_expense: 100_000, net_flow: 100_000 },
+    daily_balance_series: [
+      { date: "2026-03-01", balance: 250_000 },
+      { date: "2026-03-03", balance: 132_500 },
+    ],
+    review_queue: [],
+    ...overrides,
+  };
+}
+
+export function buildInvestmentOverview(
+  overrides: Partial<InvestmentOverview> = {},
+): InvestmentOverview {
+  return {
+    view: "monthly",
+    from: "2026-03-01T00:00:00Z",
+    to: "2026-03-31T23:59:59Z",
+    totals: {
+      contribution_total: 30_00,
+      dividend_total: 5_00,
+      withdrawal_total: 10_00,
+      invested_balance: 25_00,
+      cash_balance: 132_500,
+      wealth: 132_525,
+      dividends_accumulated: 5_00,
+    },
+    goal: {
+      target: 25_000,
+      realized: 35_00,
+      remaining: 21_500,
+      progress_percent: 14,
+    },
+    series: {
+      wealth_evolution: [
+        {
+          bucket: "2026-03",
+          cash_balance: 132_500,
+          invested_balance: 25_00,
+          wealth: 132_525,
+        },
+      ],
+      contribution_dividend_trend: [
+        {
+          bucket: "2026-03",
+          contribution_total: 30_00,
+          dividend_total: 5_00,
+          withdrawal_total: 10_00,
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
+export function buildReportSummary(
+  overrides: Partial<ReportSummary> = {},
+): ReportSummary {
+  return {
+    period: {
+      type: "month",
+      from: "2026-03-01T00:00:00Z",
+      to: "2026-03-31T23:59:59Z",
+    },
+    totals: {
+      income_total: 250_000,
+      expense_total: 117_500,
+      net_total: 132_500,
+    },
+    expense_mix: {
+      fixed_total: 30_000,
+      variable_total: 87_500,
+      installment_total: 0,
+    },
+    card_breakdown: [],
+    expense_evolution: [
+      { month: "2026-02", expense_total: 100_000 },
+      { month: "2026-03", expense_total: 117_500 },
+    ],
+    month_projection: {
+      current_balance: 132_500,
+      projected_end_balance: 102_500,
+      pending_fixed_total: 30_000,
+      invoice_due_total: 0,
+      planned_income_total: 0,
+      installment_impact_total: 0,
+    },
+    category_breakdown: [{ category_id: "mercado", total: 2_500 }],
+    weekly_trend: [
+      {
+        week: "2026-W10",
+        income_total: 250_000,
+        expense_total: 117_500,
+        net_total: 132_500,
+      },
+    ],
+    future_commitments: {
+      period_installment_impact_total: 0,
+      future_installment_total: 0,
+      future_installment_months: [],
+    },
+    ...overrides,
+  };
+}
+
+export function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
+  return {
+    card_id: "card-1",
+    name: "Nubank",
+    limit: 150_000,
+    closing_day: 10,
+    due_day: 20,
+    payment_account_id: "acc-1",
+    is_active: true,
+    future_installment_total: 0,
+    ...overrides,
+  };
+}
+
+export function buildInvoice(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
+  const invoice: InvoiceSummary = {
+    invoice_id: "card-1:2026-03",
+    card_id: "card-1",
+    reference_month: "2026-03",
+    closing_date: "2026-03-10",
+    due_date: "2026-03-20",
+    total_amount: 100_00,
+    paid_amount: 0,
+    remaining_amount: 100_00,
+    purchase_count: 1,
+    status: "open",
+    ...overrides,
+  };
+
+  if (overrides.remaining_amount === undefined) {
+    invoice.remaining_amount = invoice.total_amount - invoice.paid_amount;
+  }
+
+  return invoice;
+}
+
+export function buildInvoiceItem(overrides: Partial<InvoiceItemSummary> = {}): InvoiceItemSummary {
+  return {
+    invoice_item_id: "purchase-1:1",
+    invoice_id: "card-1:2026-03",
+    purchase_id: "purchase-1",
+    card_id: "card-1",
+    purchase_date: "2026-03-03T12:00:00Z",
+    category_id: "mercado",
+    description: "Supermercado",
+    installment_number: 1,
+    installments_count: 1,
+    amount: 100_00,
+    ...overrides,
+  };
+}
+
+export function buildCardPurchase(
+  overrides: Partial<CardPurchaseSummary> = {},
+): CardPurchaseSummary {
+  return {
+    purchase_id: "purchase-1",
+    purchase_date: "2026-03-03T12:00:00Z",
+    amount: 50_00,
+    category_id: "mercado",
+    card_id: "card-1",
+    description: "Supermercado",
+    installments_count: 1,
+    invoice_id: "card-1:2026-03",
+    reference_month: "2026-03",
+    closing_date: "2026-03-10",
+    due_date: "2026-03-20",
+    ...overrides,
+  };
+}
+
+export function buildRecurringRule(
+  overrides: Partial<RecurringRuleSummary> = {},
+): RecurringRuleSummary {
+  return {
+    rule_id: "rec-1",
+    name: "Internet",
+    amount: 120_00,
+    due_day: 10,
+    account_id: "acc-1",
+    card_id: null,
+    payment_method: "PIX",
+    category_id: "internet",
+    description: "Fibra",
+    is_active: true,
+    ...overrides,
+  };
+}
+
+export function buildPendingExpense(
+  overrides: Partial<PendingExpenseSummary> = {},
+): PendingExpenseSummary {
+  return {
+    pending_id: "rec-1:2026-03",
+    rule_id: "rec-1",
+    month: "2026-03",
+    name: "Internet",
+    amount: 120_00,
+    due_date: "2026-03-10",
+    account_id: "acc-1",
+    card_id: null,
+    payment_method: "PIX",
+    category_id: "internet",
+    description: "Fibra",
+    status: "pending",
+    transaction_id: null,
+    ...overrides,
+  };
+}
+
+
+export function allocateMockInvoices({
+  amount,
+  card,
+  installmentsCount,
+  purchaseDate,
+}: {
+  amount: number;
+  card: CardSummary;
+  installmentsCount: number;
+  purchaseDate: string;
+}): InvoiceSummary[] {
+  const normalizedPurchaseDate = purchaseDate.endsWith("Z")
+    ? purchaseDate
+    : `${purchaseDate}:00Z`;
+  const purchase = new Date(normalizedPurchaseDate);
+  const baseAmount = Math.floor(amount / installmentsCount);
+  const remainder = amount % installmentsCount;
+  const firstOffset = purchase.getUTCDate() > card.closing_day ? 1 : 0;
+
+  return Array.from({ length: installmentsCount }, (_value, index) => {
+    const target = new Date(
+      Date.UTC(purchase.getUTCFullYear(), purchase.getUTCMonth() + firstOffset + index, 1),
+    );
+    const referenceMonth = `${target.getUTCFullYear()}-${String(
+      target.getUTCMonth() + 1,
+    ).padStart(2, "0")}`;
+    const closingDate = `${referenceMonth}-${String(card.closing_day).padStart(2, "0")}`;
+    const dueDate = `${referenceMonth}-${String(card.due_day).padStart(2, "0")}`;
+
+    return buildInvoice({
+      invoice_id: `${card.card_id}:${referenceMonth}`,
+      card_id: card.card_id,
+      reference_month: referenceMonth,
+      closing_date: closingDate,
+      due_date: dueDate,
+      total_amount: index === installmentsCount - 1 ? baseAmount + remainder : baseAmount,
+      purchase_count: 1,
+    });
+  });
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export function installAppFetchMock(initialState?: {
   accounts?: AccountSummary[];
   cards?: CardSummary[];
   cardPurchases?: CardPurchaseSummary[];
@@ -54,6 +393,35 @@ function installAppFetchMock(initialState?: {
           investment_movements: state.investmentMovements,
           report_summary: state.reportSummary,
         }),
+      );
+    }
+
+    if (url.includes("/api/movements/summary") && method === "GET") {
+      return new Response(
+        JSON.stringify({
+          period: "month",
+          counts: {
+            fixed: 0,
+            installments: 0,
+            non_reconciled: 0,
+          },
+          totals: {
+            income: 0,
+            expense: 0,
+          },
+        })
+      );
+    }
+
+    if (url.includes("/api/movements") && !url.includes("/summary") && method === "GET") {
+      return new Response(
+        JSON.stringify({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 50,
+          pages: 1,
+        })
       );
     }
 

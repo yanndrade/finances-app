@@ -75,11 +75,7 @@ export function DashboardView({
         <DashboardBento
           dashboard={dashboard}
           investmentOverview={investmentOverview}
-          accounts={accounts}
           cards={cards}
-          invoices={invoices}
-          isSubmitting={isSubmitting}
-          onMarkReimbursementReceived={onMarkReimbursementReceived}
           onNavigate={onNavigate}
           onOpenLedgerFiltered={onOpenLedgerFiltered}
           onOpenQuickAdd={onOpenQuickAdd}

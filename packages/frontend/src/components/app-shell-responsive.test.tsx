@@ -117,7 +117,7 @@ describe("AppShell responsive behavior", () => {
   it("forces a mobile-safe view when desktop-only sections are active", async () => {
     installMatchMedia(true);
     const { onNavigate } = renderShell({
-      activeView: "reports",
+      activeView: "investments",
     });
 
     await waitFor(() => {
@@ -128,7 +128,7 @@ describe("AppShell responsive behavior", () => {
   it("switches from desktop to mobile layout when viewport changes", async () => {
     const controller = installMatchMedia(false);
     const { onNavigate } = renderShell({
-      activeView: "reports",
+      activeView: "investments",
     });
 
     expect(screen.getByRole("navigation", { name: /navega(ç|c)(ã|a)o principal/i })).toBeInTheDocument();

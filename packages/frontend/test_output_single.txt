@@ -1,0 +1,693 @@
+
+> @finances/frontend@0.1.0 test
+> vitest src/App.test.tsx -t opens the unified ledger from reports category shortcuts
+
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/yannb/finance/packages/frontend[39m
+
+ [31m❯[39m src/App.test.tsx [2m([22m[2m37 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m36 skipped[39m[2m)[22m[33m 1197[2mms[22m[39m
+   [2m[90m↓[39m[22m App[2m > [22mnavigates between desktop views
+   [2m[90m↓[39m[22m App[2m > [22mdoes not render a fixed contextual panel in desktop shell
+   [2m[90m↓[39m[22m App[2m > [22muses unified desktop navigation taxonomy labels
+   [2m[90m↓[39m[22m App[2m > [22mnavigates to investments view and shows advanced analytics
+   [2m[90m↓[39m[22m App[2m > [22mroutes investment actions to the global quick add with presets
+   [2m[90m↓[39m[22m App[2m > [22mopens the unified ledger from investments quick action
+   [2m[90m↓[39m[22m App[2m > [22mmarks a pending reimbursement as received from dashboard
+   [2m[90m↓[39m[22m App[2m > [22mshows category budget alerts on dashboard and updates monthly limits from settings
+   [2m[90m↓[39m[22m App[2m > [22mopens the unified ledger with budget-alert context from dashboard quick corrections
+[31m   [31m×[31m App[2m > [22mopens the unified ledger from reports category shortcuts[39m[33m 1195[2mms[22m[39m
+[31m     → Unable to find role="button" and name `/abrir .*hist.rico/i`
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"app-layout app-layout--desktop ui-density--compact"[31m
+    [36m>[31m
+      [36m<nav[31m
+        [33maria-label[31m=[32m"Navegação principal"[31m
+        [33mclass[31m=[32m"sidebar"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"brand-block"[31m
+        [36m>[31m
+          [36m<p[31m
+            [33mclass[31m=[32m"eyebrow"[31m
+          [36m>[31m
+            [0mFinanças[0m
+          [36m</p>[31m
+          [36m<strong[31m
+            [33mclass[31m=[32m"brand-title"[31m
+          [36m>[31m
+            [0mControle pessoal[0m
+          [36m</strong>[31m
+          [36m<p[31m
+            [33mclass[31m=[32m"sidebar-copy"[31m
+          [36m>[31m
+            [0mDesktop focado em caixa, contas e movimentações.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<ul[31m
+          [33mclass[31m=[32m"nav-list"[31m
+        [36m>[31m
+          [36m<li>[31m
+            [36m<button[31m
+              [33maria-pressed[31m=[32m"false"[31m
+              [33mclass[31m=[32m"nav-item"[31m
+              [33mtype[31m=[32m"button"[31m
+            [36m>[31m
+              [36m<span[31m
+                [33mclass[31m=[32m"nav-item__headline"[31m
+              [36m>[31m
+                [36m<svg[31m
+                  [33maria-hidden[31m=[32m"true"[31m
+                  [33mclass[31m=[32m"lucide lucide-house nav-item__icon"[31m
+                  [33mfill[31m=[32m"none"[31m
+                  [33mheight[31m=[32m"24"[31m
+                  [33mstroke[31m=[32m"currentColor"[31m
+                  [33mstroke-linecap[31m=[32m"round"[31m
+                  [33mstroke-linejoin[31m=[32m"round"[31m
+                  [33mstroke-width[31m=[32m"2"[31m
+                  [33mviewBox[31m=[32m"0 0 24 24"[31m
+                  [33mwidth[31m=[32m"24"[31m
+                  [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+                [36m>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[31m
+                  [36m/>[31m
+                [36m</svg>[31m
+                [36m<span[31m
+                  [33mclass[31m=[32m"nav-item__label"[31m
+                [36m>[31m
+                  [0mVisão geral[0m
+                [36m</span>[31m
+              [36m</span>[31m
+              [36m<span[31m
+                [33maria-hidden[31m=[32m"true"[31m
+                [33mclass[31m=[32m"nav-item__description"[31m
+              [36m>[31m
+                [0mVisão mensal do caixa[0m
+              [36m</span>[31m
+            [36m</button>[31m
+          [36m</li>[31m
+          [36m<li>[31m
+            [36m<button[31m
+              [33maria-pressed[31m=[32m"false"[31m
+              [33mclass[31m=[32m"nav-item"[31m
+              [33mtype[31m=[32m"button"[31m
+            [36m>[31m
+              [36m<span[31m
+                [33mclass[31m=[32m"nav-item__headline"[31m
+              [36m>[31m
+                [36m<svg[31m
+                  [33maria-hidden[31m=[32m"true"[31m
+                  [33mclass[31m=[32m"lucide lucide-receipt-text nav-item__icon"[31m
+                  [33mfill[31m=[32m"none"[31m
+                  [33mheight[31m=[32m"24"[31m
+                  [33mstroke[31m=[32m"currentColor"[31m
+                  [33mstroke-linecap[31m=[32m"round"[31m
+                  [33mstroke-linejoin[31m=[32m"round"[31m
+                  [33mstroke-width[31m=[32m"2"[31m
+                  [33mviewBox[31m=[32m"0 0 24 24"[31m
+                  [33mwidth[31m=[32m"24"[31m
+                  [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+                [36m>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M13 16H8"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M14 8H8"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M16 12H8"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"[31m
+                  [36m/>[31m
+                [36m</svg>[31m
+                [36m<span[31m
+                  [33mclass[31m=[32m"nav-item__label"[31m
+                [36m>[31m
+                  [0mHistórico[0m
+                [36m</span>[31m
+              [36m</span>[31m
+              [36m<span[31m
+                [33maria-hidden[31m=[32m"true"[31m
+                [33mclass[31m=[32m"nav-item__description"[31m
+              [36m>[31m
+                [0mHistórico central e operação do mês[0m
+              [36m</span>[31m
+            [36m</button>[31m
+          [36m</li>[31m
+          [36m<li>[31m
+            [36m<button[31m
+              [33maria-pressed[31m=[32m"false"[31m
+              [33mclass[31m=[32m"nav-item"[31m
+              [33mtype[31m=[32m"button"[31m
+            [36m>[31m
+              [36m<span[31m
+                [33mclass[31m=[32m"nav-item__headline"[31m
+              [36m>[31m
+                [36m<svg[31m
+                  [33maria-hidden[31m=[32m"true"[31m
+                  [33mclass[31m=[32m"lucide lucide-repeat nav-item__icon"[31m
+                  [33mfill[31m=[32m"none"[31m
+                  [33mheight[31m=[32m"24"[31m
+                  [33mstroke[31m=[32m"currentColor"[31m
+                  [33mstroke-linecap[31m=[32m"round"[31m
+                  [33mstroke-linejoin[31m=[32m"round"[31m
+                  [33mstroke-width[31m=[32m"2"[31m
+                  [33mviewBox[31m=[32m"0 0 24 24"[31m
+                  [33mwidth[31m=[32m"24"[31m
+                  [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+                [36m>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"m17 2 4 4-4 4"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M3 11v-1a4 4 0 0 1 4-4h14"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"m7 22-4-4 4-4"[31m
+        ...
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"app-layout app-layout--desktop ui-density--compact"[31m
+    [36m>[31m
+      [36m<nav[31m
+        [33maria-label[31m=[32m"Navegação principal"[31m
+        [33mclass[31m=[32m"sidebar"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"brand-block"[31m
+        [36m>[31m
+          [36m<p[31m
+            [33mclass[31m=[32m"eyebrow"[31m
+          [36m>[31m
+            [0mFinanças[0m
+          [36m</p>[31m
+          [36m<strong[31m
+            [33mclass[31m=[32m"brand-title"[31m
+          [36m>[31m
+            [0mControle pessoal[0m
+          [36m</strong>[31m
+          [36m<p[31m
+            [33mclass[31m=[32m"sidebar-copy"[31m
+          [36m>[31m
+            [0mDesktop focado em caixa, contas e movimentações.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<ul[31m
+          [33mclass[31m=[32m"nav-list"[31m
+        [36m>[31m
+          [36m<li>[31m
+            [36m<button[31m
+              [33maria-pressed[31m=[32m"false"[31m
+              [33mclass[31m=[32m"nav-item"[31m
+              [33mtype[31m=[32m"button"[31m
+            [36m>[31m
+              [36m<span[31m
+                [33mclass[31m=[32m"nav-item__headline"[31m
+              [36m>[31m
+                [36m<svg[31m
+                  [33maria-hidden[31m=[32m"true"[31m
+                  [33mclass[31m=[32m"lucide lucide-house nav-item__icon"[31m
+                  [33mfill[31m=[32m"none"[31m
+                  [33mheight[31m=[32m"24"[31m
+                  [33mstroke[31m=[32m"currentColor"[31m
+                  [33mstroke-linecap[31m=[32m"round"[31m
+                  [33mstroke-linejoin[31m=[32m"round"[31m
+                  [33mstroke-width[31m=[32m"2"[31m
+                  [33mviewBox[31m=[32m"0 0 24 24"[31m
+                  [33mwidth[31m=[32m"24"[31m
+                  [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+                [36m>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[31m
+                  [36m/>[31m
+                [36m</svg>[31m
+                [36m<span[31m
+                  [33mclass[31m=[32m"nav-item__label"[31m
+                [36m>[31m
+                  [0mVisão geral[0m
+                [36m</span>[31m
+              [36m</span>[31m
+              [36m<span[31m
+                [33maria-hidden[31m=[32m"true"[31m
+                [33mclass[31m=[32m"nav-item__description"[31m
+              [36m>[31m
+                [0mVisão mensal do caixa[0m
+              [36m</span>[31m
+            [36m</button>[31m
+          [36m</li>[31m
+          [36m<li>[31m
+            [36m<button[31m
+              [33maria-pressed[31m=[32m"false"[31m
+              [33mclass[31m=[32m"nav-item"[31m
+              [33mtype[31m=[32m"button"[31m
+            [36m>[31m
+              [36m<span[31m
+                [33mclass[31m=[32m"nav-item__headline"[31m
+              [36m>[31m
+                [36m<svg[31m
+                  [33maria-hidden[31m=[32m"true"[31m
+                  [33mclass[31m=[32m"lucide lucide-receipt-text nav-item__icon"[31m
+                  [33mfill[31m=[32m"none"[31m
+                  [33mheight[31m=[32m"24"[31m
+                  [33mstroke[31m=[32m"currentColor"[31m
+                  [33mstroke-linecap[31m=[32m"round"[31m
+                  [33mstroke-linejoin[31m=[32m"round"[31m
+                  [33mstroke-width[31m=[32m"2"[31m
+                  [33mviewBox[31m=[32m"0 0 24 24"[31m
+                  [33mwidth[31m=[32m"24"[31m
+                  [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+                [36m>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M13 16H8"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M14 8H8"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M16 12H8"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"[31m
+                  [36m/>[31m
+                [36m</svg>[31m
+                [36m<span[31m
+                  [33mclass[31m=[32m"nav-item__label"[31m
+                [36m>[31m
+                  [0mHistórico[0m
+                [36m</span>[31m
+              [36m</span>[31m
+              [36m<span[31m
+                [33maria-hidden[31m=[32m"true"[31m
+                [33mclass[31m=[32m"nav-item__description"[31m
+              [36m>[31m
+                [0mHistórico central e operação do mês[0m
+              [36m</span>[31m
+            [36m</button>[31m
+          [36m</li>[31m
+          [36m<li>[31m
+            [36m<button[31m
+              [33maria-pressed[31m=[32m"false"[31m
+              [33mclass[31m=[32m"nav-item"[31m
+              [33mtype[31m=[32m"button"[31m
+            [36m>[31m
+              [36m<span[31m
+                [33mclass[31m=[32m"nav-item__headline"[31m
+              [36m>[31m
+                [36m<svg[31m
+                  [33maria-hidden[31m=[32m"true"[31m
+                  [33mclass[31m=[32m"lucide lucide-repeat nav-item__icon"[31m
+                  [33mfill[31m=[32m"none"[31m
+                  [33mheight[31m=[32m"24"[31m
+                  [33mstroke[31m=[32m"currentColor"[31m
+                  [33mstroke-linecap[31m=[32m"round"[31m
+                  [33mstroke-linejoin[31m=[32m"round"[31m
+                  [33mstroke-width[31m=[32m"2"[31m
+                  [33mviewBox[31m=[32m"0 0 24 24"[31m
+                  [33mwidth[31m=[32m"24"[31m
+                  [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+                [36m>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"m17 2 4 4-4 4"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"M3 11v-1a4 4 0 0 1 4-4h14"[31m
+                  [36m/>[31m
+                  [36m<path[31m
+                    [33md[31m=[32m"m7 22-4-4 4-4"[31m
+        ...[39m
+   [2m[90m↓[39m[22m App[2m > [22mpreserves the report range when drilling from weekly reports into the ledger
+   [2m[90m↓[39m[22m App[2m > [22mshows upcoming events on dashboard and opens the ledger from that section
+   [2m[90m↓[39m[22m App[2m > [22mopens quick add with controlled category selection
+   [2m[90m↓[39m[22m App[2m > [22mopens command palette with Ctrl+K and routes actions to the global launcher
+   [2m[90m↓[39m[22m App[2m > [22muses explicit invoice payment copy
+   [2m[90m↓[39m[22m App[2m > [22mshows card limit availability
+   [2m[90m↓[39m[22m App[2m > [22mrestores account management actions from the accounts workspace
+   [2m[90m↓[39m[22m App[2m > [22mremoves an account from active operation from the accounts workspace
+   [2m[90m↓[39m[22m App[2m > [22mrenders the cards overview and wallet settings
+   [2m[90m↓[39m[22m App[2m > [22mremoves a card from active operation from the wallet settings
+   [2m[90m↓[39m[22m App[2m > [22mopens the unified ledger from cards quick action
+   [2m[90m↓[39m[22m App[2m > [22mshows consolidated invoice rows in the cards purchases tab
+   [2m[90m↓[39m[22m App[2m > [22mregisters an invoice payment from the cards view and keeps partial invoices visible
+   [2m[90m↓[39m[22m App[2m > [22mkeeps the viewed invoice selected when paying from cards with multiple open invoices
+   [2m[90m↓[39m[22m App[2m > [22mexpands invoice details inline and shows the invoice items
+   [2m[90m↓[39m[22m App[2m > [22mshows feedback as a global toast that auto-hides after success
+   [2m[90m↓[39m[22m App[2m > [22mupdates and voids a transaction from the transactions view
+   [2m[90m↓[39m[22m App[2m > [22mshows unified ledger header with top filters and slice KPIs
+   [2m[90m↓[39m[22m App[2m > [22mshows origem e destino columns in the unified ledger and drawer details
+   [2m[90m↓[39m[22m App[2m > [22mfilters the ledger table instantly through the top search field
+   [2m[90m↓[39m[22m App[2m > [22msupports density modes for the ledger table
+   [2m[90m↓[39m[22m App[2m > [22mopens ledger drill-down details when selecting a transaction row
+   [2m[90m↓[39m[22m App[2m > [22mkeeps report summary visible when a stale non-report refresh settles later
+   [2m[90m↓[39m[22m App[2m > [22mexports a full backup snapshot from the dedicated backup endpoint
+   [2m[90m↓[39m[22m App[2m > [22mrenders settings and resets the app in development mode
+   [2m[90m↓[39m[22m App[2m > [22mnavigates from settings back to the account management workspace
+   [2m[90m↓[39m[22m App[2m > [22mopens the fixed expenses workspace and confirms a monthly pending
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/App.test.tsx[2m > [22mApp[2m > [22mopens the unified ledger from reports category shortcuts
+[31m[1mTestingLibraryElementError[22m[39m: Unable to find role="button" and name `/abrir .*hist.rico/i`
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"app-layout app-layout--desktop ui-density--compact"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Navegação principal"[39m
+        [33mclass[39m=[32m"sidebar"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"brand-block"[39m
+        [36m>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"eyebrow"[39m
+          [36m>[39m
+            [0mFinanças[0m
+          [36m</p>[39m
+          [36m<strong[39m
+            [33mclass[39m=[32m"brand-title"[39m
+          [36m>[39m
+            [0mControle pessoal[0m
+          [36m</strong>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"sidebar-copy"[39m
+          [36m>[39m
+            [0mDesktop focado em caixa, contas e movimentações.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<ul[39m
+          [33mclass[39m=[32m"nav-list"[39m
+        [36m>[39m
+          [36m<li>[39m
+            [36m<button[39m
+              [33maria-pressed[39m=[32m"false"[39m
+              [33mclass[39m=[32m"nav-item"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"nav-item__headline"[39m
+              [36m>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-house nav-item__icon"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+                  [36m/>[39m
+                [36m</svg>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"nav-item__label"[39m
+                [36m>[39m
+                  [0mVisão geral[0m
+                [36m</span>[39m
+              [36m</span>[39m
+              [36m<span[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"nav-item__description"[39m
+              [36m>[39m
+                [0mVisão mensal do caixa[0m
+              [36m</span>[39m
+            [36m</button>[39m
+          [36m</li>[39m
+          [36m<li>[39m
+            [36m<button[39m
+              [33maria-pressed[39m=[32m"false"[39m
+              [33mclass[39m=[32m"nav-item"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"nav-item__headline"[39m
+              [36m>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-receipt-text nav-item__icon"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M13 16H8"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M14 8H8"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M16 12H8"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"[39m
+                  [36m/>[39m
+                [36m</svg>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"nav-item__label"[39m
+                [36m>[39m
+                  [0mHistórico[0m
+                [36m</span>[39m
+              [36m</span>[39m
+              [36m<span[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"nav-item__description"[39m
+              [36m>[39m
+                [0mHistórico central e operação do mês[0m
+              [36m</span>[39m
+            [36m</button>[39m
+          [36m</li>[39m
+          [36m<li>[39m
+            [36m<button[39m
+              [33maria-pressed[39m=[32m"false"[39m
+              [33mclass[39m=[32m"nav-item"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"nav-item__headline"[39m
+              [36m>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-repeat nav-item__icon"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"m17 2 4 4-4 4"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M3 11v-1a4 4 0 0 1 4-4h14"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"m7 22-4-4 4-4"[39m
+        ...
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"app-layout app-layout--desktop ui-density--compact"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Navegação principal"[39m
+        [33mclass[39m=[32m"sidebar"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"brand-block"[39m
+        [36m>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"eyebrow"[39m
+          [36m>[39m
+            [0mFinanças[0m
+          [36m</p>[39m
+          [36m<strong[39m
+            [33mclass[39m=[32m"brand-title"[39m
+          [36m>[39m
+            [0mControle pessoal[0m
+          [36m</strong>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"sidebar-copy"[39m
+          [36m>[39m
+            [0mDesktop focado em caixa, contas e movimentações.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<ul[39m
+          [33mclass[39m=[32m"nav-list"[39m
+        [36m>[39m
+          [36m<li>[39m
+            [36m<button[39m
+              [33maria-pressed[39m=[32m"false"[39m
+              [33mclass[39m=[32m"nav-item"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"nav-item__headline"[39m
+              [36m>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-house nav-item__icon"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+                  [36m/>[39m
+                [36m</svg>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"nav-item__label"[39m
+                [36m>[39m
+                  [0mVisão geral[0m
+                [36m</span>[39m
+              [36m</span>[39m
+              [36m<span[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"nav-item__description"[39m
+              [36m>[39m
+                [0mVisão mensal do caixa[0m
+              [36m</span>[39m
+            [36m</button>[39m
+          [36m</li>[39m
+          [36m<li>[39m
+            [36m<button[39m
+              [33maria-pressed[39m=[32m"false"[39m
+              [33mclass[39m=[32m"nav-item"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"nav-item__headline"[39m
+              [36m>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-receipt-text nav-item__icon"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M13 16H8"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M14 8H8"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M16 12H8"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"[39m
+                  [36m/>[39m
+                [36m</svg>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"nav-item__label"[39m
+                [36m>[39m
+                  [0mHistórico[0m
+                [36m</span>[39m
+              [36m</span>[39m
+              [36m<span[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"nav-item__description"[39m
+              [36m>[39m
+                [0mHistórico central e operação do mês[0m
+              [36m</span>[39m
+            [36m</button>[39m
+          [36m</li>[39m
+          [36m<li>[39m
+            [36m<button[39m
+              [33maria-pressed[39m=[32m"false"[39m
+              [33mclass[39m=[32m"nav-item"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"nav-item__headline"[39m
+              [36m>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-repeat nav-item__icon"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"m17 2 4 4-4 4"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M3 11v-1a4 4 0 0 1 4-4h14"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"m7 22-4-4 4-4"[39m
+        ...
+[90m [2m❯[22m waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:[2m163:27[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m86:33[22m[39m
+[36m [2m❯[22m src/App.test.tsx:[2m1398:54[22m[39m
+    [90m1396| [39m    )[33m.[39m[34mtoBeInTheDocument[39m()[33m;[39m
+    [90m1397| [39m
+    [90m1398| [39m    const openLedgerFromReportsButton = await screen.findByRole("butto…
+    [90m   | [39m                                                     [31m^[39m
+    [90m1399| [39m      name[33m:[39m [36m/abrir .*hist.rico/i[39m[33m,[39m
+    [90m1400| [39m    })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m36 skipped[39m[90m (37)[39m
+[2m   Start at [22m 15:58:57
+[2m   Duration [22m 3.02s[2m (transform 482ms, setup 123ms, collect 696ms, tests 1.20s, environment 532ms, prepare 152ms)[22m
+

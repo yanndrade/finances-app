@@ -137,7 +137,7 @@ export function AppShell({
             </div>
             <div className="page-header__controls flex flex-wrap items-center gap-2 lg:gap-3">
               {actions ? <div className="page-actions">{actions}</div> : null}
-              {month && onMonthChange && activeView === "dashboard" ? (
+              {month && onMonthChange ? (
                 <div className="flex-shrink-0">
                   <MonthPicker
                     month={month}

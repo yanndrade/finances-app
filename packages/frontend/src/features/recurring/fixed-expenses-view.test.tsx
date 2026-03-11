@@ -94,12 +94,14 @@ describe("FixedExpensesView", () => {
       />,
     );
 
+    await userEvent.click(screen.getByRole("button", { name: /novo gasto fixo/i }));
+
     await userEvent.type(screen.getByPlaceholderText(/aluguel, internet/i), "Academia");
     await userEvent.type(screen.getByPlaceholderText("0,00"), "89,90");
     await userEvent.clear(screen.getByDisplayValue("1"));
     await userEvent.type(screen.getByRole("spinbutton"), "7");
     await userEvent.selectOptions(screen.getByDisplayValue("Internet"), "rent");
-    await userEvent.click(screen.getByRole("button", { name: /salvar regra/i }));
+    await userEvent.click(screen.getByRole("button", { name: /criar gasto fixo/i }));
 
     expect(onCreateRule).toHaveBeenCalledWith({
       name: "Academia",
@@ -134,8 +136,7 @@ describe("FixedExpensesView", () => {
       />,
     );
 
-    await userEvent.click(screen.getByRole("tab", { name: /pendencias/i }));
-    await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
+    await userEvent.click(screen.getByRole("button", { name: /pagar agora/i }));
 
     expect(onConfirmPending).toHaveBeenCalledWith("rec-1:2026-03");
   }, 15_000);

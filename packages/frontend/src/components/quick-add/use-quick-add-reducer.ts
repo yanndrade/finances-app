@@ -1,10 +1,11 @@
-export type EntryType = "expense" | "income" | "transfer" | "investment";
+export type EntryType = "expense" | "income" | "transfer" | "investment" | "recurring";
 export type ExpensePaymentMode = "PIX" | "CASH" | "OTHER" | "CARD";
+export type RecurringPaymentMode = "PIX" | "CASH" | "OTHER" | "CARD";
 export type TransferMode = "internal" | "invoice_payment";
 export type InvestmentMode = "contribution" | "withdrawal";
 export type QuickAddValidationErrors = Partial<
   Record<
-    "amount" | "date" | "accountId" | "toAccountId" | "invoiceId" | "cardId" | "installments",
+    "amount" | "date" | "accountId" | "toAccountId" | "invoiceId" | "cardId" | "installments" | "dueDay",
     string
   >
 >;
@@ -12,9 +13,11 @@ export type QuickAddValidationErrors = Partial<
 export type QuickAddState = {
   entryType: EntryType;
   expensePaymentMode: ExpensePaymentMode;
+  recurringPaymentMode: RecurringPaymentMode;
   transferMode: TransferMode;
   investmentMode: InvestmentMode;
   date: string;
+  dueDay: string;
   accountId: string;
   keepOpen: boolean;
   toAccountId: string;
@@ -28,9 +31,11 @@ export type QuickAddState = {
 export type QuickAddAction =
   | { type: "entryTypeChanged"; entryType: EntryType }
   | { type: "expensePaymentModeChanged"; mode: ExpensePaymentMode }
+  | { type: "recurringPaymentModeChanged"; mode: RecurringPaymentMode }
   | { type: "transferModeChanged"; mode: TransferMode }
   | { type: "investmentModeChanged"; mode: InvestmentMode }
   | { type: "dateChanged"; date: string }
+  | { type: "dueDayChanged"; dueDay: string }
   | { type: "accountChanged"; accountId: string }
   | { type: "keepOpenChanged"; keepOpen: boolean }
   | { type: "toAccountChanged"; accountId: string }
@@ -49,9 +54,11 @@ export function createInitialQuickAddState(options: {
   return {
     entryType: "expense",
     expensePaymentMode: "PIX",
+    recurringPaymentMode: "PIX",
     transferMode: "internal",
     investmentMode: "contribution",
     date: options.today,
+    dueDay: "1",
     accountId: options.defaultAccountId,
     keepOpen: false,
     toAccountId: "",
@@ -90,6 +97,11 @@ export function quickAddReducer(state: QuickAddState, action: QuickAddAction): Q
         nextState.investedReductionAmount = "";
       }
 
+      if (action.entryType !== "recurring") {
+        nextState.recurringPaymentMode = "PIX";
+        nextState.dueDay = "1";
+      }
+
       return nextState;
     }
     case "expensePaymentModeChanged":
@@ -110,6 +122,22 @@ export function quickAddReducer(state: QuickAddState, action: QuickAddAction): Q
         ...state,
         expensePaymentMode: action.mode,
       };
+    case "recurringPaymentModeChanged":
+      if (action.mode !== "CARD") {
+        return {
+          ...state,
+          recurringPaymentMode: action.mode,
+          validationErrors: {
+            ...state.validationErrors,
+            cardId: undefined,
+          },
+        };
+      }
+
+      return {
+        ...state,
+        recurringPaymentMode: action.mode,
+      };
     case "transferModeChanged":
       return {
         ...state,
@@ -124,6 +152,11 @@ export function quickAddReducer(state: QuickAddState, action: QuickAddAction): Q
       return {
         ...state,
         date: action.date,
+      };
+    case "dueDayChanged":
+      return {
+        ...state,
+        dueDay: action.dueDay,
       };
     case "accountChanged":
       return {

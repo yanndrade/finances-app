@@ -1,5 +1,4 @@
 import {
-  BarChart3,
   CreditCard,
   HandCoins,
   Home,
@@ -122,13 +121,6 @@ const NAVIGATION_COMMANDS: Array<{
     value: "patrimônio investimentos",
     view: "investments",
     icon: TrendingUp,
-  },
-  {
-    label: "Planejamento",
-    hint: "Orçamento e projeção",
-    value: "planejamento orçamento relatórios insights",
-    view: "reports",
-    icon: BarChart3,
   },
   {
     label: "Contas",

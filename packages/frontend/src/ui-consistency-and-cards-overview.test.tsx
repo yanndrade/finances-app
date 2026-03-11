@@ -215,6 +215,30 @@ function installFetchMock(initialState?: {
       return new Response(JSON.stringify([]));
     }
 
+    if (url.includes("/api/movements/summary")) {
+      return new Response(JSON.stringify({
+        total_income: 0,
+        total_fixed: 0,
+        total_installments: 0,
+        total_variable: 0,
+        total_investments: 0,
+        total_reimbursements: 0,
+        total_expenses: 0,
+        total_result: 0,
+        counts: {
+          fixed: 0,
+          installments: 0,
+          variable: 0,
+          investments: 0,
+          reimbursements: 0,
+        }
+      }));
+    }
+
+    if (url.includes("/api/movements")) {
+      return new Response(JSON.stringify({ items: [], total: 0, page: 1 }));
+    }
+
     return new Response(JSON.stringify([]));
   });
 
@@ -280,7 +304,7 @@ describe("UI consistency and cards overview", () => {
     expect(screen.queryByText(/mapa de contas/i)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-    expect(await screen.findByRole("button", { name: /aplicar filtros/i }, { timeout: 10_000 })).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText(/buscar movimentações/i, undefined, { timeout: 10_000 })).toBeInTheDocument();
     expect(screen.queryByText(/histórico e filtros/i)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^lançar/i }));
     expect(
@@ -303,20 +327,19 @@ describe("UI consistency and cards overview", () => {
 
     render(<App />);
 
-    await userEvent.click(screen.getByRole("button", { name: /cart/i }));
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
 
     expect(
-      await screen.findByLabelText(/escopo/i, undefined, { timeout: 10_000 }),
+      await screen.findByRole("combobox", { name: /escopo/i }, { timeout: 10_000 }),
     ).toHaveValue("all");
-    expect(screen.getByRole("tab", { name: /faturas/i })).toBeInTheDocument();
-    expect(screen.getAllByText(/faturas abertas/i).length).toBeGreaterThan(0);
-    const bradescoInvoice = screen.getByRole("button", { name: /bradesco platinum/i });
+        const bradescoInvoice = screen.getByRole("button", { name: /bradesco platinum/i });
     expect(bradescoInvoice).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1, name: /cart.es e ciclos/i })).not.toBeInTheDocument();
 
     await userEvent.click(bradescoInvoice);
 
-    expect(screen.getByLabelText(/escopo/i)).toHaveValue("card-2");
+    expect(screen.getByRole("combobox", { name: /escopo/i })).toHaveValue("card-2");
     expect(screen.getByRole("button", { name: /pagar agora/i })).toBeInTheDocument();
   }, 30_000);
 });

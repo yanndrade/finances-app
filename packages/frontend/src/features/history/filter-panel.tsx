@@ -47,6 +47,7 @@ function SelectField({
         {label}
       </label>
       <select
+        aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={cn(

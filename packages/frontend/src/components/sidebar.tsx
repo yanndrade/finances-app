@@ -1,5 +1,4 @@
 import {
-  BarChart3,
   CreditCard,
   Home,
   LineChart,
@@ -12,7 +11,6 @@ import {
 
 export type AppView =
   | "dashboard"
-  | "reports"
   | "investments"
   | "transactions"
   | "fixedExpenses"
@@ -61,13 +59,6 @@ export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
     shortLabel: "Cartões",
     description: "Faturas, limite e ciclo de pagamento",
     icon: CreditCard,
-  },
-  {
-    id: "reports",
-    label: "Planejamento",
-    shortLabel: "Planejamento",
-    description: "Orçamento, relatórios e projeção",
-    icon: BarChart3,
   },
   {
     id: "investments",

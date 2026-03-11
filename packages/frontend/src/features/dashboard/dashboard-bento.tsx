@@ -25,7 +25,6 @@ type DashboardBentoProps = {
       | "fixedExpenses"
       | "investments"
       | "cards"
-      | "reports"
       | "settings",
   ) => void;
   onOpenLedgerFiltered: (

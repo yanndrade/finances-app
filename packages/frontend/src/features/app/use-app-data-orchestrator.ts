@@ -9,7 +9,6 @@ import {
   fetchInvestmentOverview,
   fetchInvoices,
   fetchPendings,
-  fetchReportSummary,
   fetchRecurringRules,
   fetchTransactions,
   type AccountSummary,
@@ -21,11 +20,10 @@ import {
   type InvoiceSummary,
   type PendingExpenseSummary,
   type RecurringRuleSummary,
-  type ReportSummary,
   type TransactionFilters,
   type TransactionSummary,
 } from "../../lib/api";
-import { toIsoFromDate, toReportApiFilters, toTransactionApiFilters } from "../../lib/date-filters";
+import { toIsoFromDate, toTransactionApiFilters } from "../../lib/date-filters";
 
 type RefreshOptions = {
   month?: string;
@@ -33,7 +31,6 @@ type RefreshOptions = {
   investmentView?: InvestmentView;
   investmentFromDate?: string;
   investmentToDate?: string;
-  includeReport?: boolean;
 };
 
 type UseAppDataOrchestratorParams = {
@@ -62,7 +59,6 @@ export function useAppDataOrchestrator({
   const [transactions, setTransactions] = useState<TransactionSummary[]>([]);
   const [recurringRules, setRecurringRules] = useState<RecurringRuleSummary[]>([]);
   const [pendingExpenses, setPendingExpenses] = useState<PendingExpenseSummary[]>([]);
-  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
   const [investmentOverview, setInvestmentOverview] = useState<InvestmentOverview | null>(null);
   const [investmentMovements, setInvestmentMovements] = useState<InvestmentMovementSummary[]>([]);
   const [investmentView, setInvestmentView] = useState<InvestmentView>(initialInvestmentView);
@@ -82,9 +78,7 @@ export function useAppDataOrchestrator({
       const activeInvestmentView = options?.investmentView ?? investmentView;
       const activeFromDate = options?.investmentFromDate ?? investmentFromDate;
       const activeToDate = options?.investmentToDate ?? investmentToDate;
-      const shouldFetchReport = options?.includeReport ?? activeView === "reports";
       const transactionApiFilters = toTransactionApiFilters(filters);
-      const reportApiFilters = toReportApiFilters(filters);
 
       setLoading(true);
 
@@ -117,10 +111,6 @@ export function useAppDataOrchestrator({
             to: toIsoFromDate(activeToDate, true),
           }),
         ]);
-        let nextReportSummary: ReportSummary | undefined;
-        if (shouldFetchReport) {
-          nextReportSummary = await fetchReportSummary(reportApiFilters);
-        }
 
         if (refreshId !== latestRefreshIdRef.current) {
           return;
@@ -135,9 +125,6 @@ export function useAppDataOrchestrator({
         setPendingExpenses(nextPendingExpenses);
         setInvestmentOverview(nextInvestmentOverview);
         setInvestmentMovements(nextInvestmentMovements);
-        if (nextReportSummary !== undefined) {
-          setReportSummary(nextReportSummary);
-        }
         setTransactionFilters(filters);
         setInvestmentView(activeInvestmentView);
         setInvestmentFromDate(activeFromDate);
@@ -171,7 +158,6 @@ export function useAppDataOrchestrator({
     transactions,
     recurringRules,
     pendingExpenses,
-    reportSummary,
     investmentOverview,
     investmentMovements,
     investmentView,

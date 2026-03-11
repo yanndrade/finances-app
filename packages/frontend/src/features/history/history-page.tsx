@@ -26,7 +26,7 @@ import { cn } from "../../lib/utils";
 type HistoryPageProps = {
   accounts: AccountSummary[];
   cards: CardSummary[];
-  initialCompetenceMonth?: string;
+  month: string;
   className?: string;
 };
 
@@ -70,14 +70,11 @@ const EMPTY_PAGE: MovementPage = {
 export function HistoryPage({
   accounts,
   cards,
-  initialCompetenceMonth,
+  month,
   className,
 }: HistoryPageProps) {
   // ── State ──────────────────────────────────────────────────────────────────
 
-  const [competenceMonth, setCompetenceMonth] = useState(
-    initialCompetenceMonth ?? currentMonthKey(),
-  );
   const [searchText, setSearchText] = useState("");
   const [activeScope, setActiveScope] = useState<MovementScope>("all");
   const [advancedFilters, setAdvancedFilters] = useState<MovementFilters>({});
@@ -95,11 +92,11 @@ export function HistoryPage({
   const activeFilters = useMemo<MovementFilters>(
     () => ({
       ...advancedFilters,
-      competence_month: competenceMonth,
+      competence_month: month,
       scope: activeScope !== "all" ? activeScope : undefined,
       text: searchText.trim() || undefined,
     }),
-    [competenceMonth, activeScope, searchText, advancedFilters],
+    [month, activeScope, searchText, advancedFilters],
   );
 
   // ── Data fetching ──────────────────────────────────────────────────────────
@@ -133,8 +130,8 @@ export function HistoryPage({
 
   // Load summary whenever the month changes
   useEffect(() => {
-    void loadSummary(competenceMonth);
-  }, [competenceMonth, loadSummary]);
+    void loadSummary(month);
+  }, [month, loadSummary]);
 
   // Load movements whenever any filter changes (debounced for text)
   useEffect(() => {
@@ -162,11 +159,6 @@ export function HistoryPage({
     setActiveScope(scope);
   }
 
-  function handleCompetenceChange(month: string) {
-    setCompetenceMonth(month);
-    setActiveScope("all");
-  }
-
   function handleAdvancedFiltersChange(filters: MovementFilters) {
     setAdvancedFilters({
       kind: filters.kind,
@@ -183,12 +175,14 @@ export function HistoryPage({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className={cn("flex flex-col gap-4", className)}>
+    <section 
+      className={cn("flex flex-col gap-4", className)}
+      role="region"
+      aria-label="Histórico e filtros"
+    >
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <HistoryHeader
-        competenceMonth={competenceMonth}
         searchText={searchText}
-        onCompetenceChange={handleCompetenceChange}
         onSearchChange={setSearchText}
       />
 
@@ -273,6 +267,6 @@ export function HistoryPage({
         isOpen={isDrawerOpen}
         onClose={handleCloseDrawer}
       />
-    </div>
+    </section>
   );
 }

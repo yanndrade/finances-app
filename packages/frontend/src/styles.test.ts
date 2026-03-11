@@ -27,12 +27,12 @@ describe("styles", () => {
     expect(styles).toContain("--success: 160 84% 39%");
     expect(styles).toContain("--warning: 38 92% 50%");
     expect(styles).toContain("--danger: 343 78% 50%");
-    expect(styles).toContain("--finance-income: var(--success)");
-    expect(styles).toContain("--finance-expense: var(--danger)");
-    expect(styles).toContain("--finance-transfer: 213 18% 42%");
+    expect(styles).toContain("--finance-income: 155 60% 28%");
+    expect(styles).toContain("--finance-expense: 350 55% 40%");
+    expect(styles).toContain("--finance-transfer: 213 18% 50%");
     expect(styles).toContain("--chart-primary: var(--primary-accent)");
-    expect(styles).toContain("--chart-income: var(--success)");
-    expect(styles).toContain("--chart-expense: var(--danger)");
+    expect(styles).toContain("--chart-income: var(--finance-income)");
+    expect(styles).toContain("--chart-expense: var(--finance-expense)");
     expect(styles).toContain("--radius: 0.75rem");
   });
 
@@ -40,7 +40,7 @@ describe("styles", () => {
     const styles = readFileSync(path.resolve(__dirname, "./styles.css"), "utf8");
 
     expect(styles).toContain('font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", sans-serif;');
-    expect(styles).toContain('"Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", sans-serif');
+    expect(styles).toMatch(/"Segoe UI Variable Display",\s*"Segoe UI Variable Text",\s*"Segoe UI",\s*sans-serif/);
 
     const moneyValue = cssBlock(styles, ".money-value");
     expect(moneyValue).toContain("font-variant-numeric: tabular-nums;");

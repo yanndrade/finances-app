@@ -155,20 +155,15 @@ describe("Dashboard view", () => {
     render(<App />);
 
     expect(
-      await screen.findByText(/visao geral sem empilhar tudo/i, undefined, { timeout: 10_000 }),
+      await screen.findByText(/Entradas/i, undefined, { timeout: 10_000 }),
     ).toBeInTheDocument();
     expect(screen.getAllByText(/20,00/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/25,00/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/7,50/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/5,00/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/alimenta/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/raio-x de despesas/i)).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /compromissos/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: /compromissos/i }));
+    expect(screen.getByText(/próximos compromissos/i)).toBeInTheDocument();
 
     expect(screen.getByText(/tudo em dia/i)).toBeInTheDocument();
-    expect(screen.getByText(/sem fixos/i)).toBeInTheDocument();
-    expect(screen.getByText(/sem parcelas/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(7);

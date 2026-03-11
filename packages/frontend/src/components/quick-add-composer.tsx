@@ -30,6 +30,7 @@ import type {
   InvoicePaymentPayload,
   InvoiceSummary,
   TransferPayload,
+  RecurringRulePayload,
 } from "../lib/api";
 import { getCategoryOptions } from "../lib/categories";
 import {
@@ -37,6 +38,7 @@ import {
   quickAddReducer,
   type EntryType,
   type ExpensePaymentMode,
+  type RecurringPaymentMode,
   type InvestmentMode,
   type TransferMode,
   type QuickAddValidationErrors,
@@ -81,6 +83,7 @@ type QuickAddComposerProps = {
   onSubmitCardPurchase: (payload: CardPurchasePayload) => Promise<void>;
   onSubmitInvoicePayment: (payload: InvoicePaymentPayload) => Promise<void>;
   onSubmitInvestmentMovement: (payload: InvestmentMovementPayload) => Promise<void>;
+  onSubmitRecurringRule?: (payload: RecurringRulePayload) => Promise<void>;
   isSubmitting?: boolean;
 };
 
@@ -99,6 +102,7 @@ export function QuickAddComposer({
   onSubmitCardPurchase,
   onSubmitInvoicePayment,
   onSubmitInvestmentMovement,
+  onSubmitRecurringRule,
   isSubmitting,
 }: QuickAddComposerProps) {
   const isMobile = useMediaQuery(MOBILE_QUERY);
@@ -123,6 +127,8 @@ export function QuickAddComposer({
     invoiceId,
     dividendAmount,
     investedReductionAmount,
+    recurringPaymentMode,
+    dueDay,
     validationErrors,
   } = quickAddState;
   const [amount, setAmount] = useState("");
@@ -134,6 +140,9 @@ export function QuickAddComposer({
 
   const categoryOptions = getCategoryOptions(categoryId);
   const isCardExpense = entryType === "expense" && expensePaymentMode === "CARD";
+  const isCardRecurring = entryType === "recurring" && recurringPaymentMode === "CARD";
+  const showAccountSelect = !isCardExpense && !isCardRecurring;
+  const showCardSelect = isCardExpense || isCardRecurring;
   const openInvoices = useMemo(
     () => invoices.filter((invoice) => invoice.status.toLowerCase() !== "paid"),
     [invoices],
@@ -311,7 +320,7 @@ export function QuickAddComposer({
     if (!dateResult.success) {
       nextErrors.date = dateResult.error.issues[0]?.message;
     }
-    if (!isCardExpense) {
+    if (!isCardExpense && entryType !== "recurring") {
       const accountResult = z.string().min(1, "Selecione uma conta.").safeParse(accountId);
       if (!accountResult.success) {
         nextErrors.accountId = accountResult.error.issues[0]?.message;
@@ -359,6 +368,32 @@ export function QuickAddComposer({
       }
     }
 
+    if (entryType === "recurring") {
+      const dueDayCount = parseInt(dueDay, 10);
+      const dueDayResult = z
+        .number()
+        .int()
+        .min(1, "Dia de vencimento inválido (1-28).")
+        .max(28, "Dia de vencimento inválido (1-28).")
+        .safeParse(dueDayCount);
+
+      if (!dueDayResult.success) {
+        nextErrors.dueDay = dueDayResult.error.issues[0]?.message;
+      }
+
+      if (recurringPaymentMode === "CARD") {
+        const cardResult = z.string().min(1, "Selecione um cartão.").safeParse(cardId);
+        if (!cardResult.success) {
+          nextErrors.cardId = cardResult.error.issues[0]?.message;
+        }
+      } else {
+        const accountResult = z.string().min(1, "Selecione uma conta.").safeParse(accountId);
+        if (!accountResult.success) {
+          nextErrors.accountId = accountResult.error.issues[0]?.message;
+        }
+      }
+    }
+
     dispatchQuickAdd({ type: "validationErrorsSet", errors: nextErrors });
     return Object.keys(nextErrors).length === 0;
   }
@@ -391,7 +426,19 @@ export function QuickAddComposer({
     }
 
     try {
-      if (entryType === "investment") {
+      if (entryType === "recurring") {
+        if (onSubmitRecurringRule) {
+          await onSubmitRecurringRule({
+            name: description || "Gasto Fixo", // Use description as name since description is the main input
+            amountInCents,
+            dueDay: parseInt(dueDay, 10),
+            paymentMethod: recurringPaymentMode,
+            accountId: recurringPaymentMode !== "CARD" ? accountId : undefined,
+            cardId: recurringPaymentMode === "CARD" ? cardId : undefined,
+            categoryId: categoryId || "other",
+          });
+        }
+      } else if (entryType === "investment") {
         if (investmentMode === "contribution") {
           await onSubmitInvestmentMovement({
             type: "contribution",
@@ -559,6 +606,7 @@ export function QuickAddComposer({
             <option value="income">Receita</option>
             <option value="transfer">Transferência</option>
             <option value="investment">Investimento</option>
+            <option value="recurring">Gasto Fixo</option>
           </select>
         </div>
 
@@ -601,6 +649,51 @@ export function QuickAddComposer({
               value={personId}
               onChange={(event) => setPersonId(event.target.value)}
             />
+          </div>
+        ) : null}
+
+        {entryType === "recurring" ? (
+          <div className="space-y-2">
+            <Label htmlFor="quick-add-recurring-mode">Modo de pagamento</Label>
+            <select
+              id="quick-add-recurring-mode"
+              aria-label="Modo de pagamento do gasto fixo"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
+              onChange={(event) =>
+                dispatchQuickAdd({
+                  type: "recurringPaymentModeChanged",
+                  mode: event.target.value as RecurringPaymentMode,
+                })
+              }
+              value={recurringPaymentMode}
+            >
+              <option value="PIX">PIX</option>
+              <option value="CASH">Dinheiro</option>
+              <option value="OTHER">Outro</option>
+              <option value="CARD">Cartão</option>
+            </select>
+          </div>
+        ) : null}
+
+        {entryType === "recurring" ? (
+          <div className="space-y-2">
+            <Label htmlFor="quick-add-due-day">Dia do vencimento</Label>
+            <Input
+              id="quick-add-due-day"
+              aria-label="Dia do vencimento"
+              type="number"
+              min="1"
+              max="28"
+              className="h-11 border-transparent bg-muted/50"
+              onChange={(event) =>
+                dispatchQuickAdd({
+                  type: "dueDayChanged",
+                  dueDay: event.target.value,
+                })
+              }
+              value={dueDay}
+            />
+            <FieldError message={validationErrors.dueDay} />
           </div>
         ) : null}
 
@@ -667,8 +760,8 @@ export function QuickAddComposer({
           </div>
         ) : null}
 
-        {entryType === "expense" || entryType === "income" ? (
-          <div className={isCardExpense ? "col-span-1 sm:col-span-2 space-y-2" : "space-y-2"}>
+        {entryType === "expense" || entryType === "income" || entryType === "recurring" ? (
+          <div className={isCardExpense || entryType === "recurring" ? "col-span-1 sm:col-span-2 space-y-2" : "space-y-2"}>
             <Label htmlFor="quick-add-category">Categoria</Label>
             <select
               id="quick-add-category"
@@ -723,7 +816,7 @@ export function QuickAddComposer({
           </div>
         ) : null}
 
-        {isCardExpense ? null : (
+        {showAccountSelect ? (
           <div className="col-span-1 sm:col-span-2 space-y-2">
             <Label htmlFor="quick-add-account">
               {entryType === "transfer" && transferMode === "invoice_payment"
@@ -759,7 +852,7 @@ export function QuickAddComposer({
             </select>
             <FieldError message={validationErrors.accountId} />
           </div>
-        )}
+        ) : null}
 
         {entryType === "transfer" && transferMode === "internal" ? (
           <div className="space-y-2">
@@ -827,9 +920,9 @@ export function QuickAddComposer({
           </>
         ) : null}
 
-        {isCardExpense ? (
+        {showCardSelect ? (
           <>
-            <div className="space-y-2">
+            <div className={isCardRecurring ? "col-span-1 sm:col-span-2 space-y-2" : "space-y-2"}>
               <Label htmlFor="quick-add-card">Cartão</Label>
               <select
                 id="quick-add-card"
@@ -852,29 +945,31 @@ export function QuickAddComposer({
               </select>
               <FieldError message={validationErrors.cardId} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="quick-add-installments">Parcelas</Label>
-              <Input
-                id="quick-add-installments"
-                aria-label="Parcelas"
-                type="number"
-                min={1}
-                max={48}
-                className="h-11 border-transparent bg-muted/50"
-                value={installments}
-                onChange={(event) => {
-                  dispatchQuickAdd({
-                    type: "installmentsChanged",
-                    installments: event.target.value,
-                  });
-                  dispatchQuickAdd({
-                    type: "validationErrorsPatched",
-                    errors: { installments: undefined },
-                  });
-                }}
-              />
-              <FieldError message={validationErrors.installments} />
-            </div>
+            {isCardExpense && (
+              <div className="space-y-2">
+                <Label htmlFor="quick-add-installments">Parcelas</Label>
+                <Input
+                  id="quick-add-installments"
+                  aria-label="Parcelas"
+                  type="number"
+                  min={1}
+                  max={48}
+                  className="h-11 border-transparent bg-muted/50"
+                  value={installments}
+                  onChange={(event) => {
+                    dispatchQuickAdd({
+                      type: "installmentsChanged",
+                      installments: event.target.value,
+                    });
+                    dispatchQuickAdd({
+                      type: "validationErrorsPatched",
+                      errors: { installments: undefined },
+                    });
+                  }}
+                />
+                <FieldError message={validationErrors.installments} />
+              </div>
+            )}
           </>
         ) : null}
       </div>
