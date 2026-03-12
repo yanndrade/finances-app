@@ -12,6 +12,7 @@ from finance_app.interfaces.http.routes.investments import build_investments_rou
 from finance_app.interfaces.http.routes.movements import build_movements_router
 from finance_app.interfaces.http.routes.recurring import build_recurring_router
 from finance_app.interfaces.http.routes.reports import build_reports_router
+from finance_app.interfaces.http.routes.security import build_security_router
 from finance_app.interfaces.http.routes.transactions import build_transactions_router
 
 
@@ -46,6 +47,7 @@ def build_router(services: AppServices) -> APIRouter:
     router.include_router(build_recurring_router(services.recurring_service))
     router.include_router(build_budgets_router(services.budget_service))
     router.include_router(build_investments_router(services.investment_service))
+    router.include_router(build_security_router(services.security_store))
     router.include_router(
         build_movements_router(movement_service=services.movement_service)
     )

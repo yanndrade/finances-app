@@ -1,8 +1,20 @@
 # Desktop
 
-Desktop package root for the Tauri shell.
+Desktop shell for the finances app (Tauri v2).
 
-- `src-tauri/`: Rust and Tauri host application code
+- `src-tauri/`: Rust host runtime, tray behavior, backend lifecycle, and autostart commands
 - `icons/`: desktop packaging icon assets
 
-The Tauri manifest and Rust entrypoint will be added in the desktop implementation issues.
+## Development
+
+Run desktop development from this package:
+
+```powershell
+npm run tauri -- dev
+```
+
+The desktop runtime starts the backend automatically using:
+
+```powershell
+uv run backend --host 127.0.0.1 --port 8000
+```

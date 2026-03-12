@@ -422,6 +422,58 @@ describe("api timestamp normalization", () => {
     });
   });
 
+  it("fetches security state from dedicated endpoint", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          password_configured: true,
+          is_locked: true,
+          requires_lock_on_startup: true,
+          inactivity_lock_seconds: 300,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await api.fetchSecurityState();
+
+    expect(result).toEqual({
+      password_configured: true,
+      is_locked: true,
+      requires_lock_on_startup: true,
+      inactivity_lock_seconds: 300,
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/security/state");
+  });
+
+  it("posts security commands for password, lock and unlock", async () => {
+    const fetchMock = vi
+      .fn<(typeof fetch)>()
+      .mockResolvedValue(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.setSecurityPassword({
+      password: "secret-123",
+      inactivityLockSeconds: 300,
+    });
+    await api.lockApplication();
+    await api.unlockApplication("secret-123");
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/security/password");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      password: "secret-123",
+      inactivity_lock_seconds: 300,
+    });
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/api/security/lock");
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/api/security/unlock");
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({
+      password: "secret-123",
+    });
+  });
+
   it("returns undefined for 204 responses", async () => {
     const fetchMock = vi
       .fn<(typeof fetch)>()
