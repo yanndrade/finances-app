@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Download,
@@ -9,6 +9,7 @@ import {
   Smartphone,
   Wifi,
 } from "lucide-react";
+import { toString as toQrSvgString } from "qrcode";
 
 import type {
   AuthorizedLanDevice,
@@ -73,6 +74,40 @@ export function SettingsView({
   const [isUpdatingLan, setIsUpdatingLan] = useState(false);
   const [isGeneratingPairToken, setIsGeneratingPairToken] = useState(false);
   const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
+  const [pairingQrDataUrl, setPairingQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!lanPairingSession) {
+      setPairingQrDataUrl(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    void toQrSvgString(lanPairingSession.pairing_url, {
+      type: "svg",
+      margin: 1,
+      errorCorrectionLevel: "M",
+    })
+      .then((svgMarkup) => {
+        if (!active) {
+          return;
+        }
+        const dataUrl =
+          "data:image/svg+xml;utf8," + encodeURIComponent(svgMarkup);
+        setPairingQrDataUrl(dataUrl);
+      })
+      .catch(() => {
+        if (active) {
+          setPairingQrDataUrl(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [lanPairingSession]);
 
   async function handleReset() {
     setIsResetting(true);
@@ -284,7 +319,7 @@ export function SettingsView({
                 <p className="settings-action-item__hint">
                   {lanSecurityState?.enabled ? "Ativo" : "Desativado"}
                   {" - "}
-                  {lanSecurityState?.local_ip ?? "IP local indisponivel"}
+                  {lanSecurityState?.local_ip ?? "IP local indisponível"}
                   {lanSecurityState?.subnet_cidr
                     ? ` (${lanSecurityState.subnet_cidr})`
                     : ""}
@@ -308,7 +343,7 @@ export function SettingsView({
               <div>
                 <p className="settings-action-item__label">Pareamento por QR</p>
                 <p className="settings-action-item__hint">
-                  Gere um token temporario e escaneie no celular para autorizar.
+                  Gere um token temporário e escaneie no celular para autorizar.
                 </p>
               </div>
               <Button
@@ -331,11 +366,17 @@ export function SettingsView({
             {lanPairingSession ? (
               <div className="rounded-xl border border-border/60 p-3">
                 <div className="flex flex-col gap-3 md:flex-row">
-                  <img
-                    src={lanPairingSession.qr_image_url}
-                    alt="QR para pareamento LAN"
-                    className="h-36 w-36 rounded-md border border-border/60 object-cover"
-                  />
+                  {pairingQrDataUrl ? (
+                    <img
+                      src={pairingQrDataUrl}
+                      alt="QR para pareamento LAN"
+                      className="h-36 w-36 rounded-md border border-border/60 bg-white object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-36 w-36 items-center justify-center rounded-md border border-border/60 bg-muted text-[11px] text-muted-foreground">
+                      QR indisponível
+                    </div>
+                  )}
                   <div className="min-w-0 space-y-1">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       URL de pareamento
@@ -369,7 +410,7 @@ export function SettingsView({
                           {device.name}
                         </p>
                         <p className="truncate text-xs text-muted-foreground">
-                          Ultimo acesso:{" "}
+                          Último acesso:{" "}
                           {device.last_seen_at
                             ? new Date(device.last_seen_at).toLocaleString()
                             : "nunca"}

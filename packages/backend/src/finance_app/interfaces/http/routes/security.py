@@ -2,9 +2,11 @@ from urllib.parse import quote
 
 from fastapi import APIRouter
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 from fastapi import status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -135,17 +137,119 @@ def build_security_router(security_store: SecurityStore) -> APIRouter:
             local_ip=network.local_ip,
             pair_token=pair_token.token,
         )
-        qr_image_url = (
-            "https://api.qrserver.com/v1/create-qr-code/?size=256x256&data="
-            + quote(pairing_url, safe="")
-        )
-
         return {
             "pair_token": pair_token.token,
             "expires_at": pair_token.expires_at,
             "pairing_url": pairing_url,
-            "qr_image_url": qr_image_url,
         }
+
+    @router.get("/api/security/pair", response_class=HTMLResponse)
+    def pairing_bootstrap_page(
+        pair_token: str = Query(min_length=1),
+    ) -> str:
+        safe_token = pair_token.replace("\\", "\\\\").replace('"', '\\"')
+        return f"""
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Finance App Pairing</title>
+    <style>
+      body {{
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: #0b1020;
+        color: #e9edf6;
+      }}
+      .card {{
+        max-width: 460px;
+        margin: 0 auto;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 12px;
+        padding: 18px;
+        background: rgba(255, 255, 255, 0.04);
+      }}
+      input {{
+        width: 100%;
+        height: 40px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        padding: 0 12px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+      }}
+      button {{
+        margin-top: 12px;
+        width: 100%;
+        height: 40px;
+        border-radius: 8px;
+        border: none;
+        background: #3dd6a0;
+        color: #062719;
+        font-weight: 700;
+      }}
+      #status {{
+        margin-top: 12px;
+        font-size: 14px;
+      }}
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1 style="margin-top: 0; font-size: 20px;">Pair device</h1>
+      <p style="font-size: 14px; opacity: 0.9;">
+        Authorize this mobile browser for LAN access.
+      </p>
+      <label for="deviceName" style="display: block; font-size: 13px; margin-bottom: 6px;">
+        Device name
+      </label>
+      <input id="deviceName" type="text" />
+      <button id="pairButton" type="button">Pair device</button>
+      <p id="status"></p>
+    </div>
+    <script>
+      const pairToken = "{safe_token}";
+      const deviceNameInput = document.getElementById("deviceName");
+      const status = document.getElementById("status");
+      const pairButton = document.getElementById("pairButton");
+
+      if (deviceNameInput && !deviceNameInput.value) {{
+        deviceNameInput.value = navigator.userAgent.slice(0, 80);
+      }}
+
+      pairButton?.addEventListener("click", async () => {{
+        if (!status) return;
+        status.textContent = "Pairing device...";
+        try {{
+          const response = await fetch("/api/security/pair", {{
+            method: "POST",
+            headers: {{
+              "Content-Type": "application/json",
+            }},
+            body: JSON.stringify({{
+              pair_token: pairToken,
+              device_name: deviceNameInput?.value || undefined,
+            }}),
+          }});
+
+          const payload = await response.json();
+          if (!response.ok) {{
+            status.textContent = payload?.detail || "Failed to pair device.";
+            return;
+          }}
+
+          localStorage.setItem("finance.device_token", payload.device_token);
+          status.textContent = "Device paired. You can close this page.";
+        }} catch (_error) {{
+          status.textContent = "Failed to pair device.";
+        }}
+      }});
+    </script>
+  </body>
+</html>
+"""
 
     @router.post("/api/security/pair")
     def pair_mobile_device(payload: PairDeviceRequest) -> dict[str, str]:
@@ -210,4 +314,7 @@ def _read_public_port(request: Request) -> int:
 def _build_pairing_url(*, request: Request, local_ip: str, pair_token: str) -> str:
     scheme = _read_public_scheme(request)
     port = _read_public_port(request)
-    return f"{scheme}://{local_ip}:{port}/?pair_token={quote(pair_token, safe='')}"
+    return (
+        f"{scheme}://{local_ip}:{port}/api/security/pair"
+        f"?pair_token={quote(pair_token, safe='')}"
+    )

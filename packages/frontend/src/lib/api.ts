@@ -417,7 +417,6 @@ export type LanPairTokenSession = {
   pair_token: string;
   expires_at: string;
   pairing_url: string;
-  qr_image_url: string;
 };
 
 export type AuthorizedLanDevice = {

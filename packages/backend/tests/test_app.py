@@ -278,6 +278,10 @@ def test_security_lan_pairing_authenticates_remote_devices(
     assert pair_token_response.status_code == 200
     pair_token_payload = pair_token_response.json()
     pair_token = pair_token_payload["pair_token"]
+    assert "qr_image_url" not in pair_token_payload
+    assert pair_token_payload["pairing_url"].startswith(
+        "http://192.168.50.2:8000/api/security/pair?pair_token="
+    )
 
     remote_headers = {
         "X-Finance-Client-IP": "192.168.50.20",
@@ -310,6 +314,33 @@ def test_security_lan_pairing_authenticates_remote_devices(
     assert devices_payload[0]["created_at"] == pair_response.json()["paired_at"]
     assert devices_payload[0]["last_seen_ip"] == "192.168.50.20"
     assert devices_payload[0]["revoked_at"] is None
+
+
+def test_security_lan_pairing_page_is_reachable_without_origin_header(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    client.post("/api/security/lan", json={"enabled": True})
+    pair_token = client.post("/api/security/lan/pair-token").json()["pair_token"]
+
+    response = client.get(
+        "/api/security/pair",
+        params={"pair_token": pair_token},
+        headers={"X-Finance-Client-IP": "192.168.50.20"},
+    )
+
+    assert response.status_code == 200
+    assert "Pair device" in response.text
+    assert "localStorage.setItem(\"finance.device_token\"" in response.text
 
 
 def test_security_lan_rejects_remote_requests_without_valid_context(
@@ -401,6 +432,67 @@ def test_security_lan_rejects_requests_outside_authorized_subnet(
     assert response.json() == {
         "detail": "Request origin is outside the authorized subnet."
     }
+
+
+def test_security_lan_accepts_http_origin_when_server_is_running_http(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    client.post("/api/security/lan", json={"enabled": True})
+    pair_token = client.post("/api/security/lan/pair-token").json()["pair_token"]
+
+    pair_response = client.post(
+        "/api/security/pair",
+        json={"pair_token": pair_token, "device_name": "Pixel HTTP"},
+        headers={"X-Finance-Client-IP": "192.168.50.20"},
+    )
+    assert pair_response.status_code == 200
+    device_token = pair_response.json()["device_token"]
+
+    http_origin_response = client.get(
+        "/api/dashboard",
+        params={"month": "2026-03"},
+        headers={
+            "X-Finance-Client-IP": "192.168.50.20",
+            "Origin": "http://192.168.50.2:8000",
+            "X-Finance-Token": device_token,
+        },
+    )
+    assert http_origin_response.status_code == 200
+
+
+def test_security_public_endpoints_are_localhost_only_for_remote_clients(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    for path in ("/health", "/openapi.json", "/docs", "/redoc"):
+        response = client.get(
+            path,
+            headers={"X-Finance-Client-IP": "192.168.50.20"},
+        )
+        assert response.status_code == 403
+        assert response.json() == {
+            "detail": "This endpoint is only available on localhost."
+        }
 
 
 def test_accounts_endpoints_support_create_list_and_update(tmp_path) -> None:

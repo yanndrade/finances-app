@@ -343,6 +343,8 @@ export function App() {
         if (cancelled) {
           return;
         }
+        await refreshLanSecurityState();
+        setLanPairingSession(null);
         currentUrl.searchParams.delete("pair_token");
         globalThis.history.replaceState({}, "", currentUrl.toString());
         showToast("success", "Dispositivo pareado com sucesso.");

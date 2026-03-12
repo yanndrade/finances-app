@@ -106,10 +106,13 @@ def create_app(
     @app.middleware("http")
     async def enforce_lan_security(request: Request, call_next):
         path = request.url.path
-        if _is_public_path(path):
-            return await call_next(request)
-
         request_ip = _resolve_request_ip(request)
+
+        if _is_public_path(path):
+            if request_ip is None or _is_local_client(request_ip):
+                return await call_next(request)
+            return _forbidden("This endpoint is only available on localhost.")
+
         if request_ip is None or _is_local_client(request_ip):
             return await call_next(request)
 
@@ -129,22 +132,23 @@ def create_app(
         if not _is_ip_in_subnet(request_ip, network.subnet_cidr):
             return _forbidden("Request origin is outside the authorized subnet.")
 
-        origin = request.headers.get("origin")
-        if not _is_origin_allowed(
-            origin=origin,
-            local_ip=network.local_ip,
-            allow_http=False,
-        ):
-            return _forbidden("Invalid request origin.")
-
         if path.startswith(LAN_LOCAL_ONLY_PREFIXES):
             return _forbidden("LAN configuration endpoints are desktop-only.")
 
         if request.method.upper() == "OPTIONS":
             return await call_next(request)
 
-        if path == LAN_PAIR_ENDPOINT and request.method.upper() == "POST":
+        if path == LAN_PAIR_ENDPOINT and request.method.upper() in {"GET", "POST"}:
             return await call_next(request)
+
+        origin = request.headers.get("origin")
+        allow_http_origin = getattr(request.app.state, "public_scheme", "http") != "https"
+        if not _is_origin_allowed(
+            origin=origin,
+            local_ip=network.local_ip,
+            allow_http=allow_http_origin,
+        ):
+            return _forbidden("Invalid request origin.")
 
         device_token = request.headers.get("X-Finance-Token")
         if not device_token:
