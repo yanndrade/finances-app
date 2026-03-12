@@ -24,6 +24,7 @@ import { cn } from "../../lib/utils";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type HistoryPageProps = {
+  surface?: "desktop" | "mobile";
   accounts: AccountSummary[];
   cards: CardSummary[];
   month: string;
@@ -69,6 +70,7 @@ const EMPTY_PAGE: MovementPage = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function HistoryPage({
+  surface = "desktop",
   accounts,
   cards,
   month,
@@ -95,10 +97,13 @@ export function HistoryPage({
     () => ({
       ...advancedFilters,
       competence_month: month,
-      scope: activeScope !== "all" ? activeScope : undefined,
+      scope:
+        surface === "mobile" || activeScope === "all"
+          ? undefined
+          : activeScope,
       text: searchText.trim() || undefined,
     }),
-    [month, activeScope, searchText, advancedFilters],
+    [month, activeScope, searchText, advancedFilters, surface],
   );
 
   // ── Data fetching ──────────────────────────────────────────────────────────
@@ -134,6 +139,12 @@ export function HistoryPage({
   useEffect(() => {
     void loadSummary(month);
   }, [month, refreshKey, loadSummary]);
+
+  useEffect(() => {
+    if (surface === "mobile" && activeScope !== "all") {
+      setActiveScope("all");
+    }
+  }, [activeScope, surface]);
 
   // Load movements whenever any filter changes (debounced for text)
   useEffect(() => {
@@ -189,20 +200,23 @@ export function HistoryPage({
       />
 
       {/* ── Summary ribbon ──────────────────────────────────────────────── */}
-      <div className={cn("transition-opacity duration-200", summaryLoading && "opacity-60")}>
-        <SummaryRibbon
-          summary={summary}
+      {surface === "desktop" ? (
+        <div className={cn("transition-opacity duration-200", summaryLoading && "opacity-60")}>
+          <SummaryRibbon
+            summary={summary}
+            activeScope={activeScope}
+            onScopeChange={handleScopeChange}
+          />
+        </div>
+      ) : null}
+
+      {surface === "desktop" ? (
+        <ScopeBar
+          counts={summary.counts}
           activeScope={activeScope}
           onScopeChange={handleScopeChange}
         />
-      </div>
-
-      {/* ── Scope bar ───────────────────────────────────────────────────── */}
-      <ScopeBar
-        counts={summary.counts}
-        activeScope={activeScope}
-        onScopeChange={handleScopeChange}
-      />
+      ) : null}
 
       {/* ── Advanced filters ────────────────────────────────────────────── */}
       <FilterPanel

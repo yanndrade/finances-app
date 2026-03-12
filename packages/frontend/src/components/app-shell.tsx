@@ -10,6 +10,7 @@ import type { UiDensity } from "../lib/ui-density";
 const SIDEBAR_COLLAPSED_KEY = "finance.sidebar-collapsed";
 
 type AppShellProps = {
+  surface: "desktop" | "mobile";
   activeView: AppView;
   title: string;
   description: string;
@@ -24,9 +25,8 @@ type AppShellProps = {
   onMonthChange?: (month: string) => void;
 };
 
-const MOBILE_QUERY = "(max-width: 900px)";
-
 export function AppShell({
+  surface,
   activeView,
   title,
   description,
@@ -40,8 +40,6 @@ export function AppShell({
   month,
   onMonthChange,
 }: AppShellProps) {
-  const isMobile = useMediaQuery(MOBILE_QUERY);
-
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
@@ -89,14 +87,14 @@ export function AppShell({
   }, [onOpenCommandPalette, onOpenQuickAdd]);
 
   useEffect(() => {
-    if (!isMobile || isMobileEssentialView(activeView)) {
+    if (surface !== "mobile" || isMobileEssentialView(activeView)) {
       return;
     }
 
     onNavigate("dashboard");
-  }, [activeView, isMobile, onNavigate]);
+  }, [activeView, onNavigate, surface]);
 
-  if (isMobile) {
+  if (surface === "mobile") {
     return (
       <div className={`app-layout app-layout--mobile ui-density--${uiDensity}`}>
         <main className="app-main app-main--mobile">
@@ -210,34 +208,4 @@ export function AppShell({
       </div>
     </div>
   );
-}
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return false;
-    }
-
-    return window.matchMedia(query).matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia(query);
-    const handleChange = (event: MediaQueryListEvent) => {
-      setMatches(event.matches);
-    };
-
-    setMatches(mediaQuery.matches);
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange);
-    };
-  }, [query]);
-
-  return matches;
 }

@@ -1,57 +1,9 @@
 import type { ComponentProps } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AppShell } from "./app-shell";
 import type { AppView } from "./sidebar";
-
-type MatchMediaController = {
-  setMatches: (matches: boolean) => void;
-};
-
-function installMatchMedia(initialMatches: boolean): MatchMediaController {
-  let currentMatches = initialMatches;
-  const listeners = new Set<(event: MediaQueryListEvent) => void>();
-
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn().mockImplementation(() => {
-      return {
-        get matches() {
-          return currentMatches;
-        },
-        media: "(max-width: 900px)",
-        onchange: null,
-        addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => {
-          listeners.add(listener);
-        },
-        removeEventListener: (
-          _type: string,
-          listener: (event: MediaQueryListEvent) => void,
-        ) => {
-          listeners.delete(listener);
-        },
-        addListener: (listener: (event: MediaQueryListEvent) => void) => {
-          listeners.add(listener);
-        },
-        removeListener: (listener: (event: MediaQueryListEvent) => void) => {
-          listeners.delete(listener);
-        },
-        dispatchEvent: () => true,
-      } as MediaQueryList;
-    }),
-  );
-
-  return {
-    setMatches(nextMatches: boolean) {
-      currentMatches = nextMatches;
-      const event = { matches: currentMatches } as MediaQueryListEvent;
-      for (const listener of listeners) {
-        listener(event);
-      }
-    },
-  };
-}
 
 function renderShell(overrides?: Partial<ComponentProps<typeof AppShell>>) {
   const onNavigate = vi.fn<(view: AppView) => void>();
@@ -59,8 +11,9 @@ function renderShell(overrides?: Partial<ComponentProps<typeof AppShell>>) {
   const onOpenCommandPalette = vi.fn();
   const onMonthChange = vi.fn();
 
-  render(
+  const result = render(
     <AppShell
+      surface="desktop"
       activeView="dashboard"
       title="Visao geral"
       description="Resumo mensal e atalhos."
@@ -76,13 +29,11 @@ function renderShell(overrides?: Partial<ComponentProps<typeof AppShell>>) {
     </AppShell>,
   );
 
-  return { onNavigate, onOpenQuickAdd, onOpenCommandPalette, onMonthChange };
+  return { ...result, onNavigate, onOpenQuickAdd, onOpenCommandPalette, onMonthChange };
 }
 
 describe("AppShell responsive behavior", () => {
-  it("shows desktop sidebar and contextual panel when not on mobile", () => {
-    installMatchMedia(false);
-
+  it("shows desktop sidebar and contextual panel on desktop surface", () => {
     renderShell({
       contextPanel: <div>Contexto desktop</div>,
     });
@@ -92,29 +43,29 @@ describe("AppShell responsive behavior", () => {
     expect(screen.queryByRole("navigation", { name: /mobile/i })).not.toBeInTheDocument();
   });
 
-  it("renders reduced mobile navigation with a prominent add-expense action", async () => {
-    installMatchMedia(true);
+  it("renders 5-item mobile navigation with reimbursements and quick add action", async () => {
     const user = userEvent.setup();
-    const { onNavigate, onOpenQuickAdd } = renderShell();
+    const { onNavigate, onOpenQuickAdd } = renderShell({ surface: "mobile" });
 
     const mobileNav = screen.getByRole("navigation", { name: /mobile/i });
     expect(mobileNav).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /in.*cio/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hist/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cart/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /relatorios/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /fixos/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reembols/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^contas$/i })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /cart/i }));
-    expect(onNavigate).toHaveBeenCalledWith("cards");
+    await user.click(screen.getByRole("button", { name: /reembols/i }));
+    expect(onNavigate).toHaveBeenCalledWith("reimbursements");
 
     await user.click(screen.getByRole("button", { name: /adicionar gasto/i }));
     expect(onOpenQuickAdd).toHaveBeenCalledTimes(1);
   });
 
   it("forces a mobile-safe view when desktop-only sections are active", async () => {
-    installMatchMedia(true);
     const { onNavigate } = renderShell({
+      surface: "mobile",
       activeView: "investments",
     });
 
@@ -123,17 +74,30 @@ describe("AppShell responsive behavior", () => {
     });
   });
 
-  it("switches from desktop to mobile layout when viewport changes", async () => {
-    const controller = installMatchMedia(false);
-    const { onNavigate } = renderShell({
+  it("switches from desktop to mobile layout when surface changes", async () => {
+    const { rerender, onNavigate } = renderShell({
       activeView: "investments",
+      surface: "desktop",
     });
 
     expect(screen.getByRole("navigation", { name: /navega.*principal/i })).toBeInTheDocument();
 
-    act(() => {
-      controller.setMatches(true);
-    });
+    rerender(
+      <AppShell
+        surface="mobile"
+        activeView="investments"
+        title="Visao geral"
+        description="Resumo mensal e atalhos."
+        onNavigate={onNavigate}
+        onOpenQuickAdd={vi.fn()}
+        onOpenCommandPalette={vi.fn()}
+        uiDensity="compact"
+        month="2026-03"
+        onMonthChange={vi.fn()}
+      >
+        <section>Conteudo</section>
+      </AppShell>,
+    );
 
     await waitFor(() => {
       expect(screen.getByRole("navigation", { name: /mobile/i })).toBeInTheDocument();
@@ -142,7 +106,6 @@ describe("AppShell responsive behavior", () => {
   });
 
   it("routes keyboard shortcuts to quick add and command palette", () => {
-    installMatchMedia(false);
     const { onOpenQuickAdd, onOpenCommandPalette } = renderShell();
 
     fireEvent.keyDown(window, { key: "n", ctrlKey: true });
@@ -154,7 +117,6 @@ describe("AppShell responsive behavior", () => {
   });
 
   it("renders MonthPicker on dashboard and handles month changes", () => {
-    installMatchMedia(false);
     const { onMonthChange } = renderShell();
 
     const monthInput = screen.getByLabelText(/selecionar compet/i);
@@ -167,7 +129,6 @@ describe("AppShell responsive behavior", () => {
   });
 
   it("keeps MonthPicker available when the shell receives month controls", () => {
-    installMatchMedia(false);
     renderShell({ activeView: "cards" });
 
     const monthInput = screen.getByLabelText(/selecionar compet/i);
