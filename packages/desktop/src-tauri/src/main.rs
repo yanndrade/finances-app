@@ -105,7 +105,7 @@ fn set_autostart_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
 }
 
 fn main() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
@@ -139,8 +139,20 @@ fn main() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run finances desktop shell");
+        .build(tauri::generate_context!())
+        .expect("failed to build finances desktop shell");
+
+    app.run(|app_handle, event| {
+        if matches!(
+            event,
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+        ) {
+            if let Some(state) = app_handle.try_state::<RuntimeState>() {
+                state.mark_quitting();
+                state.stop_backend();
+            }
+        }
+    });
 }
 
 fn configure_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -160,7 +172,12 @@ fn configure_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>
             handle_tray_action(app, TrayAction::from_menu_id(event.id().as_ref()));
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { .. } = event {
+            if let TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                button_state: tauri::tray::MouseButtonState::Up,
+                ..
+            } = event
+            {
                 handle_tray_action(&tray.app_handle(), TrayAction::Open);
             }
         });
