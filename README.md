@@ -149,7 +149,7 @@ npm run dev
 
 # Apenas backend (FastAPI com reload)
 cd packages/backend
-uv run finace  # ou uvicorn finance_app.main:app --reload
+uv run backend  # ou uvicorn finance_app.main:app --reload
 
 # Apenas desktop (Tauri dev)
 cd packages/desktop
@@ -171,20 +171,45 @@ uv run pytest
 #### Build para Produção
 
 ```bash
-# Build do frontend
-cd packages/frontend
-npm run build
-
-# Build do desktop (inclui backend empacotado)
-cd packages/desktop
-npm run tauri build
+# Build completo Windows (frontend + backend sidecar + instalador MSI)
+./scripts/build-release-windows.ps1
 ```
+
+#### Distribuição no GitHub Actions
+
+- Workflow: `.github/workflows/windows-release.yml`
+- Em `pull_request` e `push` para `main`: valida build e publica artefato do instalador
+- Em tags `v*` (ex: `v0.2.0`): publica release no GitHub com os arquivos `.msi`
+
+#### Assinatura de Código (recomendado para evitar alerta de segurança)
+
+Configure os secrets do repositório:
+
+- `WINDOWS_CERT_PFX_BASE64`: conteúdo do certificado `.pfx` em base64
+- `WINDOWS_CERT_PASSWORD`: senha do certificado
+- `WINDOWS_SIGN_TIMESTAMP_URL` (opcional): servidor RFC3161 (padrão `http://timestamp.digicert.com`)
+
+Com os secrets configurados, o pipeline assina:
+
+- `packages/desktop/src-tauri/bin/backend.exe` (antes do bundle)
+- `packages/desktop/src-tauri/target/release/finances-desktop.exe`
+- arquivos `.msi` gerados no release
+
+Observação importante: certificado OV reduz alertas, mas o SmartScreen pode continuar avisando até ganhar reputação. Certificado EV acelera esse processo de confiança.
+
+#### Requisitos de Runtime (usuário final)
+
+- Windows 10/11
+- Microsoft Edge WebView2 Runtime instalado (normalmente já vem no Windows moderno)
+- Na primeira execução, permitir a aplicação no Firewall para rede privada caso queira usar o modo LAN
 
 ## 🗄️ Persistência de Dados
 
 ### Dual Database Pattern
 
 Finanças App utiliza duas bases SQLite separadas:
+
+No build desktop de produção para Windows, os arquivos são armazenados em `%LOCALAPPDATA%\com.yannb.finances\` (`app.db`, `events.db` e certificados TLS), evitando escrita na pasta de instalação.
 
 1. **Event Store (`events.db`)** - Fonte da verdade
    - Append-only, nunca atualiza ou deleta registros

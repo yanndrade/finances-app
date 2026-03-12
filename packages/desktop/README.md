@@ -18,3 +18,25 @@ The desktop runtime starts the backend automatically using:
 ```powershell
 uv run backend --host 127.0.0.1 --port 8000
 ```
+
+## Release Packaging (Windows)
+
+The desktop release expects a bundled backend sidecar at:
+
+- `src-tauri/bin/backend.exe`
+
+From the repository root, use:
+
+```powershell
+./scripts/build-release-windows.ps1
+```
+
+Optional signing env vars used by the release script:
+
+- `WINDOWS_SIGN_CERT_PATH`
+- `WINDOWS_SIGN_CERT_PASSWORD`
+- `WINDOWS_SIGN_TIMESTAMP_URL`
+
+Generated installer files (`.msi`) are written to:
+
+- `src-tauri/target/release/bundle/msi`

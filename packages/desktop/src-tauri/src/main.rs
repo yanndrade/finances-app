@@ -2,7 +2,7 @@
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -56,6 +56,7 @@ impl RuntimeState {
         }
     }
 
+    #[cfg(test)]
     fn new_empty() -> Self {
         Self {
             backend_child: Mutex::new(None),
@@ -260,12 +261,26 @@ fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::E
         .parent()
         .ok_or("backend executable directory is missing")?
         .to_path_buf();
+    let backend_data_dir = resolve_release_data_dir(app, &working_dir);
+    let certificate_dir = backend_data_dir.join("certs");
+    std::fs::create_dir_all(&certificate_dir)?;
+    let projection_database_path = backend_data_dir.join("app.db");
+    let event_database_path = backend_data_dir.join("events.db");
 
     let child = Command::new(&backend_path)
         .arg("--host")
         .arg(BACKEND_BIND_HOST)
         .arg("--port")
         .arg(BACKEND_PORT.to_string())
+        .env(
+            "FINANCE_APP_DATABASE_PATH",
+            projection_database_path.as_os_str(),
+        )
+        .env(
+            "FINANCE_APP_EVENT_DATABASE_PATH",
+            event_database_path.as_os_str(),
+        )
+        .env("FINANCE_APP_CERT_DIR", certificate_dir.as_os_str())
         .current_dir(working_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -283,6 +298,13 @@ fn resolve_dev_backend_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(backend_dir)
 }
 
+fn resolve_release_data_dir(app: &AppHandle, working_dir: &Path) -> PathBuf {
+    app.path()
+        .app_local_data_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .unwrap_or_else(|_| working_dir.join("finances-data"))
+}
+
 fn resolve_release_backend_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let binary_name = if cfg!(target_os = "windows") {
         "backend.exe"
@@ -291,17 +313,27 @@ fn resolve_release_backend_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std:
     };
 
     if let Ok(resource_dir) = app.path().resource_dir() {
-        let bundled = resource_dir.join(binary_name);
-        if bundled.exists() {
-            return Ok(bundled);
+        let bundled_candidates = [
+            resource_dir.join(binary_name),
+            resource_dir.join("bin").join(binary_name),
+        ];
+        for candidate in bundled_candidates {
+            if candidate.exists() {
+                return Ok(candidate);
+            }
         }
     }
 
     let current_executable = std::env::current_exe()?;
     if let Some(parent) = current_executable.parent() {
-        let local_binary = parent.join(binary_name);
-        if local_binary.exists() {
-            return Ok(local_binary);
+        let local_candidates = [
+            parent.join(binary_name),
+            parent.join("bin").join(binary_name),
+        ];
+        for candidate in local_candidates {
+            if candidate.exists() {
+                return Ok(candidate);
+            }
         }
     }
 

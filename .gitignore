@@ -3,6 +3,7 @@
 venv/
 node_modules/
 dist/
+build/
 target/
 coverage/
 *.db
@@ -20,3 +21,5 @@ __pycache__/
 Thumbs.db
 .claude/
 opencode.json
+packages/desktop/src-tauri/bin/backend.exe
+packages/backend/*.spec

@@ -48,6 +48,7 @@ Optional environment variables:
 - `FINANCE_APP_EVENT_DATABASE_URL`
 - `FINANCE_APP_DATABASE_PATH`
 - `FINANCE_APP_EVENT_DATABASE_PATH`
+- `FINANCE_APP_CERT_DIR`
 
 Security routes exposed for the desktop shell:
 

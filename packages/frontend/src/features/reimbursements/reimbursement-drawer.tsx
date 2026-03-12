@@ -57,6 +57,7 @@ export function ReimbursementDrawer({
   const canAct = !isCanceled && !isReceived;
 
   function handleEditStart() {
+    if (!reimbursement) return;
     setEditedExpectedAt(reimbursement.expected_at ?? "");
     setEditedNotes(reimbursement.notes ?? "");
     setIsEditing(true);
@@ -68,6 +69,7 @@ export function ReimbursementDrawer({
   }
 
   async function handleEditSave() {
+    if (!reimbursement) return;
     await onUpdate(
       reimbursement.transaction_id,
       editedExpectedAt.trim() || null,
@@ -77,6 +79,7 @@ export function ReimbursementDrawer({
   }
 
   async function handleConfirmCancel() {
+    if (!reimbursement) return;
     await onCancel(reimbursement.transaction_id);
     setShowCancelConfirm(false);
     onOpenChange(false);

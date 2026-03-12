@@ -1,0 +1,104 @@
+name: windows-release
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            packages/frontend/package-lock.json
+            packages/desktop/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            packages/desktop/src-tauri -> target
+
+      - name: Enforce signing secrets on tag releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $cert = "${{ secrets.WINDOWS_CERT_PFX_BASE64 }}"
+          $password = "${{ secrets.WINDOWS_CERT_PASSWORD }}"
+          if ([string]::IsNullOrWhiteSpace($cert) -or [string]::IsNullOrWhiteSpace($password)) {
+            throw "Missing signing secrets. Configure WINDOWS_CERT_PFX_BASE64 and WINDOWS_CERT_PASSWORD."
+          }
+
+      - name: Prepare signing certificate
+        id: signing
+        if: github.event_name != 'pull_request' && secrets.WINDOWS_CERT_PFX_BASE64 != '' && secrets.WINDOWS_CERT_PASSWORD != ''
+        shell: pwsh
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP "windows-signing-certificate.pfx"
+          $certBytes = [System.Convert]::FromBase64String("${{ secrets.WINDOWS_CERT_PFX_BASE64 }}")
+          [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+          "cert_path=$certPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build Windows release
+        shell: pwsh
+        env:
+          WINDOWS_SIGN_CERT_PATH: ${{ steps.signing.outputs.cert_path }}
+          WINDOWS_SIGN_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          WINDOWS_SIGN_TIMESTAMP_URL: ${{ secrets.WINDOWS_SIGN_TIMESTAMP_URL }}
+        run: ./scripts/build-release-windows.ps1
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            packages/desktop/src-tauri/target/release/bundle/msi/*.msi
+            packages/desktop/src-tauri/target/release/bundle/msi/*.zip
+          if-no-files-found: error
+
+      - name: Cleanup signing certificate
+        if: always() && steps.signing.outputs.cert_path != ''
+        shell: pwsh
+        run: |
+          Remove-Item -Path "${{ steps.signing.outputs.cert_path }}" -Force -ErrorAction SilentlyContinue
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            packages/desktop/src-tauri/target/release/bundle/msi/*.msi
+            packages/desktop/src-tauri/target/release/bundle/msi/*.zip
