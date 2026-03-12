@@ -33,3 +33,25 @@ The first local desktop security layer is stored in `app.db`.
 - lock state is persisted separately from the password hash
 - startup can require the lock screen when credentials exist and the app is marked locked
 - inactivity lock is prepared as persisted configuration (`inactivity_lock_seconds`)
+
+## CLI Runtime
+
+The backend package now exposes a runnable CLI entrypoint:
+
+```powershell
+uv run backend --host 127.0.0.1 --port 8000
+```
+
+Optional environment variables:
+
+- `FINANCE_APP_DATABASE_URL`
+- `FINANCE_APP_EVENT_DATABASE_URL`
+- `FINANCE_APP_DATABASE_PATH`
+- `FINANCE_APP_EVENT_DATABASE_PATH`
+
+Security routes exposed for the desktop shell:
+
+- `GET /api/security/state`
+- `POST /api/security/password`
+- `POST /api/security/lock`
+- `POST /api/security/unlock`

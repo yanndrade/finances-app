@@ -397,6 +397,13 @@ export type PendingExpenseSummary = {
   transaction_id: string | null;
 };
 
+export type SecurityState = {
+  password_configured: boolean;
+  is_locked: boolean;
+  requires_lock_on_startup: boolean;
+  inactivity_lock_seconds: number | null;
+};
+
 export type RecurringRulePayload = {
   name: string;
   amountInCents: number;
@@ -1280,6 +1287,36 @@ export async function resetApplicationData(): Promise<{
 }> {
   return requestJson<{ status: string; message: string }>("/api/dev/reset", {
     method: "POST",
+  });
+}
+
+export async function fetchSecurityState(): Promise<SecurityState> {
+  return requestJson<SecurityState>("/api/security/state");
+}
+
+export async function setSecurityPassword(payload: {
+  password: string;
+  inactivityLockSeconds?: number;
+}): Promise<void> {
+  await requestJson<void>("/api/security/password", {
+    method: "POST",
+    body: JSON.stringify({
+      password: payload.password,
+      inactivity_lock_seconds: payload.inactivityLockSeconds,
+    }),
+  });
+}
+
+export async function lockApplication(): Promise<void> {
+  await requestJson<void>("/api/security/lock", {
+    method: "POST",
+  });
+}
+
+export async function unlockApplication(password: string): Promise<void> {
+  await requestJson<void>("/api/security/unlock", {
+    method: "POST",
+    body: JSON.stringify({ password }),
   });
 }
 

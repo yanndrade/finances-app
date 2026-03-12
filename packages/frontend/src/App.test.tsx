@@ -233,6 +233,12 @@ function installAppFetchMock(initialState?: {
   investmentOverview?: InvestmentOverview;
   investmentMovements?: InvestmentMovementSummary[];
   invoices?: InvoiceSummary[];
+  securityState?: {
+    password_configured: boolean;
+    is_locked: boolean;
+    requires_lock_on_startup: boolean;
+    inactivity_lock_seconds: number | null;
+  };
 }) {
   const state = {
     accounts: initialState?.accounts ?? [buildAccount()],
@@ -248,6 +254,12 @@ function installAppFetchMock(initialState?: {
       buildDashboard({
         recent_transactions: initialState?.transactions ?? [buildTransaction()],
       }),
+    securityState: initialState?.securityState ?? {
+      password_configured: false,
+      is_locked: false,
+      requires_lock_on_startup: false,
+      inactivity_lock_seconds: null,
+    },
   };
 
   const originalFetch = globalThis.fetch;
@@ -337,6 +349,36 @@ function installAppFetchMock(initialState?: {
 
     if (url.includes("/api/transactions") && method === "GET") {
       return new Response(JSON.stringify(state.transactions));
+    }
+
+    if (url.includes("/api/security/state") && method === "GET") {
+      return new Response(JSON.stringify(state.securityState));
+    }
+
+    if (url.includes("/api/security/password") && method === "POST") {
+      state.securityState = {
+        ...state.securityState,
+        password_configured: true,
+        is_locked: true,
+        requires_lock_on_startup: true,
+      };
+      return new Response(null, { status: 204 });
+    }
+
+    if (url.includes("/api/security/lock") && method === "POST") {
+      state.securityState = {
+        ...state.securityState,
+        is_locked: state.securityState.password_configured,
+      };
+      return new Response(null, { status: 204 });
+    }
+
+    if (url.includes("/api/security/unlock") && method === "POST") {
+      state.securityState = {
+        ...state.securityState,
+        is_locked: false,
+      };
+      return new Response(JSON.stringify({ unlocked: true }));
     }
 
     if (url.includes("/api/accounts/") && method === "PATCH") {
@@ -673,6 +715,27 @@ describe("App", () => {
           return String(url).endsWith("/api/dev/reset") && init?.method === "POST";
         }),
       ).toBe(true);
+    });
+  });
+
+  it("shows lock overlay and unlocks with password", async () => {
+    installAppFetchMock({
+      securityState: {
+        password_configured: true,
+        is_locked: true,
+        requires_lock_on_startup: true,
+        inactivity_lock_seconds: null,
+      },
+    });
+
+    render(<App />);
+
+    const passwordInput = await screen.findByLabelText(/senha de desbloqueio/i);
+    await userEvent.type(passwordInput, "secret-123");
+    await userEvent.click(screen.getByRole("button", { name: /desbloquear/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/senha de desbloqueio/i)).not.toBeInTheDocument();
     });
   });
 

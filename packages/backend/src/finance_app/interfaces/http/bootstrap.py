@@ -15,6 +15,7 @@ from finance_app.application.transactions import TransactionService
 from finance_app.application.transfers import TransferService
 from finance_app.infrastructure.event_store import EventStore
 from finance_app.infrastructure.projector import Projector
+from finance_app.infrastructure.security import SecurityStore
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class AppServices:
     transaction_service: TransactionService
     transfer_service: TransferService
     movement_service: MovementService
+    security_store: SecurityStore
     event_store: EventStore
     projector: Projector
 
@@ -91,6 +93,7 @@ def build_services(
         projector=projector,
         account_reader=account_service,
     )
+    security_store = SecurityStore(database_url=database_url)
     return AppServices(
         account_service=account_service,
         card_service=card_service,
@@ -103,6 +106,7 @@ def build_services(
         transaction_service=transaction_service,
         transfer_service=transfer_service,
         movement_service=movement_service,
+        security_store=security_store,
         event_store=event_store,
         projector=projector,
     )

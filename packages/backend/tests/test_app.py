@@ -29,12 +29,62 @@ def test_health_use_case_returns_expected_payload() -> None:
     assert use_case.execute() == {"status": "ok", "source": "application"}
 
 
-def test_cli_entrypoint_lives_in_finance_app_package(capsys) -> None:
-    main()
+def test_cli_entrypoint_runs_uvicorn_with_cli_arguments(monkeypatch) -> None:
+    recorded: dict[str, object] = {}
 
-    captured = capsys.readouterr()
+    def fake_create_app(*, database_url: str | None, event_database_url: str | None) -> str:
+        recorded["database_url"] = database_url
+        recorded["event_database_url"] = event_database_url
+        return "app-instance"
 
-    assert "finance_app.interfaces.http.create_app()" in captured.out
+    def fake_uvicorn_run(app: object, *, host: str, port: int) -> None:
+        recorded["app"] = app
+        recorded["host"] = host
+        recorded["port"] = port
+
+    monkeypatch.setattr("finance_app.cli.create_app", fake_create_app)
+    monkeypatch.setattr("finance_app.cli.uvicorn.run", fake_uvicorn_run)
+
+    main(["--host", "127.0.0.1", "--port", "8100"])
+
+    assert recorded == {
+        "database_url": None,
+        "event_database_url": None,
+        "app": "app-instance",
+        "host": "127.0.0.1",
+        "port": 8100,
+    }
+
+
+def test_cli_entrypoint_uses_database_path_environment_variables(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    recorded: dict[str, object] = {}
+    app_db = tmp_path / "app.db"
+    events_db = tmp_path / "events.db"
+    monkeypatch.setenv("FINANCE_APP_DATABASE_PATH", str(app_db))
+    monkeypatch.setenv("FINANCE_APP_EVENT_DATABASE_PATH", str(events_db))
+
+    def fake_create_app(*, database_url: str | None, event_database_url: str | None) -> str:
+        recorded["database_url"] = database_url
+        recorded["event_database_url"] = event_database_url
+        return "app-instance"
+
+    def fake_uvicorn_run(app: object, *, host: str, port: int) -> None:
+        recorded["app"] = app
+        recorded["host"] = host
+        recorded["port"] = port
+
+    monkeypatch.setattr("finance_app.cli.create_app", fake_create_app)
+    monkeypatch.setattr("finance_app.cli.uvicorn.run", fake_uvicorn_run)
+
+    main([])
+
+    assert recorded["database_url"] == f"sqlite:///{app_db.as_posix()}"
+    assert recorded["event_database_url"] == f"sqlite:///{events_db.as_posix()}"
+    assert recorded["host"] == "127.0.0.1"
+    assert recorded["port"] == 8000
 
 
 def test_http_app_module_does_not_import_infrastructure_directly() -> None:
@@ -54,6 +104,72 @@ def test_http_routes_are_built_from_bootstrap_services(tmp_path) -> None:
 
     assert router is not None
     assert len(router.routes) > 0
+
+
+def test_security_endpoints_cover_password_lock_and_unlock(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    initial_state_response = client.get("/api/security/state")
+    set_password_response = client.post(
+        "/api/security/password",
+        json={
+            "password": "secret-123",
+            "inactivity_lock_seconds": 300,
+        },
+    )
+    state_after_password_response = client.get("/api/security/state")
+    unlock_response = client.post(
+        "/api/security/unlock",
+        json={"password": "secret-123"},
+    )
+    state_after_unlock_response = client.get("/api/security/state")
+    lock_response = client.post("/api/security/lock")
+    state_after_lock_response = client.get("/api/security/state")
+
+    assert initial_state_response.status_code == 200
+    assert initial_state_response.json() == {
+        "password_configured": False,
+        "is_locked": False,
+        "requires_lock_on_startup": False,
+        "inactivity_lock_seconds": None,
+    }
+    assert set_password_response.status_code == 204
+    assert state_after_password_response.status_code == 200
+    assert state_after_password_response.json() == {
+        "password_configured": True,
+        "is_locked": True,
+        "requires_lock_on_startup": True,
+        "inactivity_lock_seconds": 300,
+    }
+    assert unlock_response.status_code == 200
+    assert unlock_response.json() == {"unlocked": True}
+    assert state_after_unlock_response.json()["is_locked"] is False
+    assert lock_response.status_code == 204
+    assert state_after_lock_response.json()["is_locked"] is True
+
+
+def test_security_unlock_rejects_invalid_password(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    client.post(
+        "/api/security/password",
+        json={"password": "secret-123"},
+    )
+
+    response = client.post(
+        "/api/security/unlock",
+        json={"password": "wrong"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Invalid password."}
 
 
 def test_accounts_endpoints_support_create_list_and_update(tmp_path) -> None:

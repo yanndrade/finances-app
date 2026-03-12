@@ -24,9 +24,14 @@ import {
   createRecurringRule,
   createTransfer,
   fetchBackupSnapshot,
+  fetchSecurityState,
+  lockApplication,
   markReimbursementReceived,
   payInvoice,
   resetApplicationData,
+  setSecurityPassword,
+  type SecurityState,
+  unlockApplication,
   updateAccount,
   updateCard,
   updateCardPurchase,
@@ -63,6 +68,11 @@ import {
   UI_DENSITY_STORAGE_KEY,
   type UiDensity,
 } from "./lib/ui-density";
+import {
+  getAutostartEnabled,
+  listenDesktopEvent,
+  setAutostartEnabled,
+} from "./lib/desktop";
 
 const QuickAddComposer = lazy(async () => {
   const module = await import("./components/quick-add-composer");
@@ -195,6 +205,11 @@ export function App() {
   const [uiDensity, setUiDensity] = useState<UiDensity>(() =>
     readStoredUiDensity(),
   );
+  const [securityState, setSecurityState] = useState<SecurityState | null>(null);
+  const [isLockOverlayVisible, setIsLockOverlayVisible] = useState(false);
+  const [lockPassword, setLockPassword] = useState("");
+  const [desktopAutostartEnabled, setDesktopAutostartEnabled] = useState(false);
+  const [desktopAutostartLoading, setDesktopAutostartLoading] = useState(true);
 
   const {
     dashboard,
@@ -253,6 +268,62 @@ export function App() {
       message,
     });
   }
+
+  async function refreshSecurityState(): Promise<void> {
+    try {
+      const state = await fetchSecurityState();
+      setSecurityState(state);
+      setIsLockOverlayVisible(state.is_locked);
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+    }
+  }
+
+  async function refreshDesktopAutostartState(): Promise<void> {
+    setDesktopAutostartLoading(true);
+    try {
+      const enabled = await getAutostartEnabled();
+      setDesktopAutostartEnabled(enabled);
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+    } finally {
+      setDesktopAutostartLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshSecurityState();
+    void refreshDesktopAutostartState();
+  }, []);
+
+  useEffect(() => {
+    let removeQuickAddListener: (() => void) | undefined;
+    let removeLockListener: (() => void) | undefined;
+    let isDisposed = false;
+
+    void (async () => {
+      removeQuickAddListener = await listenDesktopEvent(
+        "desktop://quick-add",
+        () => {
+          openQuickAdd();
+        },
+      );
+      removeLockListener = await listenDesktopEvent("desktop://lock", () => {
+        void handleLockFromDesktop();
+      });
+
+      if (isDisposed) {
+        removeQuickAddListener?.();
+        removeLockListener?.();
+      }
+    })();
+
+    return () => {
+      isDisposed = true;
+      removeQuickAddListener?.();
+      removeLockListener?.();
+    };
+  }, []);
 
   function openQuickAdd(
     preset?: QuickAddPreset,
@@ -638,6 +709,65 @@ export function App() {
     }
   }
 
+  async function handleSetDesktopAutostart(enabled: boolean): Promise<void> {
+    try {
+      await setAutostartEnabled(enabled);
+      setDesktopAutostartEnabled(enabled);
+      showToast(
+        "success",
+        enabled
+          ? "Inicialização automática ativada."
+          : "Inicialização automática desativada.",
+      );
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+      throw error;
+    }
+  }
+
+  async function handleSetSecurityPassword(password: string): Promise<void> {
+    setIsSubmitting(true);
+    setToast(null);
+    try {
+      await setSecurityPassword({ password });
+      await refreshSecurityState();
+      setIsLockOverlayVisible(true);
+      showToast("success", "Senha definida com sucesso.");
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+      throw error;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleLockFromDesktop(): Promise<void> {
+    try {
+      await lockApplication();
+      await refreshSecurityState();
+      showToast("success", "Aplicação bloqueada.");
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+    }
+  }
+
+  async function handleUnlock(password: string): Promise<void> {
+    setIsSubmitting(true);
+    setToast(null);
+    try {
+      await unlockApplication(password);
+      await refreshSecurityState();
+      setIsLockOverlayVisible(false);
+      setLockPassword("");
+      showToast("success", "Aplicação desbloqueada.");
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+      throw error;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   function handleCreateCategory(label: string): boolean {
     const nextCategory = createCategoryOption(label, categoryOptions);
     if (nextCategory === null) {
@@ -789,6 +919,13 @@ export function App() {
               void handleExportBackup();
             }}
             onResetApplicationData={handleResetAllData}
+            securityState={securityState}
+            desktopAutostartEnabled={desktopAutostartEnabled}
+            desktopAutostartLoading={desktopAutostartLoading}
+            onSetDesktopAutostart={handleSetDesktopAutostart}
+            onSetSecurityPassword={handleSetSecurityPassword}
+            onUnlock={handleUnlock}
+            onLock={handleLockFromDesktop}
           />
         ) : null}
       </Suspense>
@@ -843,7 +980,64 @@ export function App() {
           />
         </Suspense>
       ) : null}
+
+      {isLockOverlayVisible ? (
+        <LockOverlay
+          password={lockPassword}
+          onPasswordChange={setLockPassword}
+          onSubmit={() => {
+            void handleUnlock(lockPassword);
+          }}
+          isSubmitting={isSubmitting}
+        />
+      ) : null}
     </AppShell>
+  );
+}
+
+function LockOverlay({
+  password,
+  onPasswordChange,
+  onSubmit,
+  isSubmitting,
+}: {
+  password: string;
+  onPasswordChange: (value: string) => void;
+  onSubmit: () => void;
+  isSubmitting: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <h2 className="text-lg font-bold text-slate-900">Aplicação bloqueada</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Digite sua senha para continuar.
+        </p>
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <input
+            aria-label="Senha de desbloqueio"
+            type="password"
+            value={password}
+            onChange={(event) => onPasswordChange(event.target.value)}
+            className="flex h-10 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            placeholder="Senha"
+          />
+          <button
+            type="submit"
+            className="h-10 w-full rounded-md bg-slate-900 px-3 text-sm font-semibold text-white disabled:opacity-50"
+            disabled={isSubmitting || !password.trim()}
+          >
+            Desbloquear
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
 
