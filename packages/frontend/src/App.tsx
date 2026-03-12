@@ -82,6 +82,7 @@ import {
   listenDesktopEvent,
   setAutostartEnabled,
 } from "./lib/desktop";
+import { useMediaQuery } from "./lib/use-media-query";
 
 const QuickAddComposer = lazy(async () => {
   const module = await import("./components/quick-add-composer");
@@ -193,8 +194,11 @@ const TOAST_DURATION_MS = {
   success: 3200,
   error: 5200,
 } as const;
+const MOBILE_QUERY = "(max-width: 900px)";
 
 export function App() {
+  const isMobileViewport = useMediaQuery(MOBILE_QUERY);
+  const surface = isMobileViewport ? "mobile" : "desktop";
   const [activeView, setActiveView] = useState<AppView>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>(() =>
@@ -913,6 +917,7 @@ export function App() {
   const activeMeta = VIEW_META[activeView];
   return (
     <AppShell
+      surface={surface}
       activeView={activeView}
       description={activeMeta.description}
       onNavigate={setActiveView}
@@ -926,6 +931,7 @@ export function App() {
       <Suspense fallback={<ViewFallback activeView={activeView} />}>
         {activeView === "dashboard" ? (
           <DashboardView
+            surface={surface}
             accounts={accounts}
             cards={cards}
             dashboard={dashboard}
@@ -968,6 +974,7 @@ export function App() {
 
         {activeView === "transactions" ? (
           <HistoryPage
+            surface={surface}
             accounts={accounts}
             cards={cards}
             month={selectedMonth}
@@ -977,6 +984,7 @@ export function App() {
 
         {activeView === "reimbursements" ? (
           <ReimbursementsView
+            surface={surface}
             accounts={accounts}
             month={selectedMonth}
             refreshKey={refreshKey}
@@ -985,6 +993,7 @@ export function App() {
 
         {activeView === "fixedExpenses" ? (
           <FixedExpensesView
+            surface={surface}
             accounts={accounts}
             cards={cards}
             categories={categoryOptions}
@@ -1014,6 +1023,7 @@ export function App() {
 
         {activeView === "cards" ? (
           <CardsView
+            surface={surface}
             accounts={accounts}
             cards={cards}
             invoices={invoices}

@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
-import { CalendarClock, Plus } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 
-import { Button } from "../../components/ui/button";
 import { EmptyState } from "../../components/ui/empty-state";
 
 import type {
@@ -27,6 +26,7 @@ import { DetailDrawer } from "./components/detail-drawer";
 import { groupPendingsByTemporal, TemporalStatus, getTemporalOrder } from "./helpers/temporal-status";
 
 type FixedExpensesViewProps = {
+  surface?: "desktop" | "mobile";
   accounts: AccountSummary[];
   cards: CardSummary[];
   categories: CategoryOption[];
@@ -43,6 +43,7 @@ type FixedExpensesViewProps = {
 };
 
 export function FixedExpensesView({
+  surface = "desktop",
   accounts,
   cards,
   categories,
@@ -52,16 +53,15 @@ export function FixedExpensesView({
   recurringRules,
   onConfirmPending,
   onCreateRule,
-  onMonthChange,
+  onMonthChange: _onMonthChange,
   onOpenLedgerFiltered,
   onUpdateRule,
   uiDensity,
 }: FixedExpensesViewProps) {
-  // Sheet state
+  const isMobileSurface = surface === "mobile";
+
   const [isRuleSheetOpen, setIsRuleSheetOpen] = useState(false);
   const [ruleToEdit, setRuleToEdit] = useState<RecurringRuleSummary | null>(null);
-
-  // Drawer state
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [selectedPending, setSelectedPending] = useState<PendingExpenseSummary | null>(null);
 
@@ -74,29 +74,25 @@ export function FixedExpensesView({
     [cards],
   );
 
-  // Kpi stats
   const activeRulesCount = recurringRules.filter((r) => r.is_active).length;
-  
+
   let pendingCount = 0;
   let pendingAmount = 0;
   let paidCount = 0;
   let paidAmount = 0;
 
-  for (const p of pendingExpenses) {
-    if (p.status === "confirmed") {
-      paidCount++;
-      paidAmount += p.amount;
+  for (const pending of pendingExpenses) {
+    if (pending.status === "confirmed") {
+      paidCount += 1;
+      paidAmount += pending.amount;
     } else {
-      pendingCount++;
-      pendingAmount += p.amount;
+      pendingCount += 1;
+      pendingAmount += pending.amount;
     }
   }
 
   const totalPendingAmount = pendingAmount + paidAmount;
-
-  const groupedPendings = useMemo(() => {
-    return groupPendingsByTemporal(pendingExpenses);
-  }, [pendingExpenses]);
+  const groupedPendings = useMemo(() => groupPendingsByTemporal(pendingExpenses), [pendingExpenses]);
 
   const sortedGroups = Array.from(groupedPendings.entries())
     .filter(([_, items]) => items.length > 0)
@@ -123,20 +119,24 @@ export function FixedExpensesView({
         paidAmount={paidAmount}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* Left Column: Pendências (Ocorrências do mês) */}
+      <div className={cn("grid grid-cols-1 gap-6 items-start", !isMobileSurface && "lg:grid-cols-2")}>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Ocorrências do Mês</h2>
+            <h2 className="text-xl font-bold text-slate-900">Ocorrencias do mes</h2>
           </div>
-          
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm min-h-[400px]">
+
+          <div
+            className={cn(
+              "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm",
+              isMobileSurface ? "min-h-[280px]" : "min-h-[400px]",
+            )}
+          >
             {pendingExpenses.length === 0 ? (
               <EmptyState
                 className="py-12"
-                description="Nenhuma ocorrência gerada para este mês."
+                description="Nenhuma ocorrencia gerada para este mes."
                 icon={CalendarClock}
-                title="Sem pendências"
+                title="Sem pendencias"
               />
             ) : (
               <div className="space-y-6">
@@ -178,53 +178,56 @@ export function FixedExpensesView({
           </div>
         </div>
 
-        {/* Right Column: Cadastros Fixos */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Cadastros Fixos</h2>
-          </div>
+        {!isMobileSurface ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900">Cadastros fixos</h2>
+            </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-[400px]">
-            {recurringRules.length === 0 ? (
-              <EmptyState
-                className="py-12"
-                description="Nenhum cadastro de gasto fixo criado."
-                icon={CalendarClock}
-                title="Sem cadastros"
-              />
-            ) : (
-              <div className="flex flex-col">
-                {recurringRules.map((rule) => (
-                  <RuleListItem
-                    key={rule.rule_id}
-                    rule={rule}
-                    accountNameById={accountNameById}
-                    cardNameById={cardNameById}
-                    onClick={() => handleOpenRuleSheet(rule)}
-                  />
-                ))}
-              </div>
-            )}
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-[400px]">
+              {recurringRules.length === 0 ? (
+                <EmptyState
+                  className="py-12"
+                  description="Nenhum cadastro de gasto fixo criado."
+                  icon={CalendarClock}
+                  title="Sem cadastros"
+                />
+              ) : (
+                <div className="flex flex-col">
+                  {recurringRules.map((rule) => (
+                    <RuleListItem
+                      key={rule.rule_id}
+                      rule={rule}
+                      accountNameById={accountNameById}
+                      cardNameById={cardNameById}
+                      onClick={() => handleOpenRuleSheet(rule)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
-      <RuleFormSheet
-        isOpen={isRuleSheetOpen}
-        onOpenChange={setIsRuleSheetOpen}
-        accounts={accounts}
-        cards={cards}
-        categories={categories}
-        ruleToEdit={ruleToEdit}
-        isSubmitting={isSubmitting}
-        onCreateRule={onCreateRule}
-        onUpdateRule={onUpdateRule}
-        onToggleRuleStatus={async (rule) => {
-          await onUpdateRule(rule.rule_id, {
-            isActive: !rule.is_active,
-          });
-        }}
-      />
+      {!isMobileSurface ? (
+        <RuleFormSheet
+          isOpen={isRuleSheetOpen}
+          onOpenChange={setIsRuleSheetOpen}
+          accounts={accounts}
+          cards={cards}
+          categories={categories}
+          ruleToEdit={ruleToEdit}
+          isSubmitting={isSubmitting}
+          onCreateRule={onCreateRule}
+          onUpdateRule={onUpdateRule}
+          onToggleRuleStatus={async (rule) => {
+            await onUpdateRule(rule.rule_id, {
+              isActive: !rule.is_active,
+            });
+          }}
+        />
+      ) : null}
 
       <DetailDrawer
         pending={selectedPending}

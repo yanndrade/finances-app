@@ -16,15 +16,12 @@ import { ReimbursementList } from "./reimbursement-list";
 import { ReimbursementDrawer } from "./reimbursement-drawer";
 import { ReceivePaymentDialog } from "./receive-payment-dialog";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type ReimbursementsViewProps = {
+  surface?: "desktop" | "mobile";
   accounts: AccountSummary[];
   month: string;
   refreshKey?: number;
 };
-
-// ─── Empty defaults ───────────────────────────────────────────────────────────
 
 const EMPTY_SUMMARY: ReimbursementSummary = {
   total_outstanding: 0,
@@ -35,23 +32,23 @@ const EMPTY_SUMMARY: ReimbursementSummary = {
   overdue_total: 0,
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
-export function ReimbursementsView({ accounts, month, refreshKey }: ReimbursementsViewProps) {
-  // ── Data state ────────────────────────────────────────────────────────────
+export function ReimbursementsView({
+  surface = "desktop",
+  accounts,
+  month,
+  refreshKey,
+}: ReimbursementsViewProps) {
+  const isMobileSurface = surface === "mobile";
   const [reimbursements, setReimbursements] = useState<PendingReimbursementSummary[]>([]);
   const [summary, setSummary] = useState<ReimbursementSummary>(EMPTY_SUMMARY);
   const [isListLoading, setIsListLoading] = useState(false);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ── UI state ──────────────────────────────────────────────────────────────
   const [selectedReimbursement, setSelectedReimbursement] =
     useState<PendingReimbursementSummary | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
-
-  // ── Data loading ──────────────────────────────────────────────────────────
 
   const loadList = useCallback(async () => {
     setIsListLoading(true);
@@ -89,10 +86,8 @@ export function ReimbursementsView({ accounts, month, refreshKey }: Reimbursemen
     void loadSummary(month);
   }, [month, refreshKey, loadSummary]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
-  function handleSelectReimbursement(r: PendingReimbursementSummary) {
-    setSelectedReimbursement(r);
+  function handleSelectReimbursement(reimbursement: PendingReimbursementSummary) {
+    setSelectedReimbursement(reimbursement);
     setIsDrawerOpen(true);
   }
 
@@ -108,9 +103,8 @@ export function ReimbursementsView({ accounts, month, refreshKey }: Reimbursemen
     setIsSubmitting(true);
     try {
       const updated = await updateReimbursement(id, { expectedAt, notes });
-      // Update in place so drawer reflects new values without full reload
-      setReimbursements((prev) =>
-        prev.map((r) => (r.transaction_id === id ? updated : r)),
+      setReimbursements((previous) =>
+        previous.map((item) => (item.transaction_id === id ? updated : item)),
       );
       setSelectedReimbursement(updated);
     } finally {
@@ -148,14 +142,10 @@ export function ReimbursementsView({ accounts, month, refreshKey }: Reimbursemen
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <div className="space-y-6">
-      {/* Summary strip — 4 metric cards */}
       <SummaryStrip summary={summary} loading={isSummaryLoading} />
 
-      {/* Operational list — grouped by status */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <ReimbursementList
           reimbursements={reimbursements}
@@ -164,7 +154,6 @@ export function ReimbursementsView({ accounts, month, refreshKey }: Reimbursemen
         />
       </div>
 
-      {/* Detail drawer */}
       <ReimbursementDrawer
         reimbursement={selectedReimbursement}
         isOpen={isDrawerOpen}
@@ -173,9 +162,9 @@ export function ReimbursementsView({ accounts, month, refreshKey }: Reimbursemen
         onUpdate={handleUpdate}
         onCancel={handleCancel}
         onRegisterPayment={handleOpenPaymentDialog}
+        allowSecondaryActions={!isMobileSurface}
       />
 
-      {/* Payment dialog */}
       <ReceivePaymentDialog
         reimbursement={selectedReimbursement}
         accounts={accounts}

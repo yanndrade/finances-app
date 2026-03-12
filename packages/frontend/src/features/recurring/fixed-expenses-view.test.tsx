@@ -173,4 +173,33 @@ describe("FixedExpensesView", () => {
     expect(screen.getByRole("heading", { name: /sem pend/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /sem cadastros/i })).toBeInTheDocument();
   });
+
+  it("shows only pending flow on mobile surface and hides recurring rules management", async () => {
+    const onConfirmPending = vi.fn<(pendingId: string) => Promise<void>>().mockResolvedValue();
+
+    render(
+      <FixedExpensesView
+        surface="mobile"
+        accounts={accounts}
+        cards={cards}
+        categories={categories}
+        isSubmitting={false}
+        month="2026-03"
+        pendingExpenses={pendingExpenses}
+        recurringRules={recurringRules}
+        onConfirmPending={onConfirmPending}
+        onCreateRule={vi.fn().mockResolvedValue(undefined)}
+        onMonthChange={vi.fn()}
+        onOpenLedgerFiltered={vi.fn()}
+        onUpdateRule={vi.fn().mockResolvedValue(undefined)}
+        uiDensity="compact"
+      />,
+    );
+
+    expect(screen.queryByText(/cadastros fixos/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /editar gasto fixo/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /pagar agora/i }));
+    expect(onConfirmPending).toHaveBeenCalledWith("rec-1:2026-03");
+  });
 });

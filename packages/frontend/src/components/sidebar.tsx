@@ -120,12 +120,16 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export const MOBILE_NAV_ITEMS: NavigationItem[] = DESKTOP_NAV_ITEMS.filter(
-  (item) =>
-    item.id === "dashboard" ||
-    item.id === "transactions" ||
-    item.id === "fixedExpenses" ||
-    item.id === "cards",
+const MOBILE_NAV_ORDER: AppView[] = [
+  "dashboard",
+  "transactions",
+  "cards",
+  "fixedExpenses",
+  "reimbursements",
+];
+
+export const MOBILE_NAV_ITEMS: NavigationItem[] = MOBILE_NAV_ORDER.map(
+  (view) => DESKTOP_NAV_ITEMS.find((item) => item.id === view)!,
 );
 
 export function isMobileEssentialView(view: AppView): boolean {

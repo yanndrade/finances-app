@@ -24,6 +24,7 @@ import { cn } from "../../lib/utils";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type HistoryPageProps = {
+  surface?: "desktop" | "mobile";
   accounts: AccountSummary[];
   cards: CardSummary[];
   month: string;
@@ -69,6 +70,7 @@ const EMPTY_PAGE: MovementPage = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function HistoryPage({
+  surface = "desktop",
   accounts,
   cards,
   month,
@@ -189,22 +191,24 @@ export function HistoryPage({
       />
 
       {/* ── Summary ribbon ──────────────────────────────────────────────── */}
-      <div className={cn("transition-opacity duration-200", summaryLoading && "opacity-60")}>
-        <SummaryRibbon
-          summary={summary}
+      {surface === "desktop" ? (
+        <div className={cn("transition-opacity duration-200", summaryLoading && "opacity-60")}>
+          <SummaryRibbon
+            summary={summary}
+            activeScope={activeScope}
+            onScopeChange={handleScopeChange}
+          />
+        </div>
+      ) : null}
+
+      {surface === "desktop" ? (
+        <ScopeBar
+          counts={summary.counts}
           activeScope={activeScope}
           onScopeChange={handleScopeChange}
         />
-      </div>
-
-      {/* ── Scope bar ───────────────────────────────────────────────────── */}
-      <ScopeBar
-        counts={summary.counts}
-        activeScope={activeScope}
-        onScopeChange={handleScopeChange}
-      />
-
-      {/* ── Advanced filters ────────────────────────────────────────────── */}
+      ) : null}
+{/* ── Advanced filters ────────────────────────────────────────────── */}
       <FilterPanel
         filters={advancedFilters}
         accounts={accounts}
@@ -272,3 +276,4 @@ export function HistoryPage({
     </section>
   );
 }
+

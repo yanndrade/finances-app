@@ -27,6 +27,7 @@ type QuickAddOpenOptions = {
 };
 
 type CardsViewProps = {
+  surface?: "desktop" | "mobile";
   accounts: AccountSummary[];
   cards: CardSummary[];
   invoices: InvoiceSummary[];
@@ -42,6 +43,7 @@ type CardsViewProps = {
 };
 
 export function CardsView({
+  surface = "desktop",
   accounts,
   cards,
   invoices,
@@ -55,6 +57,7 @@ export function CardsView({
   onUpdateCard,
   uiDensity,
 }: CardsViewProps) {
+  const isMobileSurface = surface === "mobile";
   const activeCards = useMemo(() => cards.filter((card) => card.is_active), [cards]);
 
   const [selectedScope, setSelectedScope] = useState<string>(ALL_CARDS_SCOPE);
@@ -195,6 +198,7 @@ export function CardsView({
         selectedScope={selectedScope}
         onScopeChange={setSelectedScope}
         activeCards={activeCards}
+        showManageCardsAction={!isMobileSurface}
         onOpenManageCards={() => setIsManageSheetOpen(true)}
       />
 
@@ -228,35 +232,39 @@ export function CardsView({
         )
       )}
 
-      {/* Sheets and Dialogs */}
-      <ManageCardsSheet
-        open={isManageSheetOpen}
-        onOpenChange={setIsManageSheetOpen}
-        cards={cards} // all cards, including inactive
-        accounts={accounts}
-        onAddCard={() => setIsCreateDialogOpen(true)}
-        onEditCard={(card) => setEditingCard(card)}
-        onToggleCardActive={(card) => void handleToggleCardActive(card)}
-      />
+      {/* Sheets and dialogs remain desktop-only in v1 mobile surface */}
+      {!isMobileSurface ? (
+        <>
+          <ManageCardsSheet
+            open={isManageSheetOpen}
+            onOpenChange={setIsManageSheetOpen}
+            cards={cards} // all cards, including inactive
+            accounts={accounts}
+            onAddCard={() => setIsCreateDialogOpen(true)}
+            onEditCard={(card) => setEditingCard(card)}
+            onToggleCardActive={(card) => void handleToggleCardActive(card)}
+          />
 
-      <CreateCardDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        accounts={accounts}
-        isSubmitting={isSubmitting}
-        onCreateCard={onCreateCard}
-      />
+          <CreateCardDialog
+            open={isCreateDialogOpen}
+            onOpenChange={setIsCreateDialogOpen}
+            accounts={accounts}
+            isSubmitting={isSubmitting}
+            onCreateCard={onCreateCard}
+          />
 
-      <EditCardDialog
-        open={editingCard !== null}
-        onOpenChange={(open) => {
-          if (!open) setEditingCard(null);
-        }}
-        card={editingCard}
-        accounts={accounts}
-        isSubmitting={isSubmitting}
-        onUpdateCard={onUpdateCard}
-      />
+          <EditCardDialog
+            open={editingCard !== null}
+            onOpenChange={(open) => {
+              if (!open) setEditingCard(null);
+            }}
+            card={editingCard}
+            accounts={accounts}
+            isSubmitting={isSubmitting}
+            onUpdateCard={onUpdateCard}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
