@@ -23,14 +23,23 @@ import {
   createInvestmentMovement,
   createRecurringRule,
   createTransfer,
+  fetchAuthorizedLanDevices,
   fetchBackupSnapshot,
+  fetchLanSecurityState,
   fetchSecurityState,
+  issueLanPairToken,
   lockApplication,
   markReimbursementReceived,
+  pairLanDevice,
   payInvoice,
   resetApplicationData,
+  revokeAuthorizedLanDevice,
+  setLanSecurityEnabled,
   setSecurityPassword,
   type SecurityState,
+  type AuthorizedLanDevice,
+  type LanPairTokenSession,
+  type LanSecurityState,
   unlockApplication,
   updateAccount,
   updateCard,
@@ -206,6 +215,13 @@ export function App() {
     readStoredUiDensity(),
   );
   const [securityState, setSecurityState] = useState<SecurityState | null>(null);
+  const [lanSecurityState, setLanSecurityState] =
+    useState<LanSecurityState | null>(null);
+  const [authorizedLanDevices, setAuthorizedLanDevices] = useState<
+    AuthorizedLanDevice[]
+  >([]);
+  const [lanPairingSession, setLanPairingSession] =
+    useState<LanPairTokenSession | null>(null);
   const [isLockOverlayVisible, setIsLockOverlayVisible] = useState(false);
   const [lockPassword, setLockPassword] = useState("");
   const [desktopAutostartEnabled, setDesktopAutostartEnabled] = useState(false);
@@ -279,6 +295,19 @@ export function App() {
     }
   }
 
+  async function refreshLanSecurityState(): Promise<void> {
+    try {
+      const [state, devices] = await Promise.all([
+        fetchLanSecurityState(),
+        fetchAuthorizedLanDevices(),
+      ]);
+      setLanSecurityState(state);
+      setAuthorizedLanDevices(devices);
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+    }
+  }
+
   async function refreshDesktopAutostartState(): Promise<void> {
     setDesktopAutostartLoading(true);
     try {
@@ -293,7 +322,43 @@ export function App() {
 
   useEffect(() => {
     void refreshSecurityState();
+    void refreshLanSecurityState();
     void refreshDesktopAutostartState();
+  }, []);
+
+  useEffect(() => {
+    const currentUrl = new URL(globalThis.location.href);
+    const pairToken = currentUrl.searchParams.get("pair_token");
+    if (!pairToken) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await pairLanDevice({
+          pairToken,
+          deviceName: globalThis.navigator.userAgent.slice(0, 80),
+        });
+        if (cancelled) {
+          return;
+        }
+        await refreshLanSecurityState();
+        setLanPairingSession(null);
+        currentUrl.searchParams.delete("pair_token");
+        globalThis.history.replaceState({}, "", currentUrl.toString());
+        showToast("success", "Dispositivo pareado com sucesso.");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        showToast("error", getErrorMessage(error));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -725,6 +790,58 @@ export function App() {
     }
   }
 
+  async function handleSetLanEnabled(enabled: boolean): Promise<void> {
+    setIsSubmitting(true);
+    setToast(null);
+    try {
+      await setLanSecurityEnabled(enabled);
+      await refreshLanSecurityState();
+      if (!enabled) {
+        setLanPairingSession(null);
+      }
+      showToast(
+        "success",
+        enabled ? "Acesso LAN ativado." : "Acesso LAN desativado.",
+      );
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+      throw error;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleGenerateLanPairToken(): Promise<void> {
+    setIsSubmitting(true);
+    setToast(null);
+    try {
+      const session = await issueLanPairToken();
+      setLanPairingSession(session);
+      await refreshLanSecurityState();
+      showToast("success", "QR de pareamento gerado.");
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+      throw error;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleRevokeLanDevice(deviceId: string): Promise<void> {
+    setIsSubmitting(true);
+    setToast(null);
+    try {
+      await revokeAuthorizedLanDevice(deviceId);
+      await refreshLanSecurityState();
+      showToast("success", "Dispositivo revogado.");
+    } catch (error) {
+      showToast("error", getErrorMessage(error));
+      throw error;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleSetSecurityPassword(password: string): Promise<void> {
     setIsSubmitting(true);
     setToast(null);
@@ -926,6 +1043,12 @@ export function App() {
             onSetSecurityPassword={handleSetSecurityPassword}
             onUnlock={handleUnlock}
             onLock={handleLockFromDesktop}
+            lanSecurityState={lanSecurityState}
+            lanPairingSession={lanPairingSession}
+            authorizedLanDevices={authorizedLanDevices}
+            onSetLanEnabled={handleSetLanEnabled}
+            onGenerateLanPairToken={handleGenerateLanPairToken}
+            onRevokeLanDevice={handleRevokeLanDevice}
           />
         ) : null}
       </Suspense>

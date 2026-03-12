@@ -71,3 +71,45 @@ def test_lock_without_password_does_not_require_startup_lock(tmp_path: Path) -> 
 
     assert store.requires_lock_on_startup() is False
     assert store.is_locked() is False
+
+
+def test_lan_pairing_generates_single_use_pair_tokens_and_device_token(
+    tmp_path: Path,
+) -> None:
+    store = SecurityStore(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    store.set_lan_enabled(True)
+
+    pair_token = store.issue_pair_token()
+    first_pair = store.pair_device(pair_token.token, device_name="Pixel")
+    second_pair = store.pair_device(pair_token.token, device_name="Pixel")
+
+    assert first_pair is not None
+    assert second_pair is None
+    assert store.verify_device_token(
+        first_pair.device_token,
+        request_ip="192.168.1.50",
+    )
+
+    devices = store.list_authorized_devices()
+    assert len(devices) == 1
+    assert devices[0].name == "Pixel"
+    assert devices[0].last_seen_ip == "192.168.1.50"
+
+
+def test_lan_devices_can_be_revoked(tmp_path: Path) -> None:
+    store = SecurityStore(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    store.set_lan_enabled(True)
+
+    pair_token = store.issue_pair_token()
+    paired = store.pair_device(pair_token.token, device_name="iPhone")
+    assert paired is not None
+    assert store.verify_device_token(paired.device_token)
+
+    assert store.revoke_device(paired.device_id) is True
+    assert store.revoke_device(paired.device_id) is False
+    assert store.verify_device_token(paired.device_token) is False
+    assert store.list_authorized_devices() == []

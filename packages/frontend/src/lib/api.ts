@@ -404,6 +404,36 @@ export type SecurityState = {
   inactivity_lock_seconds: number | null;
 };
 
+export type LanSecurityState = {
+  enabled: boolean;
+  pair_token_ttl_seconds: number;
+  local_ip: string | null;
+  subnet_cidr: string | null;
+  public_url: string | null;
+  public_scheme: "http" | "https" | string;
+};
+
+export type LanPairTokenSession = {
+  pair_token: string;
+  expires_at: string;
+  pairing_url: string;
+};
+
+export type AuthorizedLanDevice = {
+  device_id: string;
+  name: string;
+  created_at: string;
+  last_seen_at: string | null;
+  last_seen_ip: string | null;
+  revoked_at: string | null;
+};
+
+export type LanPairingResult = {
+  device_id: string;
+  device_token: string;
+  paired_at: string;
+};
+
 export type RecurringRulePayload = {
   name: string;
   amountInCents: number;
@@ -666,6 +696,8 @@ export type MovementPage = {
 export const API_BASE_URL =
   (globalThis as { __FINANCES_API_BASE_URL__?: string })
     .__FINANCES_API_BASE_URL__ ?? "http://127.0.0.1:8000";
+const DEVICE_TOKEN_STORAGE_KEY = "finance.device_token";
+let runtimeDeviceToken = readPersistedDeviceToken();
 
 export class ApiError extends Error {
   readonly status: number;
@@ -677,6 +709,23 @@ export class ApiError extends Error {
     this.status = status;
     this.detail = detail;
   }
+}
+
+export function readLanDeviceToken(): string | null {
+  return runtimeDeviceToken;
+}
+
+export function setLanDeviceToken(token: string | null): void {
+  runtimeDeviceToken = token && token.trim().length > 0 ? token.trim() : null;
+  if (typeof globalThis.localStorage === "undefined") {
+    return;
+  }
+
+  if (runtimeDeviceToken === null) {
+    globalThis.localStorage.removeItem(DEVICE_TOKEN_STORAGE_KEY);
+    return;
+  }
+  globalThis.localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, runtimeDeviceToken);
 }
 
 export async function fetchDashboardSummary(
@@ -1294,6 +1343,48 @@ export async function fetchSecurityState(): Promise<SecurityState> {
   return requestJson<SecurityState>("/api/security/state");
 }
 
+export async function fetchLanSecurityState(): Promise<LanSecurityState> {
+  return requestJson<LanSecurityState>("/api/security/lan");
+}
+
+export async function setLanSecurityEnabled(enabled: boolean): Promise<LanSecurityState> {
+  return requestJson<LanSecurityState>("/api/security/lan", {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function issueLanPairToken(): Promise<LanPairTokenSession> {
+  return requestJson<LanPairTokenSession>("/api/security/lan/pair-token", {
+    method: "POST",
+  });
+}
+
+export async function pairLanDevice(payload: {
+  pairToken: string;
+  deviceName?: string;
+}): Promise<LanPairingResult> {
+  const result = await requestJson<LanPairingResult>("/api/security/pair", {
+    method: "POST",
+    body: JSON.stringify({
+      pair_token: payload.pairToken,
+      device_name: payload.deviceName || undefined,
+    }),
+  });
+  setLanDeviceToken(result.device_token);
+  return result;
+}
+
+export async function fetchAuthorizedLanDevices(): Promise<AuthorizedLanDevice[]> {
+  return requestJson<AuthorizedLanDevice[]>("/api/security/devices");
+}
+
+export async function revokeAuthorizedLanDevice(deviceId: string): Promise<void> {
+  await requestJson<void>(`/api/security/devices/${encodeURIComponent(deviceId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function setSecurityPassword(payload: {
   password: string;
   inactivityLockSeconds?: number;
@@ -1324,12 +1415,17 @@ export async function requestJson<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (runtimeDeviceToken && !headers.has("X-Finance-Token")) {
+    headers.set("X-Finance-Token", runtimeDeviceToken);
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
     ...init,
+    headers,
   });
 
   if (!response.ok) {
@@ -1362,6 +1458,18 @@ export async function requestJson<T>(
   } catch {
     return undefined as T;
   }
+}
+
+function readPersistedDeviceToken(): string | null {
+  if (typeof globalThis.localStorage === "undefined") {
+    return null;
+  }
+  const stored = globalThis.localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
+  if (!stored) {
+    return null;
+  }
+  const trimmed = stored.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 export function normalizeTimestampForApi(
