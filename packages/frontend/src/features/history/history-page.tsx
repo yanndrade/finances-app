@@ -97,10 +97,13 @@ export function HistoryPage({
     () => ({
       ...advancedFilters,
       competence_month: month,
-      scope: activeScope !== "all" ? activeScope : undefined,
+      scope:
+        surface === "mobile" || activeScope === "all"
+          ? undefined
+          : activeScope,
       text: searchText.trim() || undefined,
     }),
-    [month, activeScope, searchText, advancedFilters],
+    [month, activeScope, searchText, advancedFilters, surface],
   );
 
   // ── Data fetching ──────────────────────────────────────────────────────────
@@ -136,6 +139,12 @@ export function HistoryPage({
   useEffect(() => {
     void loadSummary(month);
   }, [month, refreshKey, loadSummary]);
+
+  useEffect(() => {
+    if (surface === "mobile" && activeScope !== "all") {
+      setActiveScope("all");
+    }
+  }, [activeScope, surface]);
 
   // Load movements whenever any filter changes (debounced for text)
   useEffect(() => {
@@ -208,7 +217,8 @@ export function HistoryPage({
           onScopeChange={handleScopeChange}
         />
       ) : null}
-{/* ── Advanced filters ────────────────────────────────────────────── */}
+
+      {/* ── Advanced filters ────────────────────────────────────────────── */}
       <FilterPanel
         filters={advancedFilters}
         accounts={accounts}
@@ -276,4 +286,3 @@ export function HistoryPage({
     </section>
   );
 }
-
