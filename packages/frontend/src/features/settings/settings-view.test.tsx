@@ -22,6 +22,19 @@ function renderSettingsView(overrides?: Partial<ComponentProps<typeof SettingsVi
       onSetSecurityPassword={vi.fn(() => Promise.resolve())}
       onUnlock={vi.fn(() => Promise.resolve())}
       onLock={vi.fn(() => Promise.resolve())}
+      lanSecurityState={{
+        enabled: false,
+        pair_token_ttl_seconds: 300,
+        local_ip: "192.168.50.2",
+        subnet_cidr: "192.168.50.0/24",
+        public_url: "http://192.168.50.2:8000",
+        public_scheme: "http",
+      }}
+      lanPairingSession={null}
+      authorizedLanDevices={[]}
+      onSetLanEnabled={vi.fn(() => Promise.resolve())}
+      onGenerateLanPairToken={vi.fn(() => Promise.resolve())}
+      onRevokeLanDevice={vi.fn(() => Promise.resolve())}
       {...overrides}
     />,
   );
@@ -49,8 +62,37 @@ describe("SettingsView", () => {
     renderSettingsView({ onSetDesktopAutostart, desktopAutostartEnabled: false });
 
     expect(screen.getByText(/desktop/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /ativar/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^ativar$/i }));
     expect(onSetDesktopAutostart).toHaveBeenCalledWith(true);
+  });
+
+  it("renders lan section and toggles lan access", async () => {
+    const onSetLanEnabled = vi.fn(() => Promise.resolve());
+    renderSettingsView({ onSetLanEnabled });
+
+    expect(screen.getByText(/acesso lan/i)).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: /ativar lan/i }),
+    );
+    expect(onSetLanEnabled).toHaveBeenCalledWith(true);
+  });
+
+  it("generates pair token when lan is enabled", async () => {
+    const onGenerateLanPairToken = vi.fn(() => Promise.resolve());
+    renderSettingsView({
+      onGenerateLanPairToken,
+      lanSecurityState: {
+        enabled: true,
+        pair_token_ttl_seconds: 300,
+        local_ip: "192.168.50.2",
+        subnet_cidr: "192.168.50.0/24",
+        public_url: "http://192.168.50.2:8000",
+        public_scheme: "http",
+      },
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /gerar qr/i }));
+    expect(onGenerateLanPairToken).toHaveBeenCalledTimes(1);
   });
 
   it("renders security section and sets password", async () => {

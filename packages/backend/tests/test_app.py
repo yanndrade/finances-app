@@ -1,8 +1,12 @@
+import ipaddress
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from finance_app.application.health import HealthCheckUseCase
 from finance_app.cli import main
+from finance_app.domain.security import LanNetworkInfo
 import finance_app.interfaces.http.app as http_app
 from finance_app.interfaces.http.app import create_app
 
@@ -85,6 +89,53 @@ def test_cli_entrypoint_uses_database_path_environment_variables(
     assert recorded["event_database_url"] == f"sqlite:///{events_db.as_posix()}"
     assert recorded["host"] == "127.0.0.1"
     assert recorded["port"] == 8000
+
+
+def test_cli_entrypoint_enables_https_with_generated_certificate(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    recorded: dict[str, object] = {}
+
+    class DummyApp:
+        def __init__(self) -> None:
+            self.state = SimpleNamespace(public_port=0, public_scheme="http")
+
+    def fake_create_app(*, database_url: str | None, event_database_url: str | None) -> DummyApp:
+        recorded["database_url"] = database_url
+        recorded["event_database_url"] = event_database_url
+        return DummyApp()
+
+    def fake_ensure_certificate(_path):
+        return (tmp_path / "server.crt", tmp_path / "server.key")
+
+    def fake_uvicorn_run(
+        app: object,
+        *,
+        host: str,
+        port: int,
+        ssl_certfile: str,
+        ssl_keyfile: str,
+    ) -> None:
+        recorded["app"] = app
+        recorded["host"] = host
+        recorded["port"] = port
+        recorded["ssl_certfile"] = ssl_certfile
+        recorded["ssl_keyfile"] = ssl_keyfile
+
+    monkeypatch.setattr("finance_app.cli.create_app", fake_create_app)
+    monkeypatch.setattr(
+        "finance_app.cli.ensure_self_signed_certificate",
+        fake_ensure_certificate,
+    )
+    monkeypatch.setattr("finance_app.cli.uvicorn.run", fake_uvicorn_run)
+
+    main(["--https", "--cert-dir", str(tmp_path)])
+
+    assert recorded["host"] == "127.0.0.1"
+    assert recorded["port"] == 8000
+    assert recorded["ssl_certfile"] == str(tmp_path / "server.crt")
+    assert recorded["ssl_keyfile"] == str(tmp_path / "server.key")
 
 
 def test_http_app_module_does_not_import_infrastructure_directly() -> None:
@@ -170,6 +221,186 @@ def test_security_unlock_rejects_invalid_password(tmp_path) -> None:
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Invalid password."}
+
+
+def test_security_lan_endpoints_default_to_disabled_and_localhost_only(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    initial = client.get("/api/security/lan")
+    update = client.post("/api/security/lan", json={"enabled": True})
+    after_update = client.get("/api/security/lan")
+
+    assert initial.status_code == 200
+    assert initial.json() == {
+        "enabled": False,
+        "pair_token_ttl_seconds": 300,
+        "local_ip": "192.168.50.2",
+        "subnet_cidr": "192.168.50.0/24",
+        "public_url": "http://192.168.50.2:8000",
+        "public_scheme": "http",
+    }
+    assert update.status_code == 200
+    assert update.json() == {
+        "enabled": True,
+        "pair_token_ttl_seconds": 300,
+    }
+    assert after_update.status_code == 200
+    assert after_update.json()["enabled"] is True
+
+
+def test_security_lan_pairing_authenticates_remote_devices(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    client.post("/api/security/lan", json={"enabled": True})
+
+    pair_token_response = client.post("/api/security/lan/pair-token")
+    assert pair_token_response.status_code == 200
+    pair_token_payload = pair_token_response.json()
+    pair_token = pair_token_payload["pair_token"]
+
+    remote_headers = {
+        "X-Finance-Client-IP": "192.168.50.20",
+        "Origin": "https://192.168.50.2:8000",
+    }
+    pair_response = client.post(
+        "/api/security/pair",
+        json={"pair_token": pair_token, "device_name": "Pixel 9"},
+        headers=remote_headers,
+    )
+    assert pair_response.status_code == 200
+    device_token = pair_response.json()["device_token"]
+
+    dashboard_response = client.get(
+        "/api/dashboard",
+        params={"month": "2026-03"},
+        headers={
+            **remote_headers,
+            "X-Finance-Token": device_token,
+        },
+    )
+    assert dashboard_response.status_code == 200
+
+    devices_response = client.get("/api/security/devices")
+    assert devices_response.status_code == 200
+    devices_payload = devices_response.json()
+    assert len(devices_payload) == 1
+    assert devices_payload[0]["device_id"] == pair_response.json()["device_id"]
+    assert devices_payload[0]["name"] == "Pixel 9"
+    assert devices_payload[0]["created_at"] == pair_response.json()["paired_at"]
+    assert devices_payload[0]["last_seen_ip"] == "192.168.50.20"
+    assert devices_payload[0]["revoked_at"] is None
+
+
+def test_security_lan_rejects_remote_requests_without_valid_context(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    remote_headers = {
+        "X-Finance-Client-IP": "192.168.50.20",
+        "Origin": "https://192.168.50.2:8000",
+    }
+    blocked_lan_disabled = client.get(
+        "/api/dashboard",
+        params={"month": "2026-03"},
+        headers=remote_headers,
+    )
+    assert blocked_lan_disabled.status_code == 403
+    assert blocked_lan_disabled.json() == {"detail": "LAN mode is disabled."}
+
+    client.post("/api/security/lan", json={"enabled": True})
+
+    blocked_missing_token = client.get(
+        "/api/dashboard",
+        params={"month": "2026-03"},
+        headers=remote_headers,
+    )
+    assert blocked_missing_token.status_code == 403
+    assert blocked_missing_token.json() == {
+        "detail": "Missing X-Finance-Token header."
+    }
+
+    blocked_bad_origin = client.get(
+        "/api/dashboard",
+        params={"month": "2026-03"},
+        headers={
+            **remote_headers,
+            "Origin": "https://malicious.site",
+        },
+    )
+    assert blocked_bad_origin.status_code == 403
+    assert blocked_bad_origin.json() == {"detail": "Invalid request origin."}
+
+    blocked_remote_config = client.post(
+        "/api/security/lan",
+        json={"enabled": False},
+        headers=remote_headers,
+    )
+    assert blocked_remote_config.status_code == 403
+    assert blocked_remote_config.json() == {
+        "detail": "LAN configuration endpoints are desktop-only."
+    }
+
+
+def test_security_lan_rejects_requests_outside_authorized_subnet(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    client.post("/api/security/lan", json={"enabled": True})
+
+    out_of_subnet_ip = _pick_out_of_subnet_ip("192.168.50.0/24")
+    response = client.get(
+        "/api/dashboard",
+        params={"month": "2026-03"},
+        headers={
+            "X-Finance-Client-IP": out_of_subnet_ip,
+            "Origin": "https://192.168.50.2:8000",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Request origin is outside the authorized subnet."
+    }
 
 
 def test_accounts_endpoints_support_create_list_and_update(tmp_path) -> None:
@@ -3622,6 +3853,14 @@ def test_invoice_items_endpoint_lists_only_requested_invoice_rows(tmp_path) -> N
         }
     ]
     assert missing_response.status_code == 404
+
+
+def _pick_out_of_subnet_ip(subnet_cidr: str) -> str:
+    network = ipaddress.ip_network(subnet_cidr, strict=False)
+    for candidate in ("10.0.0.10", "192.168.200.200", "172.31.255.250"):
+        if ipaddress.ip_address(candidate) not in network:
+            return candidate
+    return "8.8.8.8"
 
 
 def _create_account(

@@ -15,7 +15,8 @@ use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
 
 const MAIN_WINDOW_LABEL: &str = "main";
-const BACKEND_HOST: &str = "127.0.0.1";
+const BACKEND_BIND_HOST: &str = "0.0.0.0";
+const BACKEND_HEALTH_HOST: &str = "127.0.0.1";
 const BACKEND_PORT: u16 = 8000;
 const BACKEND_BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 const TRAY_EVENT_QUICK_ADD: &str = "desktop://quick-add";
@@ -243,7 +244,7 @@ fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::E
             .arg("run")
             .arg("backend")
             .arg("--host")
-            .arg(BACKEND_HOST)
+            .arg(BACKEND_BIND_HOST)
             .arg("--port")
             .arg(BACKEND_PORT.to_string())
             .current_dir(backend_dir)
@@ -262,7 +263,7 @@ fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::E
 
     let child = Command::new(&backend_path)
         .arg("--host")
-        .arg(BACKEND_HOST)
+        .arg(BACKEND_BIND_HOST)
         .arg("--port")
         .arg(BACKEND_PORT.to_string())
         .current_dir(working_dir)
@@ -308,7 +309,7 @@ fn resolve_release_backend_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std:
 }
 
 fn wait_for_backend_ready() -> Result<(), Box<dyn std::error::Error>> {
-    let socket_address: SocketAddr = format!("{BACKEND_HOST}:{BACKEND_PORT}").parse()?;
+    let socket_address: SocketAddr = format!("{BACKEND_HEALTH_HOST}:{BACKEND_PORT}").parse()?;
     let started_at = Instant::now();
 
     while started_at.elapsed() < BACKEND_BOOTSTRAP_TIMEOUT {
@@ -328,7 +329,7 @@ fn backend_healthcheck(address: &SocketAddr) -> bool {
     };
 
     let request = format!(
-        "GET /health HTTP/1.1\r\nHost: {BACKEND_HOST}:{BACKEND_PORT}\r\nConnection: close\r\n\r\n"
+        "GET /health HTTP/1.1\r\nHost: {BACKEND_HEALTH_HOST}:{BACKEND_PORT}\r\nConnection: close\r\n\r\n"
     );
     if stream.write_all(request.as_bytes()).is_err() {
         return false;
