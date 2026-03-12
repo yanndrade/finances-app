@@ -127,7 +127,7 @@ export function MonthCommitments({
                     <p className="text-sm font-semibold text-slate-900 truncate">
                       {formatCommitmentTitle(commitment, cardNameById)}
                     </p>
-                    <p className="text-[11px] text-slate-500 uppercase tracking-widest mt-0.5">
+                    <p className="text-[13px] text-slate-500 uppercase tracking-widest mt-0.5">
                       {commitment.kind === "invoice"
                         ? "Fatura de cartão"
                         : "Despesa fixa"}
@@ -156,7 +156,7 @@ export function MonthCommitments({
                       value={commitment.amount}
                       className="text-sm font-bold text-slate-900 tabular-nums"
                     />
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[13px] text-slate-400">
                       {formatCommitmentCategory(commitment.category_id)}
                     </p>
                   </div>

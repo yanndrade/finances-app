@@ -45,7 +45,7 @@ export function getTemporalLabel(status: TemporalStatus): string {
     case "due_today":
       return "Vencendo hoje";
     case "upcoming":
-      return "Proximos dias";
+      return "Próximos dias";
     case "paid":
       return "Pagos";
   }

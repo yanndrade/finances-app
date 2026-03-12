@@ -43,7 +43,7 @@ function SelectField({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+      <label className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground">
         {label}
       </label>
       <select
@@ -123,7 +123,7 @@ export function FilterPanel({
         </span>
 
         {count > 0 && (
-          <span className="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none min-w-[18px] h-[18px] px-1">
+          <span className="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[12px] font-bold leading-none min-w-[18px] h-[18px] px-1">
             {count}
           </span>
         )}

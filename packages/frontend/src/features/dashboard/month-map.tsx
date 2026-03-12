@@ -60,7 +60,7 @@ export function MonthMap({ dashboard, uiDensity }: MonthMapProps) {
           <div className="flex flex-col gap-1 md:border-l border-slate-100 md:pl-6">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
               Gasto do mês{" "}
-              <span className="text-[10px] text-slate-400 normal-case ml-1 font-normal">
+              <span className="text-[12px] text-slate-400 normal-case ml-1 font-normal">
                 (realizado + previsto)
               </span>
             </span>
@@ -120,14 +120,14 @@ export function MonthMap({ dashboard, uiDensity }: MonthMapProps) {
                 {fixed_expenses_total > 0 && (
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
-                    <span className="text-[11px] font-medium text-slate-600 uppercase tracking-wider">
+                    <span className="text-[13px] font-medium text-slate-600 uppercase tracking-wider">
                       Fixos
                     </span>
                     <MoneyValue
                       value={fixed_expenses_total}
-                      className="text-[11px] font-bold text-slate-800 tabular-nums"
+                      className="text-[13px] font-bold text-slate-800 tabular-nums"
                     />
-                    <span className="text-[10px] text-slate-400 tabular-nums">
+                    <span className="text-[12px] text-slate-400 tabular-nums">
                       {fixedPct.toFixed(0)}%
                     </span>
                   </div>
@@ -135,14 +135,14 @@ export function MonthMap({ dashboard, uiDensity }: MonthMapProps) {
                 {installment_total > 0 && (
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
-                    <span className="text-[11px] font-medium text-slate-600 uppercase tracking-wider">
+                    <span className="text-[13px] font-medium text-slate-600 uppercase tracking-wider">
                       Parceladas
                     </span>
                     <MoneyValue
                       value={installment_total}
-                      className="text-[11px] font-bold text-slate-800 tabular-nums"
+                      className="text-[13px] font-bold text-slate-800 tabular-nums"
                     />
-                    <span className="text-[10px] text-slate-400 tabular-nums">
+                    <span className="text-[12px] text-slate-400 tabular-nums">
                       {installPct.toFixed(0)}%
                     </span>
                   </div>
@@ -150,14 +150,14 @@ export function MonthMap({ dashboard, uiDensity }: MonthMapProps) {
                 {variable_expenses_total > 0 && (
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
-                    <span className="text-[11px] font-medium text-slate-600 uppercase tracking-wider">
+                    <span className="text-[13px] font-medium text-slate-600 uppercase tracking-wider">
                       Variáveis
                     </span>
                     <MoneyValue
                       value={variable_expenses_total}
-                      className="text-[11px] font-bold text-slate-800 tabular-nums"
+                      className="text-[13px] font-bold text-slate-800 tabular-nums"
                     />
-                    <span className="text-[10px] text-slate-400 tabular-nums">
+                    <span className="text-[12px] text-slate-400 tabular-nums">
                       {variablePct.toFixed(0)}%
                     </span>
                   </div>

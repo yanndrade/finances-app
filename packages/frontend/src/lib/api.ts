@@ -95,11 +95,14 @@ export type PendingReimbursementSummary = {
   transaction_id: string;
   person_id: string;
   amount: number;
-  status: "pending" | "received";
+  amount_received: number;
+  status: "pending" | "partial" | "received" | "canceled" | "overdue";
   account_id: string;
   occurred_at: string;
+  expected_at: string | null;
   received_at: string | null;
   receipt_transaction_id: string | null;
+  notes: string | null;
 };
 
 export type RecurringPaymentMethod = "PIX" | "CASH" | "OTHER" | "CARD";
@@ -331,6 +334,21 @@ export type InvoicePaymentPayload = {
 export type MarkReimbursementReceivedPayload = {
   receivedAt: string;
   accountId?: string;
+  amount?: number;
+};
+
+export type UpdateReimbursementPayload = {
+  expectedAt?: string | null;
+  notes?: string | null;
+};
+
+export type ReimbursementSummary = {
+  total_outstanding: number;
+  received_in_month: number;
+  expiring_soon_count: number;
+  expiring_soon_total: number;
+  overdue_count: number;
+  overdue_total: number;
 };
 
 export type InvestmentMovementPayload = {
@@ -1086,8 +1104,60 @@ export async function markReimbursementReceived(
       body: JSON.stringify({
         received_at: normalizeTimestampForApi(payload.receivedAt),
         account_id: payload.accountId || undefined,
+        amount: payload.amount ?? undefined,
       }),
     },
+  );
+}
+
+export async function listReimbursements(params?: {
+  status?: string;
+  person?: string;
+  month?: string;
+}): Promise<PendingReimbursementSummary[]> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.person) query.set("person", params.person);
+  if (params?.month) query.set("month", params.month);
+  const qs = query.toString();
+  return requestJson<PendingReimbursementSummary[]>(
+    `/api/reimbursements${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function getReimbursementsSummary(params?: {
+  month?: string;
+}): Promise<ReimbursementSummary> {
+  const query = new URLSearchParams();
+  if (params?.month) query.set("month", params.month);
+  const qs = query.toString();
+  return requestJson<ReimbursementSummary>(
+    `/api/reimbursements/summary${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function updateReimbursement(
+  transactionId: string,
+  payload: UpdateReimbursementPayload,
+): Promise<PendingReimbursementSummary> {
+  const body: Record<string, string | null> = {};
+  if ("expectedAt" in payload) body["expected_at"] = payload.expectedAt ?? null;
+  if ("notes" in payload) body["notes"] = payload.notes ?? null;
+  return requestJson<PendingReimbursementSummary>(
+    `/api/reimbursements/${encodeURIComponent(transactionId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function cancelReimbursement(
+  transactionId: string,
+): Promise<PendingReimbursementSummary> {
+  return requestJson<PendingReimbursementSummary>(
+    `/api/reimbursements/${encodeURIComponent(transactionId)}/cancel`,
+    { method: "POST" },
   );
 }
 

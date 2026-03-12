@@ -25,7 +25,7 @@ export function DaySeparator({
       )}
     >
       {/* Date label */}
-      <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground min-w-[80px]">
+      <span className="text-[13px] font-bold uppercase tracking-widest text-muted-foreground min-w-[80px]">
         {formatDate(date)}
       </span>
 
@@ -34,7 +34,7 @@ export function DaySeparator({
 
       {/* Day subtotal */}
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/70">
           Dia
         </span>
         <span
@@ -53,7 +53,7 @@ export function DaySeparator({
         <>
           <div className="w-px h-3.5 bg-border" />
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            <span className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/70">
               Saldo
             </span>
             <span

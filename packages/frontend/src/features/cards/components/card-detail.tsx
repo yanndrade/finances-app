@@ -119,7 +119,7 @@ export function CardDetail({
         </Button>
         <div>
           <h2 className="text-xl font-black text-slate-900 leading-none">{card.name}</h2>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-0.5">
+          <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 mt-0.5">
             {invoice.reference_month}
           </p>
         </div>
@@ -156,7 +156,7 @@ export function CardDetail({
                         invoice.reference_month,
                       )
                     }
-                    className="h-8 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                    className="h-8 rounded-lg px-3 text-[12px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                   >
                     Ver no histórico
                     <ExternalLink className="ml-1.5 h-3 w-3" />
@@ -166,7 +166,7 @@ export function CardDetail({
                     size="sm"
                     onClick={() => void handleToggleItems()}
                     className={cn(
-                      "h-8 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest",
+                      "h-8 rounded-lg px-3 text-[12px] font-black uppercase tracking-widest",
                       itemsOpen
                         ? "bg-slate-100 text-slate-900"
                         : "text-slate-500 hover:bg-slate-100 hover:text-slate-900",
@@ -185,7 +185,7 @@ export function CardDetail({
                       onOpenQuickAdd("transfer_invoice_payment", { invoiceId: invoice.invoice_id })
                     }
                     disabled={invoice.remaining_amount <= 0 || Number.isNaN(invoice.remaining_amount)}
-                    className="h-8 rounded-lg px-4 text-[10px] font-black uppercase tracking-widest bg-primary text-primary-foreground shadow shadow-primary/20 hover:bg-primary/90"
+                    className="h-8 rounded-lg px-4 text-[12px] font-black uppercase tracking-widest bg-primary text-primary-foreground shadow shadow-primary/20 hover:bg-primary/90"
                   >
                     Pagar fatura
                   </Button>
@@ -211,15 +211,15 @@ export function CardDetail({
                 {/* Progress: text when 100%, bar when partial */}
                 {isPaidFull ? (
                   <div className="space-y-0.5">
-                    <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">Progresso</p>
+                    <p className="text-[13px] font-black uppercase tracking-[0.15em] text-slate-300">Progresso</p>
                     <p className="text-sm font-black text-emerald-600">Pago integralmente</p>
                   </div>
                 ) : (
                   <div className="space-y-0.5 min-w-[100px] flex-1">
-                    <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">Progresso</p>
+                    <p className="text-[13px] font-black uppercase tracking-[0.15em] text-slate-300">Progresso</p>
                     <div className="flex items-center gap-2 pt-1">
                       <Progress value={progress} className="h-1.5 flex-1 rounded-full bg-slate-100" />
-                      <span className="text-[10px] font-black text-slate-500 tabular-nums">
+                      <span className="text-[12px] font-black text-slate-500 tabular-nums">
                         {Math.round(progress)}%
                       </span>
                     </div>
@@ -234,7 +234,7 @@ export function CardDetail({
             <Card className="rounded-[2rem] border border-slate-100 bg-white shadow-sm overflow-hidden">
               <CardContent className="p-5">
                 {isLoadingItems ? (
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 py-8 text-center">
+                  <p className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-300 py-8 text-center">
                     Carregando itens...
                   </p>
                 ) : invoiceItemsError ? (
@@ -242,7 +242,7 @@ export function CardDetail({
                 ) : (
                   <>
                     {/* Summary line */}
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">
+                    <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 mb-3">
                       {invoiceItems.length} lançamento{invoiceItems.length !== 1 ? "s" : ""} ·{" "}
                       {formatCurrency(itemsTotal)}
                     </p>
@@ -253,14 +253,14 @@ export function CardDetail({
                           key={item.invoice_item_id}
                           className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-slate-50 transition-colors"
                         >
-                          <span className="w-12 shrink-0 text-[10px] font-bold text-slate-400 tabular-nums">
+                          <span className="w-12 shrink-0 text-[12px] font-bold text-slate-400 tabular-nums">
                             {format(parseISO(item.purchase_date), "dd MMM")}
                           </span>
                           <span className="flex-1 truncate text-sm font-bold text-slate-900">
                             {item.description || "Compra no cartão"}
                           </span>
                           {item.installments_count > 1 && (
-                            <span className="shrink-0 text-[10px] font-bold text-slate-400 tabular-nums">
+                            <span className="shrink-0 text-[12px] font-bold text-slate-400 tabular-nums">
                               {item.installment_number}/{item.installments_count}
                             </span>
                           )}
@@ -283,7 +283,7 @@ export function CardDetail({
                           invoice.reference_month,
                         )
                       }
-                      className="mt-3 text-[10px] font-black uppercase tracking-widest text-primary hover:underline"
+                      className="mt-3 text-[12px] font-black uppercase tracking-widest text-primary hover:underline"
                     >
                       Ver tudo no histórico →
                     </button>
@@ -300,18 +300,18 @@ export function CardDetail({
           {/* Limit usage */}
           <Card className="rounded-[2rem] border border-slate-100 bg-white shadow-sm overflow-hidden">
             <CardContent className="p-5 space-y-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Uso de Limite</p>
+              <p className="text-[12px] font-black uppercase tracking-widest text-slate-400">Uso de Limite</p>
               <div className="space-y-2">
                 <div className="flex items-baseline justify-between">
                   <span className="text-lg font-black text-slate-900">{Math.round(limitUsage)}%</span>
-                  <span className="text-[10px] font-bold text-slate-400 tabular-nums">
+                  <span className="text-[12px] font-bold text-slate-400 tabular-nums">
                     {formatCurrency(committedLimit)} / {formatCurrency(card.limit)}
                   </span>
                 </div>
                 <Progress value={limitUsage} className="h-2 rounded-full bg-slate-100" />
               </div>
               <div className="border-t border-slate-50 pt-3">
-                <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">Disponível</p>
+                <p className="text-[13px] font-black uppercase tracking-[0.15em] text-slate-300">Disponível</p>
                 <p className="text-xl font-black text-slate-900">{formatCurrency(availableLimit)}</p>
               </div>
             </CardContent>
@@ -321,7 +321,7 @@ export function CardDetail({
           {(futureInstallments.length > 0 || installmentsLoadError) && (
             <Card className="rounded-[2rem] border border-slate-100 bg-white shadow-sm overflow-hidden">
               <CardHeader className="p-5 pb-2">
-                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <CardTitle className="text-[12px] font-black uppercase tracking-widest text-slate-400">
                   Parcelas Futuras
                 </CardTitle>
               </CardHeader>
@@ -342,7 +342,7 @@ export function CardDetail({
                           >
                             <span className="text-xs font-bold text-slate-700">{month}</span>
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-slate-400">
+                              <span className="text-[12px] font-bold text-slate-400">
                                 {items.length} lançamento{items.length !== 1 ? "s" : ""}
                               </span>
                               <span className="text-xs font-black text-slate-900 tabular-nums">
@@ -365,7 +365,7 @@ export function CardDetail({
                                   <span className="flex-1 truncate text-xs font-bold text-slate-700">
                                     {item.description || "Compra parcelada"}
                                   </span>
-                                  <span className="shrink-0 text-[10px] font-bold text-slate-400 tabular-nums">
+                                  <span className="shrink-0 text-[12px] font-bold text-slate-400 tabular-nums">
                                     {item.installment_number}/{item.installments_count}
                                   </span>
                                   <span className="shrink-0 text-xs font-black text-slate-900 tabular-nums">
@@ -388,7 +388,7 @@ export function CardDetail({
           {previousInvoices.length > 0 && (
             <Card className="rounded-[2rem] border border-slate-100 bg-white shadow-sm overflow-hidden">
               <CardHeader className="p-5 pb-2">
-                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <CardTitle className="text-[12px] font-black uppercase tracking-widest text-slate-400">
                   Ciclos Anteriores
                 </CardTitle>
               </CardHeader>

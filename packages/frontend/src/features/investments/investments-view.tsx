@@ -1,28 +1,6 @@
-import { useMemo, useState } from "react";
-import { ChevronRight, Layout } from "lucide-react";
-import {
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useMemo } from "react";
 
 import type { QuickAddPreset } from "../../components/quick-add-composer";
-import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardHeader } from "../../components/ui/card";
-import { MeasuredChartFrame } from "../../components/ui/measured-chart-frame";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import type {
   AccountSummary,
@@ -31,10 +9,15 @@ import type {
   InvestmentView,
   TransactionFilters,
 } from "../../lib/api";
-import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
-import { formatCurrency } from "../../lib/format";
 import type { UiDensity } from "../../lib/ui-density";
 import { cn } from "../../lib/utils";
+
+import { CompositionPanel } from "./composition-panel";
+import { InsightGrid } from "./insight-grid";
+import { InvestmentHero } from "./investment-hero";
+import { MovementsPanel } from "./movements-panel";
+import { TrendChart } from "./trend-chart";
+import { WealthChart } from "./wealth-chart";
 
 type InvestmentsViewProps = {
   accounts: AccountSummary[];
@@ -55,21 +38,6 @@ type InvestmentsViewProps = {
   uiDensity: UiDensity;
 };
 
-const VIEW_OPTIONS: Array<{ label: string; value: InvestmentView }> = [
-  { label: "Diario", value: "daily" },
-  { label: "Semanal", value: "weekly" },
-  { label: "Mensal", value: "monthly" },
-  { label: "Bimestral", value: "bimonthly" },
-  { label: "Trimestral", value: "quarterly" },
-  { label: "Anual", value: "yearly" },
-];
-
-const COMPOSITION_COLORS = [
-  CHART_THEME.primary,
-  CHART_THEME.income,
-  CHART_THEME.transfer,
-] as const;
-
 export function InvestmentsView({
   accounts,
   loading,
@@ -89,9 +57,37 @@ export function InvestmentsView({
     () => accounts.filter((account) => account.type !== "investment"),
     [accounts],
   );
-  const [showContribution, setShowContribution] = useState(true);
-  const [showDividend, setShowDividend] = useState(true);
   const hasMovementAccounts = movementAccounts.length > 0;
+
+  const capitalAportadoLiquido = useMemo(
+    () =>
+      Math.max(
+        (overview?.totals.contribution_total ?? 0) -
+          (overview?.totals.withdrawal_total ?? 0),
+        0,
+      ),
+    [overview],
+  );
+  const rendimentoAcumulado = Math.max(
+    overview?.totals.dividends_accumulated ?? 0,
+    0,
+  );
+  const caixaAtual = Math.max(overview?.totals.cash_balance ?? 0, 0);
+
+  const compositionData = useMemo(
+    () =>
+      [
+        { label: "Capital aportado", value: capitalAportadoLiquido },
+        { label: "Rendimento", value: rendimentoAcumulado },
+        { label: "Caixa", value: caixaAtual },
+      ].filter((item) => item.value > 0),
+    [capitalAportadoLiquido, rendimentoAcumulado, caixaAtual],
+  );
+
+  const compositionTotal = useMemo(
+    () => compositionData.reduce((sum, item) => sum + item.value, 0),
+    [compositionData],
+  );
 
   const wealthData = useMemo(
     () =>
@@ -101,6 +97,7 @@ export function InvestmentsView({
       })),
     [overview],
   );
+
   const trendData = useMemo(
     () =>
       (overview?.series.contribution_dividend_trend ?? []).map((item) => ({
@@ -111,599 +108,122 @@ export function InvestmentsView({
     [overview],
   );
 
-  const capitalAportadoLiquido = useMemo(
-    () =>
-      Math.max(
-        (overview?.totals.contribution_total ?? 0) - (overview?.totals.withdrawal_total ?? 0),
-        0,
-      ),
-    [overview],
-  );
-  const rendimentoAcumulado = Math.max(overview?.totals.dividends_accumulated ?? 0, 0);
-  const caixaAtual = Math.max(overview?.totals.cash_balance ?? 0, 0);
-  const compositionData = [
-    { label: "Capital aportado", value: capitalAportadoLiquido },
-    { label: "Rendimento", value: rendimentoAcumulado },
-    { label: "Caixa", value: caixaAtual },
-  ].filter((item) => item.value > 0);
-  const compositionTotal = compositionData.reduce((sum, item) => sum + item.value, 0);
-
-  function openInvestmentLedger() {
-    onOpenLedgerFiltered(
-      {
-        period: "custom",
-        from: fromDate,
-        to: toDate,
-        type: "investment",
-      },
-      fromDate.slice(0, 7),
-    );
-  }
-
   return (
     <div
       className={cn(
-        "investments-workbench space-y-6",
+        "investments-workbench space-y-5",
         uiDensity === "compact" && "space-y-4",
         uiDensity === "dense" && "space-y-3",
       )}
     >
-      <Card
-        className={cn(
-          "finance-card finance-card--strong",
-          chartClassNames.surface,
-          uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-[2rem]",
-        )}
-      >
-        <CardHeader className="p-5 pb-4 md:p-6 md:pb-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="rounded-xl bg-slate-100 p-2.5">
-                <Layout className="h-5 w-5 text-slate-600" />
-              </div>
-              <div className="space-y-0.5">
-                <h2 className="text-lg font-black text-slate-900">Patrimonio e Investimentos</h2>
-                <p className="text-[11px] font-medium text-slate-500">
-                  Acompanhe evolucao, capital aportado e rendimentos.
-                </p>
-              </div>
-            </div>
+      {/* Hero — dominant patrimonial summary + period controls */}
+      <InvestmentHero
+        overview={overview}
+        loading={loading}
+        view={view}
+        fromDate={fromDate}
+        toDate={toDate}
+        capitalAportadoLiquido={capitalAportadoLiquido}
+        rendimentoAcumulado={rendimentoAcumulado}
+        onViewChange={onViewChange}
+        onRangeChange={onRangeChange}
+        uiDensity={uiDensity}
+      />
 
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50/50 p-1">
-                {VIEW_OPTIONS.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={option.value === view ? "default" : "ghost"}
-                    size="sm"
-                    className={cn(
-                      "h-7 rounded-lg px-3 text-[10px] font-bold transition-all",
-                      option.value === view ? "shadow-sm" : "text-slate-500 hover:text-slate-900",
-                    )}
-                    type="button"
-                    onClick={() => onViewChange(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/50 p-1.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                    De
-                  </span>
-                  <input
-                    className="h-7 w-28 rounded-lg border-none bg-white px-2 py-0 text-[10px] font-bold shadow-sm ring-1 ring-slate-100 focus:ring-primary"
-                    type="date"
-                    value={fromDate}
-                    onChange={(event) => onRangeChange(event.target.value, toDate)}
-                  />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                    Ate
-                  </span>
-                  <input
-                    className="h-7 w-28 rounded-lg border-none bg-white px-2 py-0 text-[10px] font-bold shadow-sm ring-1 ring-slate-100 focus:ring-primary"
-                    type="date"
-                    value={toDate}
-                    onChange={(event) => onRangeChange(fromDate, event.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent
-          className={cn(
-            "grid grid-cols-2 gap-2.5 p-5 pt-0 md:p-6 md:pt-0 xl:grid-cols-5",
-            uiDensity === "dense" && "gap-2",
-          )}
-        >
-          <MetricCard label="Patrimonio total" value={overview?.totals.wealth ?? 0} tone="default" />
-          <MetricCard label="Capital aportado" value={capitalAportadoLiquido} tone="default" />
-          <MetricCard label="Rendimento bruto" value={rendimentoAcumulado} tone="positive" />
-          <MetricCard label="Caixa livre" value={overview?.totals.cash_balance ?? 0} tone="default" />
-          <MetricCard label="Total resgatado" value={overview?.totals.withdrawal_total ?? 0} tone="warning" />
-        </CardContent>
-      </Card>
-
+        {/* Tabs: Painel / Evolução / Movimentos */}
       <Tabs defaultValue="panel" className="w-full">
         <div
           className={cn(
-            "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between",
-            uiDensity === "dense" ? "mb-4" : "mb-5",
+            "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+            uiDensity === "dense" ? "mb-3" : "mb-4",
           )}
         >
-          <div className="space-y-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
-              Navegacao interna
+          <div className="space-y-0.5">
+            <p className="text-[13px] font-black uppercase tracking-[0.2em] text-slate-300">
+              Navegação interna
             </p>
-            <h3 className="text-lg font-semibold text-slate-900">Resumo, evolucao e movimentos</h3>
+            <h3 className="text-base font-semibold text-slate-800">
+              Resumo, evolução e movimentos
+            </h3>
           </div>
-          <TabsList className="h-14 rounded-[1.75rem] bg-slate-200/50 p-1.5">
+          <TabsList className="h-12 rounded-[1.5rem] bg-slate-100/70 p-1">
             <TabsTrigger
               value="panel"
-              className="rounded-2xl px-7 text-xs font-black uppercase tracking-widest text-slate-500 transition-all hover:text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-[0_8px_20px_-12px_rgba(0,0,0,0.3)]"
+              className="rounded-2xl px-6 text-xs font-black uppercase tracking-widest text-slate-500 transition-all hover:text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-[0_4px_12px_-6px_rgba(0,0,0,0.2)]"
             >
               Painel
             </TabsTrigger>
             <TabsTrigger
               value="evolution"
-              className="rounded-2xl px-7 text-xs font-black uppercase tracking-widest text-slate-500 transition-all hover:text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-[0_8px_20px_-12px_rgba(0,0,0,0.3)]"
+              className="rounded-2xl px-6 text-xs font-black uppercase tracking-widest text-slate-500 transition-all hover:text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-[0_4px_12px_-6px_rgba(0,0,0,0.2)]"
             >
-              Evolucao
+              Evolução
             </TabsTrigger>
             <TabsTrigger
               value="movements"
-              className="rounded-2xl px-7 text-xs font-black uppercase tracking-widest text-slate-500 transition-all hover:text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-[0_8px_20px_-12px_rgba(0,0,0,0.3)]"
+              className="rounded-2xl px-6 text-xs font-black uppercase tracking-widest text-slate-500 transition-all hover:text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-[0_4px_12px_-6px_rgba(0,0,0,0.2)]"
             >
               Movimentos
             </TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="panel" className="space-y-6 outline-none focus:ring-0">
+        {/* Painel */}
+        <TabsContent value="panel" className="space-y-5 outline-none focus:ring-0">
           <div
             className={cn(
-              "investments-summary-grid grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)]",
-              uiDensity === "dense" && "gap-4",
+              "grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]",
+              uiDensity === "dense" && "gap-3",
             )}
           >
-            <Card
-              className={cn(
-                "finance-card finance-card--strong",
-                chartClassNames.surface,
-                uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-[2rem]",
-              )}
-            >
-              <CardHeader>
-                <h3 className="text-lg font-semibold">Composicao patrimonial</h3>
-              </CardHeader>
-              <CardContent className="grid gap-5 lg:grid-cols-[12rem_minmax(0,1fr)] lg:items-center">
-                <div className="mx-auto h-48 w-48">
-                  {compositionData.length === 0 ? (
-                    <div className="flex h-full items-center justify-center rounded-full bg-slate-50 text-center text-sm text-slate-400">
-                      Sem composicao no periodo.
-                    </div>
-                  ) : (
-                    <PieChart width={192} height={192}>
-                      <Pie
-                        data={compositionData}
-                        dataKey="value"
-                        nameKey="label"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={52}
-                        outerRadius={82}
-                        paddingAngle={2}
-                      >
-                        {compositionData.map((item, index) => (
-                          <Cell
-                            key={item.label}
-                            fill={COMPOSITION_COLORS[index % COMPOSITION_COLORS.length]}
-                            stroke="none"
-                          />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  {compositionData.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      Assim que houver aportes ou dividendos, esta area separa capital,
-                      rendimento e caixa.
-                    </p>
-                  ) : (
-                    compositionData.map((item, index) => {
-                      const share =
-                        compositionTotal > 0 ? Math.round((item.value / compositionTotal) * 100) : 0;
-
-                      return (
-                        <div
-                          key={item.label}
-                          className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <span
-                                aria-hidden="true"
-                                className="h-3 w-3 rounded-full"
-                                style={{
-                                  backgroundColor:
-                                    COMPOSITION_COLORS[index % COMPOSITION_COLORS.length],
-                                }}
-                              />
-                              <span className="truncate text-sm font-semibold text-slate-700">
-                                {item.label}
-                              </span>
-                            </div>
-                            <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-300">
-                              {share}%
-                            </span>
-                          </div>
-                          <p className="money-value mt-2 text-lg font-black text-slate-900">
-                            {formatCurrency(item.value)}
-                          </p>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card
-              className={cn(
-                "finance-card finance-card--strong",
-                chartClassNames.surface,
-                uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-[2rem]",
-              )}
-            >
-              <CardHeader className="space-y-4">
-                <h3 className="text-lg font-semibold">Capital x rendimento</h3>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <InsightMetric
-                    label="Meta patrimonial"
-                    value={formatCurrency(overview?.goal.target ?? 0)}
-                    supporting={`${overview?.goal.progress_percent ?? 0}% concluido`}
-                  />
-                  <InsightMetric
-                    label="Falta para a meta"
-                    value={formatCurrency(overview?.goal.remaining ?? 0)}
-                    supporting={`${formatCurrency(overview?.goal.realized ?? 0)} ja realizado`}
-                  />
-                </div>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <InsightPanel
-                  label="Capital investido"
-                  value={formatCurrency(overview?.totals.invested_balance ?? 0)}
-                  supporting="Base patrimonial sem misturar rendimento."
-                />
-                <InsightPanel
-                  label="Rendimento acumulado"
-                  value={formatCurrency(rendimentoAcumulado)}
-                  supporting="Dividendos e retorno separados do principal."
-                />
-                <InsightPanel
-                  label="Aportes do periodo"
-                  value={formatCurrency(overview?.totals.contribution_total ?? 0)}
-                  supporting="Total que saiu do caixa para compor patrimonio."
-                />
-                <InsightPanel
-                  label="Resgates do periodo"
-                  value={formatCurrency(overview?.totals.withdrawal_total ?? 0)}
-                  supporting="Liquidez trazida de volta para o caixa."
-                />
-              </CardContent>
-            </Card>
+            <CompositionPanel
+              compositionData={compositionData}
+              compositionTotal={compositionTotal}
+              cashBalance={caixaAtual}
+              uiDensity={uiDensity}
+              onOpenQuickAdd={() => onOpenQuickAdd("investment_contribution")}
+            />
+            <InsightGrid
+              goalTarget={overview?.goal.target ?? 0}
+              goalProgress={overview?.goal.progress_percent ?? 0}
+              goalRemaining={overview?.goal.remaining ?? 0}
+              goalRealized={overview?.goal.realized ?? 0}
+              investedBalance={overview?.totals.invested_balance ?? 0}
+              rendimentoAcumulado={rendimentoAcumulado}
+              contributionTotal={overview?.totals.contribution_total ?? 0}
+              withdrawalTotal={overview?.totals.withdrawal_total ?? 0}
+              uiDensity={uiDensity}
+            />
           </div>
         </TabsContent>
 
-        <TabsContent value="evolution" className="space-y-6 outline-none focus:ring-0">
+        {/* Evolução */}
+        <TabsContent value="evolution" className="space-y-5 outline-none focus:ring-0">
           <div
             className={cn(
-              "investments-chart-grid grid gap-6 xl:grid-cols-2",
-              uiDensity === "dense" && "gap-4",
+              "grid gap-5 xl:grid-cols-2",
+              uiDensity === "dense" && "gap-3",
             )}
           >
-            <Card
-              className={cn(
-                "finance-card finance-card--strong",
-                chartClassNames.surface,
-                uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-[2rem]",
-              )}
-            >
-              <CardHeader>
-                <h2 className="text-lg font-semibold">Evolucao do patrimonio</h2>
-              </CardHeader>
-              <CardContent className="min-w-0">
-                {loading ? (
-                  <p className="text-sm text-muted-foreground">Carregando visao de patrimonio...</p>
-                ) : (
-                  <MeasuredChartFrame className="h-56" minHeight={224}>
-                    {({ width, height }) => (
-                      <LineChart data={wealthData} width={width} height={height}>
-                        <XAxis dataKey="bucket" tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 10 }} />
-                        <Tooltip
-                          contentStyle={{
-                            borderRadius: "12px",
-                            border: "none",
-                            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                          }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="patrimonio"
-                          stroke={CHART_THEME.primary}
-                          strokeWidth={3}
-                          dot={false}
-                          activeDot={{ r: 4, strokeWidth: 0 }}
-                        />
-                      </LineChart>
-                    )}
-                  </MeasuredChartFrame>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card
-              className={cn(
-                "finance-card finance-card--strong",
-                chartClassNames.surface,
-                uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-[2rem]",
-              )}
-            >
-              <CardHeader className="space-y-4">
-                <h3 className="text-lg font-semibold">Aportes e dividendos</h3>
-                <div className="flex flex-wrap gap-4">
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      aria-label="Aporte"
-                      checked={showContribution}
-                      type="checkbox"
-                      onChange={(event) => setShowContribution(event.target.checked)}
-                    />
-                    Aporte
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      aria-label="Dividendos"
-                      checked={showDividend}
-                      type="checkbox"
-                      onChange={(event) => setShowDividend(event.target.checked)}
-                    />
-                    Dividendos
-                  </label>
-                </div>
-              </CardHeader>
-              <CardContent className="min-w-0">
-                <MeasuredChartFrame className="h-56" minHeight={224}>
-                  {({ width, height }) => (
-                    <LineChart data={trendData} width={width} height={height}>
-                      <XAxis dataKey="bucket" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} tickFormatter={(val) => `R$ ${val}`} />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: "12px",
-                          border: "none",
-                          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                        }}
-                      />
-                      {showContribution ? (
-                        <Line
-                          type="monotone"
-                          dataKey="aporte"
-                          stroke={CHART_THEME.primary}
-                          strokeWidth={3}
-                          dot={false}
-                          activeDot={{ r: 4, strokeWidth: 0 }}
-                        />
-                      ) : null}
-                      {showDividend ? (
-                        <Line
-                          type="monotone"
-                          dataKey="dividendos"
-                          stroke={CHART_THEME.income}
-                          strokeWidth={3}
-                          dot={false}
-                          activeDot={{ r: 4, strokeWidth: 0 }}
-                        />
-                      ) : null}
-                    </LineChart>
-                  )}
-                </MeasuredChartFrame>
-              </CardContent>
-            </Card>
+            <WealthChart data={wealthData} loading={loading} uiDensity={uiDensity} />
+            <TrendChart data={trendData} loading={loading} uiDensity={uiDensity} />
           </div>
         </TabsContent>
 
-        <TabsContent value="movements" className="space-y-6 outline-none focus:ring-0">
-          <Card
-            className={cn(
-              "finance-card finance-card--strong",
-              uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-[2rem]",
-            )}
-          >
-            <CardHeader>
-              <h3 className="text-lg font-semibold">Acoes rapidas</h3>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-3">
-              <Button
-                type="button"
-                onClick={() => onOpenQuickAdd("investment_contribution")}
-                disabled={isSubmitting || !hasMovementAccounts}
-              >
-                Novo aporte
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenQuickAdd("investment_withdrawal")}
-                disabled={isSubmitting || !hasMovementAccounts}
-              >
-                Novo resgate
-              </Button>
-              <Button type="button" variant="ghost" onClick={openInvestmentLedger}>
-                Ver movimentos no historico
-              </Button>
-              {!hasMovementAccounts ? (
-                <p className="w-full text-sm text-muted-foreground">
-                  Cadastre uma conta de caixa para registrar aportes e resgates.
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <Card
-            className={cn(
-              "finance-card finance-card--strong",
-              chartClassNames.surface,
-              uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-[2rem]",
-            )}
-          >
-            <CardHeader className="flex flex-row items-center justify-between gap-3 p-5 pb-2 md:p-6">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-slate-800">Caminho do dinheiro</h3>
-                <p className="text-xs text-slate-500">Historico de aportes e rendimentos</p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 text-[10px] font-bold text-primary hover:bg-primary/5"
-                onClick={openInvestmentLedger}
-              >
-                Ver no historico <ChevronRight className="ml-1 h-3 w-3" />
-              </Button>
-            </CardHeader>
-            <CardContent className="p-0">
-              {movements.length === 0 ? (
-                <div className="px-6 pb-6 pt-2">
-                  <p className="rounded-2xl bg-slate-50 px-4 py-6 text-sm italic text-muted-foreground">
-                    Nenhum movimento no periodo.
-                  </p>
-                </div>
-              ) : (
-                <div className={`table-shell table-shell--${uiDensity}`}>
-                  <Table>
-                    <TableHeader className="bg-slate-50/50">
-                      <TableRow className="border-slate-50 hover:bg-transparent">
-                        <TableHead className="px-6">Data</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descricao</TableHead>
-                        <TableHead className="text-right">Capital</TableHead>
-                        <TableHead className="text-right">Rendimento</TableHead>
-                        <TableHead className="text-right">Caixa</TableHead>
-                        <TableHead className="pr-6 text-right">Investido</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {movements.map((movement) => (
-                        <TableRow key={movement.movement_id} className="border-slate-50">
-                          <TableCell className="px-6 font-medium text-slate-600">
-                            {movement.occurred_at.split("T")[0]}
-                          </TableCell>
-                          <TableCell className="font-semibold text-slate-800">
-                            {movement.type === "contribution" ? "Aporte" : "Resgate"}
-                          </TableCell>
-                          <TableCell className="font-medium text-slate-700">
-                            {movement.description ?? "Sem descricao"}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold text-slate-900">
-                            {formatCurrency(movement.contribution_amount)}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold text-emerald-700">
-                            {formatCurrency(movement.dividend_amount)}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold text-slate-900">
-                            {formatCurrency(movement.cash_delta)}
-                          </TableCell>
-                          <TableCell className="pr-6 text-right font-semibold text-slate-900">
-                            {formatCurrency(movement.invested_delta)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Movimentos */}
+        <TabsContent value="movements" className="outline-none focus:ring-0">
+          <MovementsPanel
+            movements={movements}
+            isSubmitting={isSubmitting}
+            hasMovementAccounts={hasMovementAccounts}
+            fromDate={fromDate}
+            toDate={toDate}
+            uiDensity={uiDensity}
+            onOpenQuickAdd={onOpenQuickAdd}
+            onOpenLedgerFiltered={onOpenLedgerFiltered}
+          />
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "default" | "positive" | "warning";
-}) {
-  const toneClass =
-    tone === "positive"
-      ? "bg-emerald-50 text-emerald-800"
-      : tone === "warning"
-        ? "bg-amber-50 text-amber-800"
-        : "bg-slate-50 text-slate-900";
-
-  return (
-    <div className={`rounded-xl px-4 py-3 ${toneClass}`}>
-      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">
-        {label}
-      </p>
-      <p className="money-value mt-1.5 text-xl font-black">{formatCurrency(value)}</p>
-    </div>
-  );
-}
-
-function InsightMetric({
-  label,
-  value,
-  supporting,
-}: {
-  label: string;
-  value: string;
-  supporting: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
-      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">
-        {label}
-      </p>
-      <p className="money-value mt-1.5 text-lg font-black text-slate-900">{value}</p>
-      <p className="mt-0.5 text-xs text-slate-500">{supporting}</p>
-    </div>
-  );
-}
-
-function InsightPanel({
-  label,
-  value,
-  supporting,
-}: {
-  label: string;
-  value: string;
-  supporting: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
-      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">
-        {label}
-      </p>
-      <p className="money-value mt-1.5 text-lg font-black text-slate-900">{value}</p>
-      <p className="mt-0.5 text-xs text-slate-500">{supporting}</p>
     </div>
   );
 }

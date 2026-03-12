@@ -36,7 +36,7 @@ export function MonthPicker({
   const isCurrentMonth = month === currentMonthKey();
 
   const sizeClasses = uiDensity === "dense" 
-    ? "h-6 w-6 text-[10px]"
+    ? "h-6 w-6 text-[12px]"
     : uiDensity === "compact"
       ? "h-7 w-7 text-xs"
       : "h-8 w-8 text-sm";
@@ -107,7 +107,7 @@ export function MonthPicker({
         <button
           type="button"
           onClick={() => onMonthChange(currentMonthKey())}
-          className="text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors duration-100 focus-visible:outline-none focus-visible:underline shrink-0"
+          className="text-[12px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors duration-100 focus-visible:outline-none focus-visible:underline shrink-0"
         >
           Hoje
         </button>

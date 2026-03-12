@@ -20,7 +20,7 @@ export function MonthSummaryBar({
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col space-y-1">
-        <span className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+        <span className="text-[13px] font-black uppercase tracking-[0.16em] text-slate-500">
           Cadastrados
         </span>
         <span className="text-xl font-bold text-slate-900 tabular-nums">
@@ -29,7 +29,7 @@ export function MonthSummaryBar({
       </div>
 
       <div className="flex flex-col space-y-1 border-l border-slate-100 pl-4">
-        <span className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+        <span className="text-[13px] font-black uppercase tracking-[0.16em] text-slate-500">
           Previstos
         </span>
         <span className="text-xl font-bold text-slate-900 tabular-nums">
@@ -38,7 +38,7 @@ export function MonthSummaryBar({
       </div>
 
       <div className="flex flex-col space-y-1 lg:border-l border-slate-100 lg:pl-4">
-        <span className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-600">
+        <span className="text-[13px] font-black uppercase tracking-[0.16em] text-amber-600">
           Pendentes
         </span>
         <span className="text-xl font-bold text-slate-900 tabular-nums flex items-baseline gap-2">
@@ -50,7 +50,7 @@ export function MonthSummaryBar({
       </div>
 
       <div className="flex flex-col space-y-1 border-l border-slate-100 pl-4">
-        <span className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-600">
+        <span className="text-[13px] font-black uppercase tracking-[0.16em] text-emerald-600">
           Pagos
         </span>
         <span className="text-xl font-bold text-slate-900 tabular-nums flex items-baseline gap-2">

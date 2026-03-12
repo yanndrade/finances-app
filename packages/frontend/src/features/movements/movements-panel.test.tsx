@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "../../App";
@@ -265,14 +265,12 @@ describe("Movements panel", () => {
     await screen.findByText(/Entradas/i, undefined, { timeout: 10_000 });
     await userEvent.click(screen.getByRole("button", { name: /^lançar/i }));
 
-    const dialog = await screen.findByText(/modo rápido/i, undefined, { timeout: 15_000 })
-      .then((el) => el.closest('form'));
-    if (!dialog) throw new Error("Form not found");
+    await screen.findByText(/modo rápido/i, undefined, { timeout: 15_000 });
     
-    await userEvent.type(within(dialog as HTMLElement).getByPlaceholderText("0,00"), "10");
-    await userEvent.type(within(dialog as HTMLElement).getByLabelText(/^Descrição$/i), "Dinner");
-    await userEvent.selectOptions(within(dialog as HTMLElement).getByLabelText(/^Categoria$/i), "custom_food");
-    await userEvent.click(within(dialog as HTMLElement).getByRole("button", { name: /^lançar$/i }));
+    await userEvent.type(screen.getByPlaceholderText("0,00"), "10");
+    await userEvent.type(screen.getByLabelText(/^Descrição$/i), "Dinner");
+    await userEvent.selectOptions(screen.getByLabelText(/^Categoria$/i), "custom_food");
+    await userEvent.click(screen.getByRole("button", { name: /^lançar$/i }));
 
     expect((await screen.findAllByText(/50,00/)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/20,00/)).length).toBeGreaterThan(0);

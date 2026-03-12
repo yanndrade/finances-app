@@ -89,12 +89,12 @@ describe("InvestmentsView", () => {
     renderInvestmentsView();
 
     expect(screen.getByRole("tab", { name: /painel/i })).toHaveAttribute("data-state", "active");
-    expect(screen.getByText(/composicao patrimonial/i)).toBeInTheDocument();
-    expect(screen.queryByText(/evolucao do patrimonio/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /composi/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /evolu.*patrim/i })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /evolucao/i }));
+    await user.click(screen.getByRole("tab", { name: /evolu/i }));
 
-    expect(screen.getByText(/evolucao do patrimonio/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /evolu.*patrim/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /aporte/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /dividendos/i })).toBeInTheDocument();
   });
@@ -118,7 +118,7 @@ describe("InvestmentsView", () => {
     renderInvestmentsView({ onOpenLedgerFiltered });
 
     await user.click(screen.getByRole("tab", { name: /movimentos/i }));
-    await user.click(screen.getByRole("button", { name: /ver movimentos no historico/i }));
+    await user.click(screen.getByRole("button", { name: /ver movimentos no hist/i }));
 
     expect(onOpenLedgerFiltered).toHaveBeenCalledWith(
       expect.objectContaining({

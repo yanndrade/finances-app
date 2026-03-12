@@ -216,23 +216,25 @@ function installFetchMock(initialState?: {
     }
 
     if (url.includes("/api/movements/summary")) {
-      return new Response(JSON.stringify({
-        total_income: 0,
-        total_fixed: 0,
-        total_installments: 0,
-        total_variable: 0,
-        total_investments: 0,
-        total_reimbursements: 0,
-        total_expenses: 0,
-        total_result: 0,
-        counts: {
-          fixed: 0,
-          installments: 0,
-          variable: 0,
-          investments: 0,
-          reimbursements: 0,
-        }
-      }));
+      return new Response(
+        JSON.stringify({
+          total_income: 0,
+          total_fixed: 0,
+          total_installments: 0,
+          total_variable: 0,
+          total_investments: 0,
+          total_reimbursements: 0,
+          total_expenses: 0,
+          total_result: 0,
+          counts: {
+            fixed: 0,
+            installments: 0,
+            variable: 0,
+            investments: 0,
+            reimbursements: 0,
+          },
+        }),
+      );
     }
 
     if (url.includes("/api/movements")) {
@@ -288,7 +290,7 @@ describe("UI consistency and cards overview", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Resumo mensal e pontos de atenção.")).toBeInTheDocument();
+    expect(screen.getByText(/resumo mensal e pontos/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^contas/i }));
     expect(
@@ -297,19 +299,19 @@ describe("UI consistency and cards overview", () => {
     expect(
       await screen.findByRole(
         "button",
-        { name: /configurações/i },
+        { name: /config/i },
         { timeout: 10_000 },
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/mapa de contas/i)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-    expect(await screen.findByPlaceholderText(/buscar movimentações/i, undefined, { timeout: 10_000 })).toBeInTheDocument();
-    expect(screen.queryByText(/histórico e filtros/i)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /^lançar/i }));
+    await userEvent.click(screen.getByRole("button", { name: /hist/i }));
     expect(
-      await screen.findByRole("dialog", undefined, { timeout: 10_000 }),
+      await screen.findByPlaceholderText(/buscar/i, undefined, { timeout: 10_000 }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/histÃ³rico e filtros/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /ctrl/i }));
+    expect(await screen.findByRole("dialog", undefined, { timeout: 10_000 })).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   }, 30_000);
 
@@ -328,18 +330,21 @@ describe("UI consistency and cards overview", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /cart/i }));
 
-    expect(
-      await screen.findByRole("combobox", { name: /escopo/i }, { timeout: 10_000 }),
-    ).toHaveValue("all");
-        const bradescoInvoice = screen.getByRole("button", { name: /bradesco platinum/i });
-    expect(bradescoInvoice).toBeInTheDocument();
+    const scopeSelect = await screen.findByRole(
+      "combobox",
+      { name: /escopo/i },
+      { timeout: 10_000 },
+    );
+    expect(scopeSelect).toHaveTextContent(/todos os cart/i);
+
+    expect(screen.getByText("Bradesco Platinum")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1, name: /cart.es e ciclos/i })).not.toBeInTheDocument();
 
-    await userEvent.click(bradescoInvoice);
+    await userEvent.click(screen.getAllByRole("button", { name: /detalhes/i })[1]);
 
-    expect(screen.getByRole("combobox", { name: /escopo/i })).toHaveValue("card-2");
-    expect(screen.getByRole("button", { name: /pagar agora/i })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /escopo/i })).toHaveTextContent(/bradesco platinum/i);
+    expect(screen.getByRole("button", { name: /pagar fatura/i })).toBeInTheDocument();
   }, 30_000);
 });

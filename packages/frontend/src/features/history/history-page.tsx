@@ -27,6 +27,7 @@ type HistoryPageProps = {
   accounts: AccountSummary[];
   cards: CardSummary[];
   month: string;
+  refreshKey?: number;
   className?: string;
 };
 
@@ -71,6 +72,7 @@ export function HistoryPage({
   accounts,
   cards,
   month,
+  refreshKey,
   className,
 }: HistoryPageProps) {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -131,7 +133,7 @@ export function HistoryPage({
   // Load summary whenever the month changes
   useEffect(() => {
     void loadSummary(month);
-  }, [month, loadSummary]);
+  }, [month, refreshKey, loadSummary]);
 
   // Load movements whenever any filter changes (debounced for text)
   useEffect(() => {
@@ -142,7 +144,7 @@ export function HistoryPage({
       searchText.trim() ? 300 : 0,
     );
     return () => globalThis.clearTimeout(handle);
-  }, [activeFilters, searchText, loadMovements]);
+  }, [activeFilters, searchText, refreshKey, loadMovements]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -220,19 +222,19 @@ export function HistoryPage({
       >
         {/* Table header */}
         <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-surface-paper/80 border-b border-border/60">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground w-10 shrink-0">
+          <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground w-10 shrink-0">
             Data
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex-1">
+          <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground flex-1">
             Movimentação
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground w-24 shrink-0 hidden sm:block">
+          <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground w-24 shrink-0 hidden sm:block">
             Origem
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground w-28 shrink-0 text-right">
+          <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground w-28 shrink-0 text-right">
             Conta
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground w-28 shrink-0 text-right">
+          <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground w-28 shrink-0 text-right">
             Valor
           </span>
         </div>

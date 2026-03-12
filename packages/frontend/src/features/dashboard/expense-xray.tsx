@@ -60,7 +60,7 @@ export function ExpenseXray({
             <CardTitle className="text-sm font-semibold text-slate-900">
               Raio-X de Despesas
             </CardTitle>
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-medium mt-0.5">
+            <p className="text-[12px] text-slate-500 uppercase tracking-widest font-medium mt-0.5">
               Top categorias do mês
             </p>
           </div>
@@ -99,7 +99,7 @@ export function ExpenseXray({
                 </PieChart>
                 {highestCategory && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <span className="text-[12px] font-semibold text-slate-400 uppercase tracking-wider">
                       Maior gasto
                     </span>
                     <span className="text-xs font-bold text-slate-800 line-clamp-1 break-all px-2">
@@ -149,7 +149,7 @@ export function ExpenseXray({
                         value={category.total}
                         className="text-xs font-bold text-slate-900 tabular-nums"
                       />
-                      <span className="text-[10px] font-semibold text-slate-400 tabular-nums w-8 text-right bg-slate-50 px-1 py-0.5 rounded">
+                      <span className="text-[12px] font-semibold text-slate-400 tabular-nums w-8 text-right bg-slate-50 px-1 py-0.5 rounded">
                         {share}%
                       </span>
                     </div>

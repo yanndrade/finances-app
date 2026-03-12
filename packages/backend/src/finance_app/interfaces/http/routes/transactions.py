@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 
 from finance_app.application.accounts import AccountNotFoundError
 from finance_app.application.reimbursements import (
+    InvalidPartialAmountError,
     InvalidReimbursementDateError,
+    ReimbursementAlreadyCanceledError,
     ReimbursementAlreadyReceivedError,
     ReimbursementNotFoundError,
     ReimbursementService,
@@ -19,7 +21,10 @@ from finance_app.application.transactions import (
     TransactionService,
     TransactionServiceError,
 )
-from finance_app.application.transfers import InvalidTransferAccountsError, TransferService
+from finance_app.application.transfers import (
+    InvalidTransferAccountsError,
+    TransferService,
+)
 
 PaymentMethod = Literal["PIX", "CASH", "OTHER"]
 TransactionType = Literal["income", "expense"]
@@ -56,6 +61,12 @@ class VoidTransactionRequest(BaseModel):
 class MarkReimbursementReceivedRequest(BaseModel):
     received_at: str
     account_id: str | None = Field(default=None, min_length=1)
+    amount: int | None = Field(default=None, gt=0)
+
+
+class UpdateReimbursementRequest(BaseModel):
+    expected_at: str | None = None
+    notes: str | None = None
 
 
 class CreateTransferRequest(BaseModel):
@@ -109,9 +120,13 @@ def build_transactions_router(
                 person_id=payload.person_id,
             )
         except AccountNotFoundError as exc:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            ) from exc
         except TransactionAlreadyExistsError as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+            ) from exc
         except InvalidTransactionDateError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -139,9 +154,13 @@ def build_transactions_router(
                 person_id=payload.person_id,
             )
         except AccountNotFoundError as exc:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            ) from exc
         except TransactionAlreadyExistsError as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+            ) from exc
         except InvalidTransactionDateError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -160,7 +179,9 @@ def build_transactions_router(
     def list_transactions(
         occurred_from: str | None = Query(default=None, alias="from"),
         occurred_to: str | None = Query(default=None, alias="to"),
-        transaction_type: TransactionListType | None = Query(default=None, alias="type"),
+        transaction_type: TransactionListType | None = Query(
+            default=None, alias="type"
+        ),
         category_id: str | None = Query(default=None, alias="category"),
         account_id: str | None = Query(default=None, alias="account"),
         card_id: str | None = Query(default=None, alias="card"),
@@ -220,9 +241,13 @@ def build_transactions_router(
                 **updates,
             )
         except AccountNotFoundError as exc:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            ) from exc
         except TransactionNotFoundError as exc:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            ) from exc
         except InvalidTransactionDateError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -245,7 +270,9 @@ def build_transactions_router(
                 reason=payload.reason,
             )
         except TransactionNotFoundError as exc:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            ) from exc
 
     @router.post(
         "/api/reimbursements/{transaction_id}/mark-received",
@@ -260,6 +287,7 @@ def build_transactions_router(
                 transaction_id,
                 received_at=payload.received_at,
                 account_id=payload.account_id,
+                amount=payload.amount,
             )
         except ReimbursementNotFoundError as exc:
             raise HTTPException(
@@ -271,19 +299,108 @@ def build_transactions_router(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(exc),
             ) from exc
-        except ReimbursementAlreadyReceivedError as exc:
+        except (
+            ReimbursementAlreadyReceivedError,
+            ReimbursementAlreadyCanceledError,
+        ) as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=str(exc),
             ) from exc
-        except InvalidReimbursementDateError as exc:
+        except (InvalidReimbursementDateError, InvalidPartialAmountError) as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(exc),
             ) from exc
         except ReimbursementServiceError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+
+    @router.get("/api/reimbursements")
+    def list_reimbursements(
+        reimbursement_status: str | None = Query(default=None, alias="status"),
+        person_id: str | None = Query(default=None, alias="person"),
+        month: str | None = Query(default=None, alias="month"),
+    ) -> list[dict[str, str | int | None]]:
+        if month is not None and re.fullmatch(r"\d{4}-\d{2}", month) is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="month must use YYYY-MM format.",
+            )
+        return reimbursement_service.list_reimbursements(
+            status=reimbursement_status,
+            person_id=person_id,
+            month=month,
+        )
+
+    @router.get("/api/reimbursements/summary")
+    def get_reimbursements_summary(
+        month: str | None = Query(default=None, alias="month"),
+    ) -> dict[str, int]:
+        if month is not None and re.fullmatch(r"\d{4}-\d{2}", month) is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="month must use YYYY-MM format.",
+            )
+        return reimbursement_service.get_summary(month=month)
+
+    @router.patch("/api/reimbursements/{transaction_id}")
+    def update_reimbursement(
+        transaction_id: str,
+        payload: UpdateReimbursementRequest,
+    ) -> dict[str, str | int | None]:
+        updates = payload.model_dump(exclude_unset=True)
+        if not updates:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No fields provided to update.",
+            )
+        try:
+            return reimbursement_service.update_reimbursement(
+                transaction_id,
+                **updates,
+            )
+        except ReimbursementNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            ) from exc
+        except (ReimbursementAlreadyCanceledError,) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+            ) from exc
+        except InvalidReimbursementDateError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+        except ReimbursementServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+
+    @router.post("/api/reimbursements/{transaction_id}/cancel")
+    def cancel_reimbursement(
+        transaction_id: str,
+    ) -> dict[str, str | int | None]:
+        try:
+            return reimbursement_service.cancel_reimbursement(transaction_id)
+        except ReimbursementNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            ) from exc
+        except (
+            ReimbursementAlreadyReceivedError,
+            ReimbursementAlreadyCanceledError,
+        ) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+            ) from exc
+        except ReimbursementServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(exc),
             ) from exc
 
@@ -301,9 +418,13 @@ def build_transactions_router(
                 description=payload.description,
             )
         except AccountNotFoundError as exc:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            ) from exc
         except TransactionAlreadyExistsError as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+            ) from exc
         except (InvalidTransactionDateError, InvalidTransferAccountsError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -316,5 +437,3 @@ def build_transactions_router(
             ) from exc
 
     return router
-
-

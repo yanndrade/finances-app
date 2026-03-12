@@ -115,14 +115,14 @@ function InfoRow({
     <div className={cn("flex items-start gap-3", className)}>
       <div className="mt-0.5 shrink-0 text-muted-foreground/60">{icon}</div>
       <div className="flex-1 min-w-0">
-        <span className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">
+        <span className="block text-[12px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">
           {label}
         </span>
         <span className="block text-sm font-semibold text-foreground break-words">
           {value}
         </span>
         {secondary && (
-          <span className="block text-[11px] text-muted-foreground mt-0.5">
+          <span className="block text-[13px] text-muted-foreground mt-0.5">
             {secondary}
           </span>
         )}
@@ -133,7 +133,7 @@ function InfoRow({
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2 pb-1 border-b border-border/50 mb-3">
+    <h3 className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2 pb-1 border-b border-border/50 mb-3">
       {children}
     </h3>
   );
@@ -222,7 +222,7 @@ export function MovementDrawer({
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <span
               className={cn(
-                "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                "px-2.5 py-1 rounded-full text-[12px] font-bold uppercase tracking-wider",
                 kind === "income" && "bg-emerald-100 text-emerald-700",
                 kind === "expense" && "bg-red-100 text-red-700",
                 kind === "transfer" && "bg-slate-100 text-slate-600",
@@ -235,7 +235,7 @@ export function MovementDrawer({
 
             <span
               className={cn(
-                "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                "px-2.5 py-1 rounded-full text-[12px] font-bold uppercase tracking-wider",
                 lifecyclePillClass(lifecycle_status),
               )}
             >
@@ -243,7 +243,7 @@ export function MovementDrawer({
             </span>
 
             {isLocked && (
-              <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
+              <span className="ml-auto flex items-center gap-1 text-[12px] font-semibold text-muted-foreground">
                 <Lock className="h-3 w-3" />
                 Protegido
               </span>
@@ -273,7 +273,7 @@ export function MovementDrawer({
                 {signedAmount >= 0 ? "+" : ""}
                 {formatCurrency(Math.abs(signedAmount))}
               </span>
-              <span className="block text-[10px] text-muted-foreground mt-1">
+              <span className="block text-[12px] text-muted-foreground mt-1">
                 {formatDate(posted_at)}
               </span>
             </div>

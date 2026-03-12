@@ -1,5 +1,5 @@
 import React from "react";
-import { Clock, CreditCard, Receipt, Target, ArrowRight } from "lucide-react";
+import { Clock, CreditCard, Receipt, RotateCcw, Target, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { MoneyValue } from "../../components/ui/money-value";
 import type {
@@ -14,7 +14,7 @@ type MetricStripProps = {
   dashboard: DashboardSummary;
   investmentOverview: InvestmentOverview | null;
   uiDensity: UiDensity;
-  onNavigate: (view: "fixedExpenses" | "investments") => void;
+  onNavigate: (view: "fixedExpenses" | "investments" | "reimbursements") => void;
   onOpenLedgerFiltered: (
     filters: Partial<TransactionFilters>,
     month?: string,
@@ -49,11 +49,15 @@ export function MetricStrip({
       ? Math.min((realizedInvestment / investmentMeta) * 100, 100)
       : 0;
 
+  const pendingReimbursementsTotal = dashboard.pending_reimbursements_total ?? 0;
+  const hasPendingReimbursements = pendingReimbursementsTotal > 0;
+
   return (
     <div
       className={cn(
         "grid grid-cols-2 lg:grid-cols-4 gap-3",
         uiDensity === "dense" ? "gap-3" : "gap-4",
+        hasPendingReimbursements && "lg:grid-cols-5",
       )}
     >
       <MetricCard
@@ -115,6 +119,16 @@ export function MetricStrip({
           </CardContent>
         </button>
       </Card>
+
+      {hasPendingReimbursements && (
+        <MetricCard
+          title="A Receber"
+          value={pendingReimbursementsTotal}
+          icon={<RotateCcw className="h-4 w-4 text-emerald-500" />}
+          onClick={() => onNavigate("reimbursements")}
+          density={uiDensity}
+        />
+      )}
     </div>
   );
 }
@@ -148,7 +162,7 @@ function MetricCard({
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {icon}
-              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">
+              <span className="text-[12px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">
                 {title}
               </span>
             </div>

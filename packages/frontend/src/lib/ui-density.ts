@@ -16,12 +16,12 @@ export const UI_DENSITY_OPTIONS: Array<{
   {
     value: "compact",
     label: "Compacto",
-    description: "Equilibrio entre legibilidade e densidade desktop.",
+    description: "Equilíbrio entre legibilidade e densidade desktop.",
   },
   {
     value: "dense",
     label: "Denso",
-    description: "Maximiza informacao acima da dobra em 1080p.",
+    description: "Maximiza informação acima da dobra em 1080p.",
   },
 ];
 

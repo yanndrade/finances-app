@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { format } from "date-fns";
 import { z } from "zod";
+import {
+  ArrowLeftRight,
+  TrendingDown,
+  TrendingUp,
+  Repeat,
+  Wallet,
+} from "lucide-react";
 
 import { Checkbox } from "./ui/checkbox";
 import {
@@ -32,7 +39,8 @@ import type {
   TransferPayload,
   RecurringRulePayload,
 } from "../lib/api";
-import { getCategoryOptions } from "../lib/categories";
+import { getCategoryOptions, type CategoryOption } from "../lib/categories";
+import { CategoryManagerDialog } from "../features/categories/category-manager-dialog";
 import {
   createInitialQuickAddState,
   quickAddReducer,
@@ -68,6 +76,92 @@ const ENTER_SUBMIT_INPUT_TYPES = new Set([
 const QUICK_ADD_SELECT_CLASS_NAME =
   "h-11 w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-base leading-tight focus-visible:bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm";
 
+// ─── Tab config ───────────────────────────────────────────────────────────────
+
+type TabConfig = {
+  type: EntryType;
+  label: string;
+  icon: React.ElementType;
+  /** Tailwind classes applied to the active tab pill */
+  activePill: string;
+  /** Tailwind classes applied to the amount block background strip */
+  amountBg: string;
+  /** Tailwind classes for the amount value text */
+  amountText: string;
+  /** Tailwind class for the R$ currency label */
+  currencyText: string;
+  /** Tailwind classes for the mode banner border+bg */
+  bannerBorder: string;
+  bannerBg: string;
+  /** Tailwind class for the submit button */
+  submitClass: string;
+};
+
+const TAB_CONFIG: TabConfig[] = [
+  {
+    type: "expense",
+    label: "Despesa",
+    icon: TrendingDown,
+    activePill: "bg-rose-500 text-white shadow-rose-200",
+    amountBg: "bg-rose-50/60",
+    amountText: "text-rose-600",
+    currencyText: "text-rose-400",
+    bannerBorder: "border-rose-100",
+    bannerBg: "bg-rose-50/70",
+    submitClass: "bg-rose-500 hover:bg-rose-600 text-white shadow-rose-200",
+  },
+  {
+    type: "income",
+    label: "Receita",
+    icon: TrendingUp,
+    activePill: "bg-emerald-500 text-white shadow-emerald-200",
+    amountBg: "bg-emerald-50/60",
+    amountText: "text-emerald-600",
+    currencyText: "text-emerald-400",
+    bannerBorder: "border-emerald-100",
+    bannerBg: "bg-emerald-50/70",
+    submitClass: "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-200",
+  },
+  {
+    type: "transfer",
+    label: "Transferência",
+    icon: ArrowLeftRight,
+    activePill: "bg-blue-500 text-white shadow-blue-200",
+    amountBg: "bg-blue-50/60",
+    amountText: "text-blue-600",
+    currencyText: "text-blue-400",
+    bannerBorder: "border-blue-100",
+    bannerBg: "bg-blue-50/70",
+    submitClass: "bg-blue-500 hover:bg-blue-600 text-white shadow-blue-200",
+  },
+  {
+    type: "investment",
+    label: "Investimento",
+    icon: Wallet,
+    activePill: "bg-violet-500 text-white shadow-violet-200",
+    amountBg: "bg-violet-50/60",
+    amountText: "text-violet-600",
+    currencyText: "text-violet-400",
+    bannerBorder: "border-violet-100",
+    bannerBg: "bg-violet-50/70",
+    submitClass: "bg-violet-500 hover:bg-violet-600 text-white shadow-violet-200",
+  },
+  {
+    type: "recurring",
+    label: "Gasto Fixo",
+    icon: Repeat,
+    activePill: "bg-amber-500 text-white shadow-amber-200",
+    amountBg: "bg-amber-50/60",
+    amountText: "text-amber-600",
+    currencyText: "text-amber-400",
+    bannerBorder: "border-amber-100",
+    bannerBg: "bg-amber-50/70",
+    submitClass: "bg-amber-500 hover:bg-amber-600 text-white shadow-amber-200",
+  },
+];
+
+// ─── Props ────────────────────────────────────────────────────────────────────
+
 type QuickAddComposerProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -76,6 +170,9 @@ type QuickAddComposerProps = {
   accounts: AccountSummary[];
   cards: CardSummary[];
   invoices: InvoiceSummary[];
+  categories?: CategoryOption[];
+  onCreateCategory?: (label: string) => boolean;
+  onRemoveCategory?: (categoryId: string) => void;
   onSubmitTransaction: (
     payload: CashTransactionPayload & { forceKeepContext?: boolean },
   ) => Promise<void>;
@@ -89,6 +186,8 @@ type QuickAddComposerProps = {
 
 type ComposerMode = "quick" | "advanced";
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function QuickAddComposer({
   isOpen,
   onClose,
@@ -97,6 +196,9 @@ export function QuickAddComposer({
   accounts,
   cards,
   invoices,
+  categories: externalCategories,
+  onCreateCategory,
+  onRemoveCategory,
   onSubmitTransaction,
   onSubmitTransfer,
   onSubmitCardPurchase,
@@ -138,7 +240,8 @@ export function QuickAddComposer({
   const [cardId, setCardId] = useState("");
   const [composerMode, setComposerMode] = useState<ComposerMode>("quick");
 
-  const categoryOptions = getCategoryOptions(categoryId);
+  const activeTab = TAB_CONFIG.find((t) => t.type === entryType) ?? TAB_CONFIG[0];
+  const categoryOptions = getCategoryOptions(categoryId, externalCategories);
   const isCardExpense = entryType === "expense" && expensePaymentMode === "CARD";
   const isCardRecurring = entryType === "recurring" && recurringPaymentMode === "CARD";
   const showAccountSelect = !isCardExpense && !isCardRecurring;
@@ -295,7 +398,6 @@ export function QuickAddComposer({
 
   function formatAmountInput(value: string): string {
     const numericValue = parseAmount(value);
-
     return (numericValue / 100).toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -429,7 +531,7 @@ export function QuickAddComposer({
       if (entryType === "recurring") {
         if (onSubmitRecurringRule) {
           await onSubmitRecurringRule({
-            name: description || "Gasto Fixo", // Use description as name since description is the main input
+            name: description || "Gasto Fixo",
             amountInCents,
             dueDay: parseInt(dueDay, 10),
             paymentMethod: recurringPaymentMode,
@@ -541,75 +643,99 @@ export function QuickAddComposer({
     entryType === "investment" ||
     (entryType === "expense" && expensePaymentMode === "CARD");
 
-  const formContent = (
-    <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-6 p-6 pt-2">
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/70 bg-slate-50/80 px-4 py-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-            {isAdvancedMode ? "Modo avançado" : "Modo rápido"}
-          </p>
-          <p className="text-sm font-medium text-slate-700">
-            {isAdvancedMode
-              ? "Campos extras aparecem quando o contexto exige mais controle."
-              : "Foque no essencial para registrar um lancamento em segundos."}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          className="rounded-xl"
-          disabled={isAdvancedModeForced}
-          onClick={() => setComposerMode((current) => (current === "quick" ? "advanced" : "quick"))}
-        >
-          {isAdvancedModeForced
-            ? "Avançado obrigatório"
-            : isAdvancedMode
-              ? "Usar modo rápido"
-              : "Abrir modo avançado"}
-        </Button>
-      </div>
+  // ─── Tab bar ────────────────────────────────────────────────────────────────
 
-      <div className="flex flex-col items-center justify-center py-2">
-        <div className="mb-1 font-semibold text-muted-foreground">R$</div>
-        <input
-          autoFocus
-          ref={amountInputRef}
-          className="w-full max-w-[300px] bg-transparent text-center text-4xl font-bold outline-none placeholder:text-muted-foreground/30 md:text-5xl"
-          placeholder="0,00"
-          value={amount}
-          onChange={(event) => {
-            setAmount(formatAmountInput(event.target.value));
-            dispatchQuickAdd({
-              type: "validationErrorsPatched",
-              errors: { amount: undefined },
-            });
-          }}
-        />
-        <FieldError message={validationErrors.amount} />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="quick-add-type">Tipo</Label>
-          <select
-            id="quick-add-type"
-            aria-label="Tipo"
-            className={QUICK_ADD_SELECT_CLASS_NAME}
-            onChange={(event) =>
-              dispatchQuickAdd({
-                type: "entryTypeChanged",
-                entryType: event.target.value as EntryType,
-              })}
-            value={entryType}
+  const tabBar = (
+    <div className="flex items-center gap-1.5 overflow-x-auto px-6 pb-3 pt-1 scrollbar-none">
+      {TAB_CONFIG.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = tab.type === entryType;
+        return (
+          <button
+            key={tab.type}
+            type="button"
+            onClick={() =>
+              dispatchQuickAdd({ type: "entryTypeChanged", entryType: tab.type })
+            }
+            className={[
+              "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all",
+              isActive
+                ? `${tab.activePill} shadow`
+                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+            ].join(" ")}
           >
-            <option value="expense">Despesa</option>
-            <option value="income">Receita</option>
-            <option value="transfer">Transferência</option>
-            <option value="investment">Investimento</option>
-            <option value="recurring">Gasto Fixo</option>
-          </select>
-        </div>
+            <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 
+  // ─── Amount block ────────────────────────────────────────────────────────────
+
+  const amountBlock = (
+    <div className={`flex flex-col items-center justify-center rounded-2xl py-5 mx-6 mb-2 ${activeTab.amountBg}`}>
+      <div className={`mb-1 text-sm font-semibold ${activeTab.currencyText}`}>R$</div>
+      <input
+        autoFocus
+        ref={amountInputRef}
+        className={`w-full max-w-[280px] bg-transparent text-center text-4xl font-bold outline-none placeholder:text-muted-foreground/30 md:text-5xl ${activeTab.amountText}`}
+        placeholder="0,00"
+        value={amount}
+        onChange={(event) => {
+          setAmount(formatAmountInput(event.target.value));
+          dispatchQuickAdd({
+            type: "validationErrorsPatched",
+            errors: { amount: undefined },
+          });
+        }}
+      />
+      {validationErrors.amount && (
+        <p className="mt-1 text-xs font-medium text-rose-600">{validationErrors.amount}</p>
+      )}
+    </div>
+  );
+
+  // ─── Mode banner ─────────────────────────────────────────────────────────────
+
+  const modeBanner = (
+    <div className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${activeTab.bannerBorder} ${activeTab.bannerBg}`}>
+      <div>
+        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+          {isAdvancedMode ? "Modo avançado" : "Modo rápido"}
+        </p>
+        <p className="text-sm font-medium text-foreground/70">
+          {isAdvancedMode
+            ? "Campos extras aparecem quando o contexto exige mais controle."
+            : "Foque no essencial para registrar um lançamento em segundos."}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="shrink-0 rounded-xl text-xs"
+        disabled={isAdvancedModeForced}
+        onClick={() => setComposerMode((c) => (c === "quick" ? "advanced" : "quick"))}
+      >
+        {isAdvancedModeForced
+          ? "Avançado obrigatório"
+          : isAdvancedMode
+            ? "Modo rápido"
+            : "Modo avançado"}
+      </Button>
+    </div>
+  );
+
+  // ─── Form fields ─────────────────────────────────────────────────────────────
+
+  const formContent = (
+    <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="flex flex-col gap-4 px-6 pb-6 pt-2">
+      {modeBanner}
+
+      {/* Common fields: date + description */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
         <div className="space-y-2">
           <Label htmlFor="quick-add-date">Data</Label>
           <Input
@@ -619,42 +745,441 @@ export function QuickAddComposer({
             value={date}
             onChange={(event) => {
               dispatchQuickAdd({ type: "dateChanged", date: event.target.value });
-              dispatchQuickAdd({
-                type: "validationErrorsPatched",
-                errors: { date: undefined },
-              });
+              dispatchQuickAdd({ type: "validationErrorsPatched", errors: { date: undefined } });
             }}
           />
           <FieldError message={validationErrors.date} />
         </div>
 
-        <div className="col-span-1 sm:col-span-2 space-y-2">
+        <div className="space-y-2">
           <Label htmlFor="quick-add-description">Descrição</Label>
           <Input
             id="quick-add-description"
             className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
-            placeholder="No que você gastou?"
+            placeholder={
+              entryType === "expense"
+                ? "No que você gastou?"
+                : entryType === "income"
+                  ? "De onde veio?"
+                  : entryType === "transfer"
+                    ? "Opcional"
+                    : entryType === "investment"
+                      ? "Opcional"
+                      : "Nome do gasto fixo"
+            }
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
         </div>
+      </div>
 
-        {entryType === "expense" && isAdvancedMode ? (
+      {/* ── Expense fields ── */}
+      {entryType === "expense" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <div className="space-y-2">
-            <Label htmlFor="quick-add-person">Pessoa relacionada</Label>
-            <Input
-              id="quick-add-person"
-              className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
-              placeholder="Opcional"
-              value={personId}
-              onChange={(event) => setPersonId(event.target.value)}
-            />
+            <Label htmlFor="quick-add-payment-mode">Pagamento</Label>
+            <select
+              id="quick-add-payment-mode"
+              aria-label="Modo de pagamento"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
+              onChange={(event) =>
+                dispatchQuickAdd({
+                  type: "expensePaymentModeChanged",
+                  mode: event.target.value as ExpensePaymentMode,
+                })
+              }
+              value={expensePaymentMode}
+            >
+              <option value="PIX">PIX</option>
+              <option value="CASH">Dinheiro</option>
+              <option value="OTHER">Outro</option>
+              <option value="CARD">Cartão de crédito</option>
+            </select>
           </div>
-        ) : null}
 
-        {entryType === "recurring" ? (
+          <div className={isCardExpense ? "space-y-2" : "space-y-2"}>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="quick-add-category">Categoria</Label>
+              {onCreateCategory && onRemoveCategory ? (
+                <CategoryManagerDialog
+                  categories={externalCategories ?? []}
+                  onCreateCategory={onCreateCategory}
+                  onRemoveCategory={onRemoveCategory}
+                />
+              ) : null}
+            </div>
+            <select
+              id="quick-add-category"
+              aria-label="Categoria"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
+              onChange={(event) => setCategoryId(event.target.value)}
+              value={categoryId}
+            >
+              <option value="">Selecione...</option>
+              {categoryOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {isCardExpense ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="quick-add-card">Cartão</Label>
+                <select
+                  id="quick-add-card"
+                  aria-label="Cartão"
+                  className={QUICK_ADD_SELECT_CLASS_NAME}
+                  onChange={(event) => {
+                    setCardId(event.target.value);
+                    dispatchQuickAdd({ type: "validationErrorsPatched", errors: { cardId: undefined } });
+                  }}
+                  value={cardId}
+                >
+                  {cards.map((card) => (
+                    <option key={card.card_id} value={card.card_id}>
+                      {card.name}
+                    </option>
+                  ))}
+                </select>
+                <FieldError message={validationErrors.cardId} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quick-add-installments">Parcelas</Label>
+                <Input
+                  id="quick-add-installments"
+                  aria-label="Parcelas"
+                  type="number"
+                  min={1}
+                  max={48}
+                  className="h-11 border-transparent bg-muted/50"
+                  value={installments}
+                  onChange={(event) => {
+                    dispatchQuickAdd({ type: "installmentsChanged", installments: event.target.value });
+                    dispatchQuickAdd({ type: "validationErrorsPatched", errors: { installments: undefined } });
+                  }}
+                />
+                <FieldError message={validationErrors.installments} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="col-span-1 sm:col-span-2 space-y-2">
+                <Label htmlFor="quick-add-account">Conta</Label>
+                <select
+                  id="quick-add-account"
+                  aria-label="Conta"
+                  className={QUICK_ADD_SELECT_CLASS_NAME}
+                  onChange={(event) => {
+                    dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
+                    dispatchQuickAdd({ type: "validationErrorsPatched", errors: { accountId: undefined } });
+                  }}
+                  value={accountId}
+                >
+                  {accounts.map((account) => (
+                    <option key={account.account_id} value={account.account_id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+                <FieldError message={validationErrors.accountId} />
+              </div>
+              {isAdvancedMode && (
+                <div className="space-y-2">
+                  <Label htmlFor="quick-add-person">Pessoa relacionada</Label>
+                  <Input
+                    id="quick-add-person"
+                    className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
+                    placeholder="Opcional — para rastrear reembolsos"
+                    value={personId}
+                    onChange={(event) => setPersonId(event.target.value)}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Income fields ── */}
+      {entryType === "income" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <div className="space-y-2">
-            <Label htmlFor="quick-add-recurring-mode">Modo de pagamento</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="quick-add-category-income">Categoria</Label>
+              {onCreateCategory && onRemoveCategory ? (
+                <CategoryManagerDialog
+                  categories={externalCategories ?? []}
+                  onCreateCategory={onCreateCategory}
+                  onRemoveCategory={onRemoveCategory}
+                />
+              ) : null}
+            </div>
+            <select
+              id="quick-add-category-income"
+              aria-label="Categoria"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
+              onChange={(event) => setCategoryId(event.target.value)}
+              value={categoryId}
+            >
+              <option value="">Selecione...</option>
+              {categoryOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="quick-add-account-income">Conta</Label>
+            <select
+              id="quick-add-account-income"
+              aria-label="Conta"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
+              onChange={(event) => {
+                dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
+                dispatchQuickAdd({ type: "validationErrorsPatched", errors: { accountId: undefined } });
+              }}
+              value={accountId}
+            >
+              {accounts.map((account) => (
+                <option key={account.account_id} value={account.account_id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+            <FieldError message={validationErrors.accountId} />
+          </div>
+
+          {isAdvancedMode && (
+            <div className="space-y-2">
+              <Label htmlFor="quick-add-person-income">Pessoa relacionada</Label>
+              <Input
+                id="quick-add-person-income"
+                className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
+                placeholder="Opcional"
+                value={personId}
+                onChange={(event) => setPersonId(event.target.value)}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Transfer fields ── */}
+      {entryType === "transfer" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div className="col-span-1 sm:col-span-2 space-y-2">
+            <Label htmlFor="quick-add-transfer-mode">Tipo de transferência</Label>
+            <select
+              id="quick-add-transfer-mode"
+              aria-label="Modo da transferência"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
+              onChange={(event) =>
+                dispatchQuickAdd({
+                  type: "transferModeChanged",
+                  mode: event.target.value as TransferMode,
+                })
+              }
+              value={transferMode}
+            >
+              <option value="internal">Entre contas</option>
+              <option value="invoice_payment">Quitar fatura do cartão</option>
+            </select>
+          </div>
+
+          {transferMode === "internal" ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="quick-add-account-from">Conta origem</Label>
+                <select
+                  id="quick-add-account-from"
+                  aria-label="Conta origem"
+                  className={QUICK_ADD_SELECT_CLASS_NAME}
+                  onChange={(event) => {
+                    dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
+                    dispatchQuickAdd({ type: "validationErrorsPatched", errors: { accountId: undefined } });
+                  }}
+                  value={accountId}
+                >
+                  {accounts.map((account) => (
+                    <option key={account.account_id} value={account.account_id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+                <FieldError message={validationErrors.accountId} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quick-add-account-to">Conta destino</Label>
+                <select
+                  id="quick-add-account-to"
+                  aria-label="Conta destino"
+                  className={QUICK_ADD_SELECT_CLASS_NAME}
+                  onChange={(event) => {
+                    dispatchQuickAdd({ type: "toAccountChanged", accountId: event.target.value });
+                    dispatchQuickAdd({ type: "validationErrorsPatched", errors: { toAccountId: undefined } });
+                  }}
+                  value={toAccountId}
+                >
+                  <option value="">Selecione...</option>
+                  {accounts
+                    .filter((account) => account.account_id !== accountId)
+                    .map((account) => (
+                      <option key={account.account_id} value={account.account_id}>
+                        {account.name}
+                      </option>
+                    ))}
+                </select>
+                <FieldError message={validationErrors.toAccountId} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="col-span-1 sm:col-span-2 space-y-2">
+                <Label htmlFor="quick-add-account-payer">Conta para pagamento</Label>
+                <select
+                  id="quick-add-account-payer"
+                  aria-label="Conta que vai pagar a fatura"
+                  className={QUICK_ADD_SELECT_CLASS_NAME}
+                  onChange={(event) => {
+                    dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
+                    dispatchQuickAdd({ type: "validationErrorsPatched", errors: { accountId: undefined } });
+                  }}
+                  value={accountId}
+                >
+                  {accounts.map((account) => (
+                    <option key={account.account_id} value={account.account_id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+                <FieldError message={validationErrors.accountId} />
+              </div>
+              <div className="col-span-1 sm:col-span-2 rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+                Quitar saldo do cartão usando uma conta existente.
+              </div>
+              <div className="col-span-1 sm:col-span-2 space-y-2">
+                <Label htmlFor="quick-add-invoice">Fatura</Label>
+                <select
+                  id="quick-add-invoice"
+                  aria-label="Fatura"
+                  className={QUICK_ADD_SELECT_CLASS_NAME}
+                  onChange={(event) => {
+                    dispatchQuickAdd({ type: "invoiceChanged", invoiceId: event.target.value });
+                    dispatchQuickAdd({ type: "validationErrorsPatched", errors: { invoiceId: undefined } });
+                  }}
+                  value={invoiceId}
+                >
+                  <option value="">Selecione...</option>
+                  {openInvoices.map((invoice) => {
+                    const cardName =
+                      cards.find((card) => card.card_id === invoice.card_id)?.name || "Cartão";
+                    return (
+                      <option key={invoice.invoice_id} value={invoice.invoice_id}>
+                        {cardName} — {format(new Date(invoice.due_date), "dd/MM")}
+                      </option>
+                    );
+                  })}
+                </select>
+                <FieldError message={validationErrors.invoiceId} />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Investment fields ── */}
+      {entryType === "investment" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="quick-add-investment-mode">Tipo do movimento</Label>
+            <select
+              id="quick-add-investment-mode"
+              aria-label="Tipo do movimento"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
+              onChange={(event) =>
+                dispatchQuickAdd({
+                  type: "investmentModeChanged",
+                  mode: event.target.value as InvestmentMode,
+                })
+              }
+              value={investmentMode}
+            >
+              <option value="contribution">Aporte</option>
+              <option value="withdrawal">Resgate</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="quick-add-account-investment">Conta</Label>
+            <select
+              id="quick-add-account-investment"
+              aria-label="Conta"
+              className={QUICK_ADD_SELECT_CLASS_NAME}
+              onChange={(event) => {
+                dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
+                dispatchQuickAdd({ type: "validationErrorsPatched", errors: { accountId: undefined } });
+              }}
+              value={accountId}
+            >
+              {accounts.map((account) => (
+                <option key={account.account_id} value={account.account_id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+            <FieldError message={validationErrors.accountId} />
+          </div>
+
+          {isAdvancedMode && investmentMode === "contribution" && (
+            <div className="space-y-2">
+              <Label htmlFor="quick-add-dividend">Dividendos (opcional)</Label>
+              <Input
+                id="quick-add-dividend"
+                aria-label="Dividendos"
+                className="h-11 border-transparent bg-muted/50"
+                value={dividendAmount}
+                onChange={(event) =>
+                  dispatchQuickAdd({
+                    type: "dividendAmountChanged",
+                    amount: formatAmountInput(event.target.value),
+                  })
+                }
+                placeholder="0,00"
+              />
+            </div>
+          )}
+
+          {isAdvancedMode && investmentMode === "withdrawal" && (
+            <div className="space-y-2">
+              <Label htmlFor="quick-add-invested-reduction">Redução do investido</Label>
+              <Input
+                id="quick-add-invested-reduction"
+                aria-label="Redução do investido"
+                className="h-11 border-transparent bg-muted/50"
+                value={investedReductionAmount}
+                onChange={(event) =>
+                  dispatchQuickAdd({
+                    type: "investedReductionAmountChanged",
+                    amount: formatAmountInput(event.target.value),
+                  })
+                }
+                placeholder="0,00"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Recurring fields ── */}
+      {entryType === "recurring" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="quick-add-recurring-mode">Pagamento</Label>
             <select
               id="quick-add-recurring-mode"
               aria-label="Modo de pagamento do gasto fixo"
@@ -673,9 +1198,7 @@ export function QuickAddComposer({
               <option value="CARD">Cartão</option>
             </select>
           </div>
-        ) : null}
 
-        {entryType === "recurring" ? (
           <div className="space-y-2">
             <Label htmlFor="quick-add-due-day">Dia do vencimento</Label>
             <Input
@@ -686,85 +1209,26 @@ export function QuickAddComposer({
               max="28"
               className="h-11 border-transparent bg-muted/50"
               onChange={(event) =>
-                dispatchQuickAdd({
-                  type: "dueDayChanged",
-                  dueDay: event.target.value,
-                })
+                dispatchQuickAdd({ type: "dueDayChanged", dueDay: event.target.value })
               }
               value={dueDay}
             />
             <FieldError message={validationErrors.dueDay} />
           </div>
-        ) : null}
 
-        {entryType === "expense" ? (
-          <div className="space-y-2">
-            <Label htmlFor="quick-add-payment-mode">Modo de pagamento</Label>
+          <div className="col-span-1 sm:col-span-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="quick-add-category-recurring">Categoria</Label>
+              {onCreateCategory && onRemoveCategory ? (
+                <CategoryManagerDialog
+                  categories={externalCategories ?? []}
+                  onCreateCategory={onCreateCategory}
+                  onRemoveCategory={onRemoveCategory}
+                />
+              ) : null}
+            </div>
             <select
-              id="quick-add-payment-mode"
-              aria-label="Modo de pagamento"
-              className={QUICK_ADD_SELECT_CLASS_NAME}
-              onChange={(event) =>
-                dispatchQuickAdd({
-                  type: "expensePaymentModeChanged",
-                  mode: event.target.value as ExpensePaymentMode,
-                })
-              }
-              value={expensePaymentMode}
-            >
-              <option value="PIX">PIX</option>
-              <option value="CASH">Dinheiro</option>
-              <option value="OTHER">Outro</option>
-              <option value="CARD">Cartão</option>
-            </select>
-          </div>
-        ) : null}
-
-        {entryType === "transfer" ? (
-          <div className="space-y-2">
-            <Label htmlFor="quick-add-transfer-mode">Modo da transferência</Label>
-            <select
-              id="quick-add-transfer-mode"
-              aria-label="Modo da transferência"
-              className={QUICK_ADD_SELECT_CLASS_NAME}
-              onChange={(event) =>
-                dispatchQuickAdd({
-                  type: "transferModeChanged",
-                  mode: event.target.value as TransferMode,
-                })}
-              value={transferMode}
-            >
-              <option value="internal">Entre contas</option>
-              <option value="invoice_payment">Quitar fatura</option>
-            </select>
-          </div>
-        ) : null}
-
-        {entryType === "investment" ? (
-          <div className="space-y-2">
-            <Label htmlFor="quick-add-investment-mode">Tipo do movimento</Label>
-            <select
-              id="quick-add-investment-mode"
-              aria-label="Tipo do movimento"
-              className={QUICK_ADD_SELECT_CLASS_NAME}
-              onChange={(event) =>
-                dispatchQuickAdd({
-                  type: "investmentModeChanged",
-                  mode: event.target.value as InvestmentMode,
-                })}
-              value={investmentMode}
-            >
-              <option value="contribution">Aporte</option>
-              <option value="withdrawal">Resgate</option>
-            </select>
-          </div>
-        ) : null}
-
-        {entryType === "expense" || entryType === "income" || entryType === "recurring" ? (
-          <div className={isCardExpense || entryType === "recurring" ? "col-span-1 sm:col-span-2 space-y-2" : "space-y-2"}>
-            <Label htmlFor="quick-add-category">Categoria</Label>
-            <select
-              id="quick-add-category"
+              id="quick-add-category-recurring"
               aria-label="Categoria"
               className={QUICK_ADD_SELECT_CLASS_NAME}
               onChange={(event) => setCategoryId(event.target.value)}
@@ -778,162 +1242,17 @@ export function QuickAddComposer({
               ))}
             </select>
           </div>
-        ) : null}
 
-        {entryType === "investment" && investmentMode === "contribution" && isAdvancedMode ? (
-          <div className="space-y-2">
-            <Label htmlFor="quick-add-dividend-amount">Dividendos (opcional)</Label>
-            <Input
-              id="quick-add-dividend-amount"
-              aria-label="Dividendos"
-              className="h-11 border-transparent bg-muted/50"
-              value={dividendAmount}
-              onChange={(event) =>
-                dispatchQuickAdd({
-                  type: "dividendAmountChanged",
-                  amount: formatAmountInput(event.target.value),
-                })}
-              placeholder="0,00"
-            />
-          </div>
-        ) : null}
-
-        {entryType === "investment" && investmentMode === "withdrawal" && isAdvancedMode ? (
-          <div className="space-y-2">
-            <Label htmlFor="quick-add-invested-reduction">Redução do investido</Label>
-            <Input
-              id="quick-add-invested-reduction"
-              aria-label="Redução do investido"
-              className="h-11 border-transparent bg-muted/50"
-              value={investedReductionAmount}
-              onChange={(event) =>
-                dispatchQuickAdd({
-                  type: "investedReductionAmountChanged",
-                  amount: formatAmountInput(event.target.value),
-                })}
-              placeholder="0,00"
-            />
-          </div>
-        ) : null}
-
-        {showAccountSelect ? (
-          <div className="col-span-1 sm:col-span-2 space-y-2">
-            <Label htmlFor="quick-add-account">
-              {entryType === "transfer" && transferMode === "invoice_payment"
-                ? "Conta que vai pagar a fatura"
-                : entryType === "transfer"
-                  ? "Conta origem"
-                  : "Conta"}
-            </Label>
-            <select
-              id="quick-add-account"
-              aria-label={
-                entryType === "transfer" && transferMode === "invoice_payment"
-                  ? "Conta que vai pagar a fatura"
-                  : entryType === "transfer"
-                    ? "Conta origem"
-                    : "Conta"
-              }
-              className={QUICK_ADD_SELECT_CLASS_NAME}
-              onChange={(event) => {
-                dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
-                dispatchQuickAdd({
-                  type: "validationErrorsPatched",
-                  errors: { accountId: undefined },
-                });
-              }}
-              value={accountId}
-            >
-              {accounts.map((account) => (
-                <option key={account.account_id} value={account.account_id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-            <FieldError message={validationErrors.accountId} />
-          </div>
-        ) : null}
-
-        {entryType === "transfer" && transferMode === "internal" ? (
-          <div className="space-y-2">
-            <Label htmlFor="quick-add-destination-account">Conta destino</Label>
-            <select
-              id="quick-add-destination-account"
-              aria-label="Conta destino"
-              className={QUICK_ADD_SELECT_CLASS_NAME}
-              onChange={(event) => {
-                dispatchQuickAdd({ type: "toAccountChanged", accountId: event.target.value });
-                dispatchQuickAdd({
-                  type: "validationErrorsPatched",
-                  errors: { toAccountId: undefined },
-                });
-              }}
-              value={toAccountId}
-            >
-              <option value="">Selecione...</option>
-              {accounts
-                .filter((account) => account.account_id !== accountId)
-                .map((account) => (
-                  <option key={account.account_id} value={account.account_id}>
-                    {account.name}
-                  </option>
-                ))}
-            </select>
-            <FieldError message={validationErrors.toAccountId} />
-          </div>
-        ) : null}
-
-        {entryType === "transfer" && transferMode === "invoice_payment" ? (
-          <>
-            <div className="col-span-1 sm:col-span-2 rounded-2xl bg-primary/5 px-4 py-3 text-sm font-medium text-primary/80">
-              Quitar saldo do cartao usando uma conta existente.
-            </div>
+          {isCardRecurring ? (
             <div className="col-span-1 sm:col-span-2 space-y-2">
-              <Label htmlFor="quick-add-invoice">Fatura</Label>
+              <Label htmlFor="quick-add-card-recurring">Cartão</Label>
               <select
-                id="quick-add-invoice"
-                aria-label="Fatura"
-                className={QUICK_ADD_SELECT_CLASS_NAME}
-                onChange={(event) => {
-                  dispatchQuickAdd({ type: "invoiceChanged", invoiceId: event.target.value });
-                  dispatchQuickAdd({
-                    type: "validationErrorsPatched",
-                    errors: { invoiceId: undefined },
-                  });
-                }}
-                value={invoiceId}
-              >
-                <option value="">Selecione...</option>
-                {openInvoices.map((invoice) => {
-                  const cardName =
-                    cards.find((card) => card.card_id === invoice.card_id)?.name || "Cartao";
-
-                  return (
-                    <option key={invoice.invoice_id} value={invoice.invoice_id}>
-                      {cardName} - {format(new Date(invoice.due_date), "dd/MM")}
-                    </option>
-                  );
-                })}
-              </select>
-              <FieldError message={validationErrors.invoiceId} />
-            </div>
-          </>
-        ) : null}
-
-        {showCardSelect ? (
-          <>
-            <div className={isCardRecurring ? "col-span-1 sm:col-span-2 space-y-2" : "space-y-2"}>
-              <Label htmlFor="quick-add-card">Cartão</Label>
-              <select
-                id="quick-add-card"
+                id="quick-add-card-recurring"
                 aria-label="Cartão"
                 className={QUICK_ADD_SELECT_CLASS_NAME}
                 onChange={(event) => {
                   setCardId(event.target.value);
-                  dispatchQuickAdd({
-                    type: "validationErrorsPatched",
-                    errors: { cardId: undefined },
-                  });
+                  dispatchQuickAdd({ type: "validationErrorsPatched", errors: { cardId: undefined } });
                 }}
                 value={cardId}
               >
@@ -945,64 +1264,63 @@ export function QuickAddComposer({
               </select>
               <FieldError message={validationErrors.cardId} />
             </div>
-            {isCardExpense && (
-              <div className="space-y-2">
-                <Label htmlFor="quick-add-installments">Parcelas</Label>
-                <Input
-                  id="quick-add-installments"
-                  aria-label="Parcelas"
-                  type="number"
-                  min={1}
-                  max={48}
-                  className="h-11 border-transparent bg-muted/50"
-                  value={installments}
-                  onChange={(event) => {
-                    dispatchQuickAdd({
-                      type: "installmentsChanged",
-                      installments: event.target.value,
-                    });
-                    dispatchQuickAdd({
-                      type: "validationErrorsPatched",
-                      errors: { installments: undefined },
-                    });
-                  }}
-                />
-                <FieldError message={validationErrors.installments} />
-              </div>
-            )}
-          </>
-        ) : null}
-      </div>
+          ) : (
+            <div className="col-span-1 sm:col-span-2 space-y-2">
+              <Label htmlFor="quick-add-account-recurring">Conta</Label>
+              <select
+                id="quick-add-account-recurring"
+                aria-label="Conta"
+                className={QUICK_ADD_SELECT_CLASS_NAME}
+                onChange={(event) => {
+                  dispatchQuickAdd({ type: "accountChanged", accountId: event.target.value });
+                  dispatchQuickAdd({ type: "validationErrorsPatched", errors: { accountId: undefined } });
+                }}
+                value={accountId}
+              >
+                {accounts.map((account) => (
+                  <option key={account.account_id} value={account.account_id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+              <FieldError message={validationErrors.accountId} />
+            </div>
+          )}
+        </div>
+      )}
 
-      <div className="flex items-center justify-between pt-2">
-        {entryType === "expense" || entryType === "income"
-          ? expensePaymentMode !== "CARD" && isAdvancedMode && (
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="keepOpen"
-                  checked={keepOpen}
-                  onCheckedChange={(checked: boolean | "indeterminate") =>
-                    dispatchQuickAdd({
-                      type: "keepOpenChanged",
-                      keepOpen: checked === true,
-                    })
-                  }
-                />
-                <label
-                  htmlFor="keepOpen"
-                  className="text-sm font-medium leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Salvar e adicionar outra
-                </label>
-              </div>
-            )
-          : <div />}
+      {/* ── Footer ── */}
+      <div className="flex items-center justify-between pt-1">
+        {(entryType === "expense" || entryType === "income") &&
+        expensePaymentMode !== "CARD" &&
+        isAdvancedMode ? (
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="keepOpen"
+              checked={keepOpen}
+              onCheckedChange={(checked: boolean | "indeterminate") =>
+                dispatchQuickAdd({
+                  type: "keepOpenChanged",
+                  keepOpen: checked === true,
+                })
+              }
+            />
+            <label
+              htmlFor="keepOpen"
+              className="text-sm font-medium leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Salvar e adicionar outra
+            </label>
+          </div>
+        ) : (
+          <div />
+        )}
 
         <Button
           disabled={isSubmitting || !amount}
           type="submit"
           size="lg"
-          className="rounded-xl px-8 shadow-lg shadow-primary/20"
+          className={`rounded-xl px-8 shadow-lg ${activeTab.submitClass}`}
         >
           Lançar
         </Button>
@@ -1011,6 +1329,8 @@ export function QuickAddComposer({
     </form>
   );
 
+  // ─── Shell ────────────────────────────────────────────────────────────────────
+
   if (isMobile) {
     return (
       <Drawer open={isOpen} onOpenChange={(open) => !open && handleClose()}>
@@ -1018,13 +1338,15 @@ export function QuickAddComposer({
           data-testid="quick-add-drawer"
           className="max-h-[95vh] sm:max-h-[92vh] overflow-hidden rounded-t-[1.75rem] border bg-background"
         >
-          <div className="overflow-y-auto px-2 pb-4">
-            <DrawerHeader className="px-4 pb-2 pt-6">
+          <div className="overflow-y-auto pb-4">
+            <DrawerHeader className="px-6 pb-1 pt-6">
               <DrawerTitle className="text-xl font-semibold">Lançar</DrawerTitle>
               <DrawerDescription>
                 Registre um lançamento sem sair da tela atual.
               </DrawerDescription>
             </DrawerHeader>
+            {tabBar}
+            {amountBlock}
             {formContent}
           </div>
         </DrawerContent>
@@ -1036,9 +1358,9 @@ export function QuickAddComposer({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent
         data-testid="quick-add-dialog"
-        className="max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-3xl border bg-background p-0 shadow-2xl sm:max-w-[720px] lg:max-w-[780px]"
+        className="max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-3xl border bg-background p-0 shadow-2xl sm:max-w-[680px] lg:max-w-[720px]"
       >
-        <div className="p-6 pb-2">
+        <div className="px-6 pb-1 pt-6">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold">Lançar</DialogTitle>
             <DialogDescription>
@@ -1046,11 +1368,15 @@ export function QuickAddComposer({
             </DialogDescription>
           </DialogHeader>
         </div>
+        {tabBar}
+        {amountBlock}
         {formContent}
       </DialogContent>
     </Dialog>
   );
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function FieldError({ message }: { message?: string }) {
   if (!message) {
@@ -1088,4 +1414,3 @@ function useMediaQuery(query: string): boolean {
 
   return matches;
 }
-

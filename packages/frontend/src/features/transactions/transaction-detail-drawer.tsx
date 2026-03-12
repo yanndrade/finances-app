@@ -85,7 +85,7 @@ export function TransactionDetailDrawer({
               <div className="flex items-center gap-2">
                 <span
                   className={cn(
-                    "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
+                    "px-2 py-0.5 rounded-full text-[13px] font-bold uppercase tracking-wider",
                     transaction.type === "income"
                       ? "bg-emerald-100 text-emerald-700"
                       : transaction.type === "expense"
@@ -96,7 +96,7 @@ export function TransactionDetailDrawer({
                   {formatTransactionType(transaction.type)}
                 </span>
                 {isReadOnly ? (
-                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 flex items-center gap-1">
+                  <span className="px-2 py-0.5 rounded-full text-[13px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 flex items-center gap-1">
                     <Info className="h-2.5 w-2.5" />
                     Auto
                   </span>
@@ -193,7 +193,7 @@ export function TransactionDetailDrawer({
                   variant="outline"
                   size="sm"
                   onClick={onStartSplit}
-                  className="h-7 text-[11px] rounded-lg"
+                  className="h-7 text-[13px] rounded-lg"
                 >
                   Iniciar Split
                 </Button>
@@ -251,7 +251,7 @@ function InfoRow({
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+      <span className="text-[12px] font-bold uppercase tracking-wider text-slate-400 block">
         {label}
       </span>
       <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">

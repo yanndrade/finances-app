@@ -86,7 +86,7 @@ export function ScopeBar({
             {count > 0 && (
               <span
                 className={cn(
-                  "inline-flex items-center justify-center rounded-full text-[10px] font-bold leading-none",
+                  "inline-flex items-center justify-center rounded-full text-[12px] font-bold leading-none",
                   "min-w-[16px] h-4 px-1",
                   isActive
                     ? "bg-white/25 text-white"

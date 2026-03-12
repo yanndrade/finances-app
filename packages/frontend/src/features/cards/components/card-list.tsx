@@ -40,14 +40,14 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
                 <span className="text-sm font-bold text-slate-900">{card.name}</span>
                 {currentInvoice && renderStatusBadge(currentInvoice.status)}
               </div>
-              <p className="mt-0.5 text-[11px] text-slate-400">
+              <p className="mt-0.5 text-[13px] text-slate-400">
                 Fecha {card.closing_day} · Vence {card.due_day}
               </p>
             </div>
 
             {/* Fatura — fixo */}
             <div className="w-28 shrink-0">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Fatura</p>
+              <p className="text-[12px] font-semibold uppercase tracking-widest text-slate-400">Fatura</p>
               <p className="mt-0.5 text-base font-black tracking-tight text-slate-900">
                 {formatCurrency(invoiceAmount)}
               </p>
@@ -56,13 +56,13 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
             {/* Barra de limite — cresce para preencher o espaço disponível */}
             <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                <span className="text-[12px] font-semibold uppercase tracking-widest text-slate-400">
                   Limite
                 </span>
-                <span className="text-[11px] font-bold text-slate-500">{Math.round(limitUsage)}%</span>
+                <span className="text-[13px] font-bold text-slate-500">{Math.round(limitUsage)}%</span>
               </div>
               <Progress value={limitUsage} className="h-1.5 rounded-full bg-slate-100" />
-              <div className="flex justify-between text-[10px] text-slate-400">
+              <div className="flex justify-between text-[12px] text-slate-400">
                 <span>Disp. {formatCurrency(availableLimit)}</span>
                 <span>{formatCurrency(card.limit)}</span>
               </div>
@@ -86,7 +86,7 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
               <button
                 type="button"
                 onClick={() => onSelectCard(card.card_id)}
-                className="flex h-8 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold text-primary transition-colors hover:bg-primary/5"
+                className="flex h-8 items-center gap-1 rounded-lg px-2.5 text-[13px] font-bold text-primary transition-colors hover:bg-primary/5"
               >
                 Detalhes
                 <ArrowRight className="h-3.5 w-3.5" />

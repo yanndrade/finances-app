@@ -73,8 +73,10 @@ const pendingExpenses: PendingExpenseSummary[] = [
 ];
 
 describe("FixedExpensesView", () => {
-  it("submits a new recurring rule", async () => {
-    const onCreateRule = vi.fn<(payload: object) => Promise<void>>().mockResolvedValue();
+  it("opens an existing recurring rule in the edit sheet and submits updates", async () => {
+    const onUpdateRule = vi
+      .fn<(ruleId: string, payload: object) => Promise<void>>()
+      .mockResolvedValue();
 
     render(
       <FixedExpensesView
@@ -84,26 +86,34 @@ describe("FixedExpensesView", () => {
         isSubmitting={false}
         month="2026-03"
         pendingExpenses={[]}
-        recurringRules={[]}
+        recurringRules={recurringRules}
         onConfirmPending={vi.fn().mockResolvedValue(undefined)}
-        onCreateRule={onCreateRule}
+        onCreateRule={vi.fn().mockResolvedValue(undefined)}
         onMonthChange={vi.fn()}
         onOpenLedgerFiltered={vi.fn()}
-        onUpdateRule={vi.fn().mockResolvedValue(undefined)}
+        onUpdateRule={onUpdateRule}
         uiDensity="compact"
       />,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: /novo gasto fixo/i }));
+    await userEvent.click(screen.getByText("Internet"));
 
-    await userEvent.type(screen.getByPlaceholderText(/aluguel, internet/i), "Academia");
-    await userEvent.type(screen.getByPlaceholderText("0,00"), "89,90");
-    await userEvent.clear(screen.getByDisplayValue("1"));
+    expect(await screen.findByRole("heading", { name: /editar gasto fixo/i })).toBeInTheDocument();
+
+    const nameInput = screen.getByPlaceholderText(/aluguel, internet/i);
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Academia");
+
+    const amountInput = screen.getByPlaceholderText("0,00");
+    await userEvent.clear(amountInput);
+    await userEvent.type(amountInput, "89,90");
+
+    await userEvent.clear(screen.getByDisplayValue("10"));
     await userEvent.type(screen.getByRole("spinbutton"), "7");
-    await userEvent.selectOptions(screen.getByDisplayValue("Internet"), "rent");
-    await userEvent.click(screen.getByRole("button", { name: /criar gasto fixo/i }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /categoria/i }), "rent");
+    await userEvent.click(screen.getByRole("button", { name: /salvar altera/i }));
 
-    expect(onCreateRule).toHaveBeenCalledWith({
+    expect(onUpdateRule).toHaveBeenCalledWith("rec-1", {
       name: "Academia",
       amountInCents: 8_990,
       dueDay: 7,
@@ -111,7 +121,7 @@ describe("FixedExpensesView", () => {
       accountId: "acc-1",
       cardId: undefined,
       categoryId: "rent",
-      description: undefined,
+      description: "Fibra",
     });
   }, 15_000);
 
@@ -141,9 +151,7 @@ describe("FixedExpensesView", () => {
     expect(onConfirmPending).toHaveBeenCalledWith("rec-1:2026-03");
   }, 15_000);
 
-  it("allows changing the month via MonthPicker", () => {
-    const onMonthChange = vi.fn();
-
+  it("surfaces empty-state summaries when there are no pending items or recurring rules", () => {
     render(
       <FixedExpensesView
         accounts={accounts}
@@ -155,18 +163,14 @@ describe("FixedExpensesView", () => {
         recurringRules={[]}
         onConfirmPending={vi.fn().mockResolvedValue(undefined)}
         onCreateRule={vi.fn().mockResolvedValue(undefined)}
-        onMonthChange={onMonthChange}
+        onMonthChange={vi.fn()}
         onOpenLedgerFiltered={vi.fn()}
         onUpdateRule={vi.fn().mockResolvedValue(undefined)}
         uiDensity="compact"
       />,
     );
 
-    const monthInput = screen.getByDisplayValue("2026-03");
-    expect(monthInput).toBeInTheDocument();
-    expect(monthInput).toHaveAttribute("type", "month");
-
-    fireEvent.change(monthInput, { target: { value: "2026-04" } });
-    expect(onMonthChange).toHaveBeenCalledWith("2026-04");
+    expect(screen.getByRole("heading", { name: /sem pend/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /sem cadastros/i })).toBeInTheDocument();
   });
 });

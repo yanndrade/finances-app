@@ -66,11 +66,14 @@ const dashboard: DashboardSummary = {
       transaction_id: "reimb-1",
       person_id: "Ana",
       amount: 4_000,
+      amount_received: 0,
       status: "pending",
       account_id: "acc-1",
       occurred_at: "2026-02-20T12:00:00Z",
+      expected_at: null,
       received_at: null,
       receipt_transaction_id: null,
+      notes: null,
     },
   ],
   monthly_commitments: [
@@ -233,7 +236,7 @@ describe("DashboardBento", () => {
 
     // Click category in ExpenseXray
     const foodCategoryBtn = screen.getByRole("button", {
-      name: /alimentacao/i,
+      name: /alimenta/i,
     });
     await user.click(foodCategoryBtn);
     expect(onOpenLedgerFiltered).toHaveBeenCalledWith(

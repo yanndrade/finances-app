@@ -29,7 +29,7 @@ export function RuleListItem({ rule, accountNameById, cardNameById, onClick }: R
           <h3 className="text-sm font-semibold text-slate-900 group-hover:text-primary transition-colors">
             {rule.name}
             {!rule.is_active && (
-              <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-slate-500">
                 Inativo
               </span>
             )}

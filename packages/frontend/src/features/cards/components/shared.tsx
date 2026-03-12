@@ -10,7 +10,7 @@ import type { UiDensity } from "../../../lib/ui-density";
 export function SummaryStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
-      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">{label}</p>
+      <p className="text-[12px] font-black uppercase tracking-[0.15em] text-slate-400">{label}</p>
       <p className="text-2xl font-black tracking-tight text-slate-900">{value}</p>
     </div>
   );
@@ -19,7 +19,7 @@ export function SummaryStat({ label, value }: { label: string; value: string }) 
 export function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-0.5">
-      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">{label}</p>
+      <p className="text-[13px] font-black uppercase tracking-[0.15em] text-slate-300">{label}</p>
       <p className="text-base font-black text-slate-900">{value}</p>
     </div>
   );
@@ -46,7 +46,7 @@ export function MetricPanel({
     <div className={`flex items-center gap-4 rounded-[1.5rem] p-4 ${toneClasses}`}>
       <div className="rounded-xl bg-white p-2.5 shadow-sm">{icon}</div>
       <div>
-        <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">{label}</p>
+        <p className="text-[13px] font-black uppercase tracking-[0.15em] text-slate-300">{label}</p>
         <p className={`text-base font-black ${valueClasses}`}>{value}</p>
       </div>
     </div>

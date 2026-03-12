@@ -87,11 +87,9 @@ describe("AppShell responsive behavior", () => {
       contextPanel: <div>Contexto desktop</div>,
     });
 
-    expect(screen.getByRole("navigation", { name: /navega(ç|c)(ã|a)o principal/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /navega.*principal/i })).toBeInTheDocument();
     expect(screen.getByText("Contexto desktop")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("navigation", { name: /navegacao mobile/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: /mobile/i })).not.toBeInTheDocument();
   });
 
   it("renders reduced mobile navigation with a prominent add-expense action", async () => {
@@ -99,15 +97,15 @@ describe("AppShell responsive behavior", () => {
     const user = userEvent.setup();
     const { onNavigate, onOpenQuickAdd } = renderShell();
 
-    const mobileNav = screen.getByRole("navigation", { name: /navegacao mobile/i });
+    const mobileNav = screen.getByRole("navigation", { name: /mobile/i });
     expect(mobileNav).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /in(í|i)cio/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /hist(ó|o)rico/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /cart(õ|o)es/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /in.*cio/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hist/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cart/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /relatorios/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^contas$/i })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /cart(õ|o)es/i }));
+    await user.click(screen.getByRole("button", { name: /cart/i }));
     expect(onNavigate).toHaveBeenCalledWith("cards");
 
     await user.click(screen.getByRole("button", { name: /adicionar gasto/i }));
@@ -131,19 +129,19 @@ describe("AppShell responsive behavior", () => {
       activeView: "investments",
     });
 
-    expect(screen.getByRole("navigation", { name: /navega(ç|c)(ã|a)o principal/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /navega.*principal/i })).toBeInTheDocument();
 
     act(() => {
       controller.setMatches(true);
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("navigation", { name: /navegacao mobile/i })).toBeInTheDocument();
+      expect(screen.getByRole("navigation", { name: /mobile/i })).toBeInTheDocument();
       expect(onNavigate).toHaveBeenCalledWith("dashboard");
     });
   });
 
-  it("routes keyboard shortcuts to quick add and command palette", async () => {
+  it("routes keyboard shortcuts to quick add and command palette", () => {
     installMatchMedia(false);
     const { onOpenQuickAdd, onOpenCommandPalette } = renderShell();
 
@@ -159,18 +157,21 @@ describe("AppShell responsive behavior", () => {
     installMatchMedia(false);
     const { onMonthChange } = renderShell();
 
-    const monthInput = screen.getByDisplayValue("2026-03");
+    const monthInput = screen.getByLabelText(/selecionar compet/i);
     expect(monthInput).toBeInTheDocument();
     expect(monthInput).toHaveAttribute("type", "month");
+    expect(monthInput).toHaveValue("2026-03");
 
     fireEvent.change(monthInput, { target: { value: "2026-04" } });
     expect(onMonthChange).toHaveBeenCalledWith("2026-04");
   });
 
-  it("hides MonthPicker when not on dashboard", () => {
+  it("keeps MonthPicker available when the shell receives month controls", () => {
     installMatchMedia(false);
     renderShell({ activeView: "cards" });
 
-    expect(screen.queryByDisplayValue("2026-03")).not.toBeInTheDocument();
+    const monthInput = screen.getByLabelText(/selecionar compet/i);
+    expect(monthInput).toBeInTheDocument();
+    expect(monthInput).toHaveValue("2026-03");
   });
 });

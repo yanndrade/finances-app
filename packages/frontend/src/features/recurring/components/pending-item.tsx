@@ -27,7 +27,7 @@ export function PendingItem({
 
   const sourceName =
     pending.payment_method === "CARD"
-      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartao"
+      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartão"
       : accountNameById.get(pending.account_id ?? "") ?? pending.account_id ?? "Conta";
 
   return (
@@ -61,7 +61,7 @@ export function PendingItem({
               className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
               onClick={onViewHistory}
             >
-              Ver no historico
+              Ver no histórico
             </button>
           ) : (
             <button
@@ -103,7 +103,7 @@ function StatusBadge({ status }: { status: TemporalStatus }) {
   }
 
   return (
-    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em]", classes)}>
+    <span className={cn("rounded-full px-2 py-0.5 text-[12px] font-black uppercase tracking-[0.14em]", classes)}>
       {label}
     </span>
   );

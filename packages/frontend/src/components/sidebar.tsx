@@ -2,8 +2,11 @@ import {
   CreditCard,
   Home,
   LineChart,
+  PanelLeftClose,
+  PanelLeftOpen,
   Repeat,
   ReceiptText,
+  RotateCcw,
   Settings2,
   Wallet2,
   type LucideIcon,
@@ -13,6 +16,7 @@ export type AppView =
   | "dashboard"
   | "investments"
   | "transactions"
+  | "reimbursements"
   | "fixedExpenses"
   | "accounts"
   | "cards"
@@ -26,11 +30,19 @@ type NavigationItem = {
   icon: LucideIcon;
 };
 
-type SidebarProps = {
-  activeView: AppView;
-  onNavigate: (view: AppView) => void;
+type NavGroup = {
+  label?: string;
+  items: NavigationItem[];
 };
 
+type SidebarProps = {
+  activeView: AppView;
+  isCollapsed: boolean;
+  onNavigate: (view: AppView) => void;
+  onToggleCollapse: () => void;
+};
+
+// Flat list kept for mobile and backward-compat exports
 export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
   {
     id: "dashboard",
@@ -47,10 +59,17 @@ export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
     icon: ReceiptText,
   },
   {
+    id: "reimbursements",
+    label: "Reembolsos",
+    shortLabel: "Reembolsos",
+    description: "Pendências, cobranças e recebimentos",
+    icon: RotateCcw,
+  },
+  {
     id: "fixedExpenses",
     label: "Gastos fixos",
     shortLabel: "Fixos",
-    description: "Regras recorrentes e pendencias do mes",
+    description: "Regras recorrentes e pendências do mês",
     icon: Repeat,
   },
   {
@@ -61,78 +80,153 @@ export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
     icon: CreditCard,
   },
   {
-    id: "investments",
-    label: "Patrimônio & investimentos",
-    shortLabel: "Patrimônio",
-    description: "Composição, evolução e movimentos",
-    icon: LineChart,
-  },
-  {
     id: "accounts",
     label: "Contas",
     shortLabel: "Contas",
     description: "Saldos e status da carteira",
     icon: Wallet2,
   },
+  {
+    id: "investments",
+    label: "Patrimônio & investimentos",
+    shortLabel: "Patrimônio",
+    description: "Composição, evolução e movimentos",
+    icon: LineChart,
+  },
 ];
 
-export const MOBILE_NAV_ITEMS: NavigationItem[] = DESKTOP_NAV_ITEMS.filter((item) =>
-  item.id === "dashboard" ||
-  item.id === "transactions" ||
-  item.id === "fixedExpenses" ||
-  item.id === "cards",
+// Grouped structure for desktop sidebar
+const NAV_GROUPS: NavGroup[] = [
+  {
+    items: [
+      { id: "dashboard", label: "Visão geral", shortLabel: "Início", description: "Visão mensal do caixa", icon: Home },
+      { id: "transactions", label: "Histórico", shortLabel: "Histórico", description: "Histórico central e operação do mês", icon: ReceiptText },
+      { id: "reimbursements", label: "Reembolsos", shortLabel: "Reembolsos", description: "Pendências, cobranças e recebimentos", icon: RotateCcw },
+    ],
+  },
+  {
+    label: "Estrutura",
+    items: [
+      { id: "fixedExpenses", label: "Gastos fixos", shortLabel: "Fixos", description: "Regras recorrentes e pendências do mês", icon: Repeat },
+      { id: "cards", label: "Cartões", shortLabel: "Cartões", description: "Faturas, limite e ciclo de pagamento", icon: CreditCard },
+      { id: "accounts", label: "Contas", shortLabel: "Contas", description: "Saldos e status da carteira", icon: Wallet2 },
+    ],
+  },
+  {
+    label: "Patrimônio",
+    items: [
+      { id: "investments", label: "Patrimônio & investimentos", shortLabel: "Patrimônio", description: "Composição, evolução e movimentos", icon: LineChart },
+    ],
+  },
+];
+
+export const MOBILE_NAV_ITEMS: NavigationItem[] = DESKTOP_NAV_ITEMS.filter(
+  (item) =>
+    item.id === "dashboard" ||
+    item.id === "transactions" ||
+    item.id === "fixedExpenses" ||
+    item.id === "cards",
 );
 
 export function isMobileEssentialView(view: AppView): boolean {
   return MOBILE_NAV_ITEMS.some((item) => item.id === view);
 }
 
-export function Sidebar({ activeView, onNavigate }: SidebarProps) {
+export function Sidebar({
+  activeView,
+  isCollapsed,
+  onNavigate,
+  onToggleCollapse,
+}: SidebarProps) {
   return (
-    <nav aria-label="Navegação principal" className="sidebar">
-      <div className="brand-block">
-        <p className="eyebrow">Finanças</p>
-        <strong className="brand-title">Controle pessoal</strong>
-        <p className="sidebar-copy">Desktop focado em caixa, contas e movimentações.</p>
+    <nav
+      aria-label="Navegação principal"
+      className={`sidebar${isCollapsed ? " sidebar--collapsed" : ""}`}
+    >
+      {/* Header: brand + collapse toggle */}
+      <div className="sidebar-header">
+        {!isCollapsed && (
+          <div className="brand-block">
+            <p className="eyebrow">Finanças</p>
+            <strong className="brand-title">Controle pessoal</strong>
+          </div>
+        )}
+        <button
+          aria-label={isCollapsed ? "Expandir menu" : "Recolher menu"}
+          className="sidebar-toggle"
+          onClick={onToggleCollapse}
+          title={isCollapsed ? "Expandir menu" : "Recolher menu"}
+          type="button"
+        >
+          {isCollapsed ? (
+            <PanelLeftOpen aria-hidden="true" className="sidebar-toggle__icon" />
+          ) : (
+            <PanelLeftClose aria-hidden="true" className="sidebar-toggle__icon" />
+          )}
+        </button>
       </div>
-      <ul className="nav-list">
-        {DESKTOP_NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
 
-          return (
-            <li key={item.id}>
-              <button
-                aria-pressed={item.id === activeView}
-                className={`nav-item${item.id === activeView ? " is-active" : ""}`}
-                onClick={() => onNavigate(item.id)}
-                type="button"
-              >
-                <span className="nav-item__headline">
-                  <Icon aria-hidden="true" className="nav-item__icon" />
-                  <span className="nav-item__label">{item.label}</span>
-                </span>
-                <span aria-hidden="true" className="nav-item__description">
-                  {item.description}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      {/* Main navigation */}
+      <div className="nav-body">
+        {NAV_GROUPS.map((group, groupIndex) => (
+          <div className="nav-group" key={groupIndex}>
+            {group.label && !isCollapsed && (
+              <p className="nav-group__label">{group.label}</p>
+            )}
+            <ul className="nav-list">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = item.id === activeView;
+
+                return (
+                  <li key={item.id}>
+                    <button
+                      aria-pressed={isActive}
+                      className={`nav-item${isActive ? " is-active" : ""}`}
+                      onClick={() => onNavigate(item.id)}
+                      title={isCollapsed ? item.label : undefined}
+                      type="button"
+                    >
+                      <span className="nav-item__headline">
+                        <Icon aria-hidden="true" className="nav-item__icon" />
+                        {!isCollapsed && (
+                          <span className="nav-item__label">{item.label}</span>
+                        )}
+                      </span>
+                      {!isCollapsed && isActive && (
+                        <span aria-hidden="true" className="nav-item__description">
+                          {item.description}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer: settings */}
       <div className="sidebar-footer">
         <button
           aria-pressed={activeView === "settings"}
           className={`nav-item nav-item--footer${activeView === "settings" ? " is-active" : ""}`}
           onClick={() => onNavigate("settings")}
+          title={isCollapsed ? "Configurações" : undefined}
           type="button"
         >
           <span className="nav-item__headline">
             <Settings2 aria-hidden="true" className="nav-item__icon" />
-            <span className="nav-item__label">Configurações</span>
+            {!isCollapsed && (
+              <span className="nav-item__label">Configurações</span>
+            )}
           </span>
-          <span aria-hidden="true" className="nav-item__description">
-            Regras, preferências e backup
-          </span>
+          {!isCollapsed && activeView === "settings" && (
+            <span aria-hidden="true" className="nav-item__description">
+              Sistema, dados e manutenção
+            </span>
+          )}
         </button>
       </div>
     </nav>

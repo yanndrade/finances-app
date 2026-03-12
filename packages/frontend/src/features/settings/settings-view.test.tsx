@@ -3,112 +3,80 @@ import userEvent from "@testing-library/user-event";
 
 import { SettingsView } from "./settings-view";
 
-const defaultCategories = [
-  { value: "pets", label: "Pets" },
-  { value: "travel", label: "Viagens" },
-];
-
 describe("SettingsView", () => {
-  it("renders actionable setup sections including cards and backup actions", async () => {
+  it("renders data and backup section with export action", async () => {
     const onExportBackup = vi.fn();
-    const onOpenCards = vi.fn();
 
     render(
       <SettingsView
-        accountsCount={1}
-        cardsCount={2}
-        categories={defaultCategories}
         isSubmitting={false}
-        onCreateCategory={vi.fn(() => true)}
-        onOpenAccounts={vi.fn()}
-        onOpenCards={onOpenCards}
-        onRemoveCategory={vi.fn()}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={onExportBackup}
       />,
     );
 
-    expect(screen.getByText(/^estrutura base$/i)).toBeInTheDocument();
-    expect(screen.getByText(/^categorias$/i)).toBeInTheDocument();
-    expect(screen.queryByText(/^regras de auto-categorizacao$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/dados e backup/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /exportar json/i })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^cart(õ|o)es$/i }));
-    await userEvent.click(screen.getByRole("button", { name: /^backup json$/i }));
-
-    expect(onOpenCards).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole("button", { name: /exportar json/i }));
     expect(onExportBackup).toHaveBeenCalledTimes(1);
   });
 
-  it("lets the user add categories and remove custom ones", async () => {
-    const onCreateCategory = vi.fn(() => true);
-    const onRemoveCategory = vi.fn();
-
+  it("renders productivity shortcuts section", () => {
     render(
       <SettingsView
-        accountsCount={0}
-        cardsCount={0}
-        categories={defaultCategories}
         isSubmitting={false}
-        onCreateCategory={onCreateCategory}
-        onOpenAccounts={vi.fn()}
-        onOpenCards={vi.fn()}
-        onRemoveCategory={onRemoveCategory}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={vi.fn()}
       />,
     );
 
-    await userEvent.type(screen.getByLabelText(/nova categoria/i), "Viagens");
-    await userEvent.click(screen.getByRole("button", { name: "+" }));
-    await userEvent.click(screen.getAllByRole("button", { name: /×/i })[0]);
-
-    expect(onCreateCategory).toHaveBeenCalledWith("Viagens");
-    expect(onRemoveCategory).toHaveBeenCalledWith("pets");
+    expect(screen.getByText(/produtividade/i)).toBeInTheDocument();
+    expect(screen.getByText(/ctrl\+n/i)).toBeInTheDocument();
+    expect(screen.getByText(/ctrl\+k/i)).toBeInTheDocument();
   });
 
-  it("shows empty state when there are no categories", () => {
+  it("renders danger zone with reset action", async () => {
+    const onResetApplicationData = vi.fn(() => Promise.resolve());
+
     render(
       <SettingsView
-        accountsCount={0}
-        cardsCount={0}
-        categories={[]}
         isSubmitting={false}
-        onCreateCategory={vi.fn(() => true)}
-        onOpenAccounts={vi.fn()}
-        onOpenCards={vi.fn()}
-        onRemoveCategory={vi.fn()}
-        onResetApplicationData={vi.fn(() => Promise.resolve())}
+        onResetApplicationData={onResetApplicationData}
         onExportBackup={vi.fn()}
       />,
     );
 
-    expect(screen.queryByLabelText(/lista de categorias/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/zona de perigo/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /zerar tudo/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /zerar tudo/i }));
+    expect(onResetApplicationData).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps danger zone collapsed until the user expands it", async () => {
+  it("disables destructive actions while submitting", () => {
     render(
       <SettingsView
-        accountsCount={0}
-        cardsCount={0}
-        categories={defaultCategories}
-        isSubmitting={false}
-        onCreateCategory={vi.fn(() => true)}
-        onOpenAccounts={vi.fn()}
-        onOpenCards={vi.fn()}
-        onRemoveCategory={vi.fn()}
+        isSubmitting={true}
         onResetApplicationData={vi.fn(() => Promise.resolve())}
         onExportBackup={vi.fn()}
       />,
     );
 
-    expect(
-      screen.queryByRole("button", { name: /zerar tudo/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /zerar tudo/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /exportar json/i })).toBeDisabled();
+  });
 
-    await userEvent.click(screen.getByRole("button", { name: /zona de perigo/i }));
+  it("does not render Estrutura base or Categorias sections", () => {
+    render(
+      <SettingsView
+        isSubmitting={false}
+        onResetApplicationData={vi.fn(() => Promise.resolve())}
+        onExportBackup={vi.fn()}
+      />,
+    );
 
-    expect(
-      screen.getByRole("button", { name: /zerar tudo/i }),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/^estrutura base$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^categorias$/i)).not.toBeInTheDocument();
   });
 });

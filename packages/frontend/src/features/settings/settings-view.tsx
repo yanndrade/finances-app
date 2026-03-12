@@ -1,176 +1,158 @@
-import { useState, type FormEvent } from "react";
-import { cn } from "../../lib/utils";
-
-import type { CategoryOption } from "../../lib/categories";
+import { useState } from "react";
+import { Download, Keyboard, AlertTriangle } from "lucide-react";
+import { Button } from "../../components/ui/button";
+import { Separator } from "../../components/ui/separator";
 
 type SettingsViewProps = {
-  accountsCount: number;
-  cardsCount: number;
-  categories: CategoryOption[];
   isSubmitting: boolean;
-  onCreateCategory: (label: string) => boolean;
-  onOpenAccounts: () => void;
-  onOpenCards: () => void;
-  onRemoveCategory: (categoryId: string) => void;
   onExportBackup: () => void;
   onResetApplicationData: () => Promise<void>;
 };
 
 const PRODUCTIVITY_SHORTCUTS = [
-  "Ctrl+N abre + Lançar",
-  "Ctrl+K abre command palette",
-  "Tab/Shift+Tab navegam no modal",
+  { keys: "Ctrl+N", description: "Abre o modal de lançamento" },
+  { keys: "Ctrl+K", description: "Abre a command palette" },
+  { keys: "Tab / Shift+Tab", description: "Navega entre campos do modal" },
 ] as const;
 
 export function SettingsView({
-  accountsCount,
-  cardsCount,
-  categories,
   isSubmitting,
-  onCreateCategory,
-  onOpenAccounts,
-  onOpenCards,
-  onRemoveCategory,
   onExportBackup,
   onResetApplicationData,
 }: SettingsViewProps) {
-  const [newCategoryLabel, setNewCategoryLabel] = useState("");
-  const [categoryFeedback, setCategoryFeedback] = useState<string | null>(null);
-  const [isDangerZoneOpen, setIsDangerZoneOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
-  function handleCreateCategorySubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const wasCreated = onCreateCategory(newCategoryLabel);
-    if (!wasCreated) {
-      setCategoryFeedback("Use um nome único para criar uma nova categoria.");
-      return;
+  async function handleReset() {
+    setIsResetting(true);
+    try {
+      await onResetApplicationData();
+    } finally {
+      setIsResetting(false);
     }
-
-    setNewCategoryLabel("");
-    setCategoryFeedback("Categoria adicionada com sucesso.");
   }
 
   return (
-    <div className="screen-stack settings-screen mx-auto max-w-[1280px]">
-      <div className="settings-bento-grid">
-        <article className="settings-bento-card settings-bento-card--large">
-          <header className="settings-bento-card__header">
-            <h3 className="section-title">Estrutura base</h3>
-            <span className="status-badge status-badge--active">Ativo</span>
-          </header>
-          <div className="settings-bento-card__content">
-            <div className="settings-chip-list mb-4" aria-label="Resumo da estrutura base">
-              <span className="settings-chip">{accountsCount} conta(s)</span>
-              <span className="settings-chip">{cardsCount} cartão(ões)</span>
-            </div>
-            <div className="settings-action-row flex-wrap gap-2">
-              <button className="secondary-button" onClick={onOpenAccounts} type="button">
-                Contas
-              </button>
-              <button className="secondary-button" onClick={onOpenCards} type="button">
-                Cartões
-              </button>
-            </div>
-          </div>
-        </article>
+    <div className="screen-stack settings-screen mx-auto max-w-[680px]">
+      <div className="settings-panel-stack">
 
-        <article className="settings-bento-card settings-bento-card--medium">
-          <header className="settings-bento-card__header">
-            <h3 className="section-title">Categorias</h3>
-            <span className="status-badge status-badge--active">Editável</span>
+        {/* ── Dados e backup ── */}
+        <section className="settings-section" aria-labelledby="settings-data-heading">
+          <header className="settings-section__header">
+            <div className="flex items-center gap-2">
+              <Download className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <h3 id="settings-data-heading" className="settings-section__title">
+                Dados e backup
+              </h3>
+            </div>
+            <p className="settings-section__description">
+              Exporte um snapshot completo dos seus dados em formato JSON. Útil como cópia de segurança antes de qualquer alteração.
+            </p>
           </header>
-          <div className="settings-bento-card__content">
-            <form className="settings-inline-form flex gap-2 mb-3" onSubmit={handleCreateCategorySubmit}>
-              <input
-                aria-label="Nova categoria"
-                className="flex-1"
-                onChange={(event) => {
-                  setNewCategoryLabel(event.target.value);
-                  setCategoryFeedback(null);
-                }}
-                placeholder="Adicionar categoria..."
-                value={newCategoryLabel}
-              />
-              <button className="primary-button p-2" type="submit" title="Adicionar">
-                <span>+</span>
-              </button>
-            </form>
-            
-            <div className="settings-scroll-area max-h-[160px] overflow-y-auto pr-1">
-              {categories.length > 0 ? (
-                <div className="settings-token-grid" aria-label="Lista de categorias">
-                  {categories.map((category) => (
-                    <div key={category.value} className="settings-token-card py-1 px-2 text-xs">
-                      <strong className="truncate">{category.label}</strong>
-                      <button
-                        className="ghost-button p-1 ml-1"
-                        onClick={() => onRemoveCategory(category.value)}
-                        type="button"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  ))}
+          <div className="settings-section__body">
+            <div className="settings-action-row">
+              <div className="settings-action-item">
+                <div>
+                  <p className="settings-action-item__label">Exportar backup</p>
+                  <p className="settings-action-item__hint">
+                    Inclui contas, cartões, transações e faturas.
+                  </p>
                 </div>
-              ) : null}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={onExportBackup}
+                  disabled={isSubmitting}
+                  className="shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+                  Exportar JSON
+                </Button>
+              </div>
             </div>
           </div>
-        </article>
+        </section>
 
-        <article className="settings-bento-card settings-bento-card--small">
-          <header className="settings-bento-card__header text-xs">
-            <h3 className="section-title">Utilitários</h3>
-          </header>
-          <div className="settings-bento-card__content">
-            <div className="mb-4">
-              <button className="secondary-button w-full text-xs py-2" onClick={onExportBackup} type="button">
-                Backup JSON
-              </button>
+        <Separator />
+
+        {/* ── Produtividade ── */}
+        <section className="settings-section" aria-labelledby="settings-shortcuts-heading">
+          <header className="settings-section__header">
+            <div className="flex items-center gap-2">
+              <Keyboard className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <h3 id="settings-shortcuts-heading" className="settings-section__title">
+                Produtividade
+              </h3>
             </div>
-
-            <ul className="settings-inline-list space-y-1">
+            <p className="settings-section__description">
+              Atalhos de teclado disponíveis na aplicação.
+            </p>
+          </header>
+          <div className="settings-section__body">
+            <ul className="settings-shortcuts-list" aria-label="Atalhos de teclado">
               {PRODUCTIVITY_SHORTCUTS.map((shortcut) => (
-                <li key={shortcut} className="text-[10px] font-medium text-slate-500 flex items-center gap-1">
-                  <span className="w-1 h-1 rounded-full bg-slate-200"></span>
-                  {shortcut}
+                <li key={shortcut.keys} className="settings-shortcut-item">
+                  <kbd className="settings-shortcut-kbd">{shortcut.keys}</kbd>
+                  <span className="settings-shortcut-description">{shortcut.description}</span>
                 </li>
               ))}
             </ul>
           </div>
-        </article>
+        </section>
 
-        <section className="settings-danger-zone-wrapper">
-          <button
-            aria-controls="settings-danger-zone"
-            aria-expanded={isDangerZoneOpen}
-            className="settings-danger-toggle flex items-center gap-2 text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
-            onClick={() => setIsDangerZoneOpen((current) => !current)}
-            type="button"
-          >
-            Zona de perigo
-          </button>
+        <Separator />
 
-          {isDangerZoneOpen ? (
-            <div id="settings-danger-zone" className="settings-danger-card mt-2 p-3 border-red-100 bg-red-50/30">
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-xs text-red-900/60">
-                  Apagar permanentemente todos os dados locais.
+        {/* ── Zona de perigo ── */}
+        <section className="settings-section settings-section--danger" aria-labelledby="settings-danger-heading">
+          <header className="settings-section__header">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-500" aria-hidden="true" />
+              <h3 id="settings-danger-heading" className="settings-section__title settings-section__title--danger">
+                Zona de perigo
+              </h3>
+            </div>
+            <p className="settings-section__description">
+              Ações irreversíveis que afetam os dados da aplicação.
+            </p>
+          </header>
+          <div className="settings-section__body">
+            <div className="settings-danger-action-card">
+              <div className="settings-danger-action-card__content">
+                <p className="settings-danger-action-card__label">Apagar todos os dados</p>
+                <p className="settings-danger-action-card__hint">
+                  Remove permanentemente todas as transações, contas, cartões e faturas do servidor.
+                  Categorias personalizadas são preservadas (armazenadas localmente).
+                  Esta ação não pode ser desfeita.
                 </p>
-                <button
-                  className="ghost-button ghost-button--danger py-1 px-3 text-xs"
-                  disabled={isSubmitting}
-                  onClick={() => {
-                    void onResetApplicationData();
-                  }}
+              </div>
+              <div className="settings-danger-action-card__actions">
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onExportBackup}
+                  disabled={isSubmitting || isResetting}
+                  className="shrink-0 text-xs"
+                >
+                  Exportar antes
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={isSubmitting || isResetting}
+                  onClick={() => {
+                    void handleReset();
+                  }}
+                  className="shrink-0"
                 >
                   Zerar tudo
-                </button>
+                </Button>
               </div>
             </div>
-          ) : null}
+          </div>
         </section>
+
       </div>
     </div>
   );

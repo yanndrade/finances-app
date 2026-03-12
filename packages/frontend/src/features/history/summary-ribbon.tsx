@@ -76,7 +76,7 @@ function SegmentCell({
     >
       <span
         className={cn(
-          "text-[10px] font-bold uppercase tracking-widest mb-1 truncate w-full",
+          "text-[12px] font-bold uppercase tracking-widest mb-1 truncate w-full",
           isActive ? "text-foreground" : "text-muted-foreground",
         )}
       >
@@ -97,7 +97,7 @@ function SegmentCell({
         {formatCurrency(Math.abs(segment.value))}
       </span>
       {segment.sublabel && (
-        <span className="text-[10px] text-muted-foreground mt-0.5 truncate w-full">
+        <span className="text-[12px] text-muted-foreground mt-0.5 truncate w-full">
           {segment.sublabel}
         </span>
       )}

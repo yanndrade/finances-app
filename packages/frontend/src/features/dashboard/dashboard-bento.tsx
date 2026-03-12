@@ -25,7 +25,8 @@ type DashboardBentoProps = {
       | "fixedExpenses"
       | "investments"
       | "cards"
-      | "settings",
+      | "settings"
+      | "reimbursements",
   ) => void;
   onOpenLedgerFiltered: (
     filters: Partial<TransactionFilters>,

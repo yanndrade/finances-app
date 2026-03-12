@@ -27,11 +27,11 @@ export function DashboardHealth({
   );
 
   return (
-    <section aria-label="Saude financeira" className="dashboard-section">
+    <section aria-label="Saúde financeira" className="dashboard-section">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Saude</p>
-          <h2 className="section-title">Como voce esta</h2>
+          <p className="eyebrow">Saúde</p>
+          <h2 className="section-title">Como você está</h2>
         </div>
       </div>
 
@@ -72,7 +72,7 @@ export function DashboardHealth({
         </article>
 
         <article className="health-card health-card--cashflow">
-          <p className="health-card__label">Cash flow do mes</p>
+          <p className="health-card__label">Cash flow do mês</p>
           <div className="cashflow-grid">
             <button
               className="cashflow-item"
@@ -91,7 +91,7 @@ export function DashboardHealth({
               onClick={() => onNavigateToTransactions({ type: "expense" })}
               type="button"
             >
-              <span className="cashflow-item__label">Saidas</span>
+              <span className="cashflow-item__label">Saídas</span>
               <strong className="cashflow-item__value cashflow-item__value--negative money-value">
                 {formatCurrency(dashboard.total_expense)}
               </strong>
@@ -138,7 +138,7 @@ function DeltaBadge({
   })();
 
   return (
-    <span className={`delta-badge delta-badge--${tone}`} aria-label={`Variacao: ${delta.percent}`}>
+    <span className={`delta-badge delta-badge--${tone}`}       aria-label={`Variação: ${delta.percent}`}>
       {delta.direction === "up" ? "↑" : delta.direction === "down" ? "↓" : "→"}{" "}
       {delta.percent}
     </span>

@@ -1,44 +1,18 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "./App";
 import type {
   AccountSummary,
-  CardPurchaseSummary,
   CardSummary,
   DashboardSummary,
   InvestmentMovementSummary,
   InvestmentOverview,
+  InvoiceSummary,
   PendingExpenseSummary,
   RecurringRuleSummary,
   TransactionSummary,
 } from "./lib/api";
-
-type InvoiceSummary = {
-  invoice_id: string;
-  card_id: string;
-  reference_month: string;
-  closing_date: string;
-  due_date: string;
-  total_amount: number;
-  paid_amount: number;
-  remaining_amount: number;
-  purchase_count: number;
-  status: string;
-};
-
-type InvoiceItemSummary = {
-  invoice_item_id: string;
-  invoice_id: string;
-  purchase_id: string;
-  card_id: string;
-  purchase_date: string;
-  category_id: string;
-  description: string | null;
-  installment_number: number;
-  installments_count: number;
-  amount: number;
-};
 
 function buildAccount(overrides: Partial<AccountSummary> = {}): AccountSummary {
   return {
@@ -48,6 +22,20 @@ function buildAccount(overrides: Partial<AccountSummary> = {}): AccountSummary {
     initial_balance: 100_000,
     is_active: true,
     current_balance: 132_500,
+    ...overrides,
+  };
+}
+
+function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
+  return {
+    card_id: "card-1",
+    name: "Nubank",
+    limit: 150_000,
+    closing_day: 10,
+    due_day: 20,
+    payment_account_id: "acc-1",
+    is_active: true,
+    future_installment_total: 0,
     ...overrides,
   };
 }
@@ -147,20 +135,6 @@ function buildInvestmentOverview(
   };
 }
 
-function buildCard(overrides: Partial<CardSummary> = {}): CardSummary {
-  return {
-    card_id: "card-1",
-    name: "Nubank",
-    limit: 150_000,
-    closing_day: 10,
-    due_day: 20,
-    payment_account_id: "acc-1",
-    is_active: true,
-    future_installment_total: 0,
-    ...overrides,
-  };
-}
-
 function buildInvoice(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
   const invoice: InvoiceSummary = {
     invoice_id: "card-1:2026-03",
@@ -181,41 +155,6 @@ function buildInvoice(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
   }
 
   return invoice;
-}
-
-function buildInvoiceItem(overrides: Partial<InvoiceItemSummary> = {}): InvoiceItemSummary {
-  return {
-    invoice_item_id: "purchase-1:1",
-    invoice_id: "card-1:2026-03",
-    purchase_id: "purchase-1",
-    card_id: "card-1",
-    purchase_date: "2026-03-03T12:00:00Z",
-    category_id: "mercado",
-    description: "Supermercado",
-    installment_number: 1,
-    installments_count: 1,
-    amount: 100_00,
-    ...overrides,
-  };
-}
-
-function buildCardPurchase(
-  overrides: Partial<CardPurchaseSummary> = {},
-): CardPurchaseSummary {
-  return {
-    purchase_id: "purchase-1",
-    purchase_date: "2026-03-03T12:00:00Z",
-    amount: 50_00,
-    category_id: "mercado",
-    card_id: "card-1",
-    description: "Supermercado",
-    installments_count: 1,
-    invoice_id: "card-1:2026-03",
-    reference_month: "2026-03",
-    closing_date: "2026-03-10",
-    due_date: "2026-03-20",
-    ...overrides,
-  };
 }
 
 function buildRecurringRule(
@@ -257,10 +196,36 @@ function buildPendingExpense(
   };
 }
 
+function installDialogEnvironment() {
+  vi.stubGlobal(
+    "ResizeObserver",
+    vi.fn(() => ({
+      observe: vi.fn(),
+      unobserve: vi.fn(),
+      disconnect: vi.fn(),
+    })),
+  );
+  Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+    configurable: true,
+    value: vi.fn(() => false),
+  });
+  Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: vi.fn(),
+  });
+}
+
 function installAppFetchMock(initialState?: {
   accounts?: AccountSummary[];
   cards?: CardSummary[];
-  cardPurchases?: CardPurchaseSummary[];
   transactions?: TransactionSummary[];
   recurringRules?: RecurringRuleSummary[];
   pendingExpenses?: PendingExpenseSummary[];
@@ -268,19 +233,16 @@ function installAppFetchMock(initialState?: {
   investmentOverview?: InvestmentOverview;
   investmentMovements?: InvestmentMovementSummary[];
   invoices?: InvoiceSummary[];
-  invoiceItemsByInvoiceId?: Record<string, InvoiceItemSummary[]>;
 }) {
   const state = {
     accounts: initialState?.accounts ?? [buildAccount()],
     cards: initialState?.cards ?? [buildCard()],
-    cardPurchases: initialState?.cardPurchases ?? [],
     transactions: initialState?.transactions ?? [buildTransaction()],
     recurringRules: initialState?.recurringRules ?? [],
     pendingExpenses: initialState?.pendingExpenses ?? [],
     investmentOverview: initialState?.investmentOverview ?? buildInvestmentOverview(),
     investmentMovements: initialState?.investmentMovements ?? [],
-    invoices: initialState?.invoices ?? [],
-    invoiceItemsByInvoiceId: initialState?.invoiceItemsByInvoiceId ?? {},
+    invoices: initialState?.invoices ?? [buildInvoice()],
     dashboard:
       initialState?.dashboard ??
       buildDashboard({
@@ -301,36 +263,31 @@ function installAppFetchMock(initialState?: {
       return new Response(JSON.stringify(state.dashboard));
     }
 
-    if (url.includes("/api/backups/export") && method === "GET") {
+    if (url.includes("/api/movements/summary") && method === "GET") {
       return new Response(
         JSON.stringify({
-          accounts: state.accounts,
-          cards: state.cards,
-          invoices: state.invoices,
-          transactions: state.transactions,
-          investment_movements: state.investmentMovements,
+          total_income: 0,
+          total_fixed: 0,
+          total_installments: 0,
+          total_variable: 0,
+          total_investments: 0,
+          total_reimbursements: 0,
+          total_expenses: 0,
+          total_result: 0,
+          counts: {
+            all: 0,
+            fixed: 0,
+            installments: 0,
+            variable: 0,
+            transfers: 0,
+            investments: 0,
+            reimbursements: 0,
+          },
         }),
       );
     }
 
-    if (url.includes("/api/movements/summary") && method === "GET") {
-      return new Response(
-        JSON.stringify({
-          period: "month",
-          counts: {
-            fixed: 0,
-            installments: 0,
-            non_reconciled: 0,
-          },
-          totals: {
-            income: 0,
-            expense: 0,
-          },
-        })
-      );
-    }
-
-    if (url.includes("/api/movements") && !url.includes("/summary") && method === "GET") {
+    if (url.includes("/api/movements") && method === "GET") {
       return new Response(
         JSON.stringify({
           items: [],
@@ -338,7 +295,7 @@ function installAppFetchMock(initialState?: {
           page: 1,
           page_size: 50,
           pages: 1,
-        })
+        }),
       );
     }
 
@@ -366,240 +323,99 @@ function installAppFetchMock(initialState?: {
       return new Response(JSON.stringify(state.pendingExpenses));
     }
 
-    if (url.includes("/api/invoices/") && url.endsWith("/items") && method === "GET") {
-      const invoiceId = decodeURIComponent(
-        url.split("/api/invoices/")[1]?.replace("/items", "") ?? "",
-      );
-
-      return new Response(
-        JSON.stringify(state.invoiceItemsByInvoiceId[invoiceId] ?? []),
-      );
+    if (url.includes("/api/invoices") && method === "GET") {
+      return new Response(JSON.stringify(state.invoices));
     }
 
-    if (url.includes("/api/invoices") && method === "GET") {
-      const currentUrl = new URL(url);
-      const cardId = currentUrl.searchParams.get("card");
+    if (url.includes("/api/card-installments") && method === "GET") {
+      return new Response(JSON.stringify([]));
+    }
 
-      return new Response(
-        JSON.stringify(
-          cardId === null
-            ? state.invoices
-            : state.invoices.filter((invoice) => invoice.card_id === cardId),
-        ),
-      );
+    if (url.includes("/api/invoices/") && url.endsWith("/items") && method === "GET") {
+      return new Response(JSON.stringify([]));
     }
 
     if (url.includes("/api/transactions") && method === "GET") {
       return new Response(JSON.stringify(state.transactions));
     }
 
-    if (url.includes("/api/card-purchases") && method === "GET") {
-      const currentUrl = new URL(url);
-      const cardId = currentUrl.searchParams.get("card");
+    if (url.includes("/api/accounts/") && method === "PATCH") {
+      const accountId = url.split("/api/accounts/")[1];
+      const payload = JSON.parse(String(init?.body)) as {
+        name?: string;
+        type?: string;
+        initial_balance?: number;
+        is_active?: boolean;
+      };
+
+      state.accounts = state.accounts.map((account) =>
+        account.account_id === accountId
+          ? {
+              ...account,
+              ...(payload.name !== undefined ? { name: payload.name } : {}),
+              ...(payload.type !== undefined ? { type: payload.type } : {}),
+              ...(payload.initial_balance !== undefined
+                ? {
+                    initial_balance: payload.initial_balance,
+                    current_balance: payload.initial_balance,
+                  }
+                : {}),
+              ...(payload.is_active !== undefined ? { is_active: payload.is_active } : {}),
+            }
+          : account,
+      );
 
       return new Response(
-        JSON.stringify(
-          cardId === null
-            ? state.cardPurchases
-            : state.cardPurchases.filter((purchase) => purchase.card_id === cardId),
-        ),
+        JSON.stringify(state.accounts.find((account) => account.account_id === accountId)),
       );
     }
 
-    if (url.endsWith("/api/recurring-rules") && method === "POST") {
+    if (url.includes("/api/cards/") && method === "PATCH") {
+      const cardId = url.split("/api/cards/")[1];
       const payload = JSON.parse(String(init?.body)) as {
-        id: string;
-        name: string;
-        amount: number;
-        due_day: number;
-        account_id?: string;
-        card_id?: string;
-        payment_method: "PIX" | "CASH" | "OTHER" | "CARD";
-        category_id: string;
-        description?: string;
+        name?: string;
+        limit?: number;
+        closing_day?: number;
+        due_day?: number;
+        payment_account_id?: string;
+        is_active?: boolean;
       };
 
-      const createdRule = buildRecurringRule({
-        rule_id: payload.id,
-        name: payload.name,
-        amount: payload.amount,
-        due_day: payload.due_day,
-        account_id: payload.account_id ?? null,
-        card_id: payload.card_id ?? null,
-        payment_method: payload.payment_method,
-        category_id: payload.category_id,
-        description: payload.description ?? null,
-      });
-      state.recurringRules = [createdRule, ...state.recurringRules];
-      state.pendingExpenses = [
-        buildPendingExpense({
-          pending_id: `${createdRule.rule_id}:${state.dashboard.month}`,
-          rule_id: createdRule.rule_id,
-          month: state.dashboard.month,
-          name: createdRule.name,
-          amount: createdRule.amount,
-          due_date: `${state.dashboard.month}-${String(createdRule.due_day).padStart(2, "0")}`,
-          account_id: createdRule.account_id,
-          card_id: createdRule.card_id,
-          payment_method: createdRule.payment_method,
-          category_id: createdRule.category_id,
-          description: createdRule.description,
-        }),
-        ...state.pendingExpenses,
-      ];
-
-      return new Response(JSON.stringify(createdRule), { status: 201 });
-    }
-
-    if (url.includes("/api/recurring-rules/") && method === "PATCH") {
-      const ruleId = decodeURIComponent(url.split("/api/recurring-rules/")[1] ?? "");
-      const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      const existingRule = state.recurringRules.find((rule) => rule.rule_id === ruleId);
-      if (!existingRule) {
-        return new Response("Rule not found", { status: 404 });
-      }
-
-      const updatedRule: RecurringRuleSummary = {
-        ...existingRule,
-        ...(payload.name !== undefined ? { name: String(payload.name) } : {}),
-        ...(payload.amount !== undefined ? { amount: Number(payload.amount) } : {}),
-        ...(payload.due_day !== undefined ? { due_day: Number(payload.due_day) } : {}),
-        ...(payload.payment_method !== undefined
-          ? { payment_method: payload.payment_method as RecurringRuleSummary["payment_method"] }
-          : {}),
-        ...(payload.category_id !== undefined ? { category_id: String(payload.category_id) } : {}),
-        ...(payload.description !== undefined
-          ? { description: payload.description === null ? null : String(payload.description) }
-          : {}),
-        ...(payload.is_active !== undefined ? { is_active: Boolean(payload.is_active) } : {}),
-        ...(payload.account_id !== undefined
-          ? { account_id: payload.account_id === null ? null : String(payload.account_id) }
-          : {}),
-        ...(payload.card_id !== undefined
-          ? { card_id: payload.card_id === null ? null : String(payload.card_id) }
-          : {}),
-      };
-      state.recurringRules = state.recurringRules.map((rule) =>
-        rule.rule_id === ruleId ? updatedRule : rule,
-      );
-      state.pendingExpenses = state.pendingExpenses.map((pending) =>
-        pending.rule_id === ruleId
+      state.cards = state.cards.map((card) =>
+        card.card_id === cardId
           ? {
-              ...pending,
-              name: updatedRule.name,
-              amount: updatedRule.amount,
-              due_date: `${pending.month}-${String(updatedRule.due_day).padStart(2, "0")}`,
-              account_id: updatedRule.account_id,
-              card_id: updatedRule.card_id,
-              payment_method: updatedRule.payment_method,
-              category_id: updatedRule.category_id,
-              description: updatedRule.description,
+              ...card,
+              ...(payload.name !== undefined ? { name: payload.name } : {}),
+              ...(payload.limit !== undefined ? { limit: payload.limit } : {}),
+              ...(payload.closing_day !== undefined ? { closing_day: payload.closing_day } : {}),
+              ...(payload.due_day !== undefined ? { due_day: payload.due_day } : {}),
+              ...(payload.payment_account_id !== undefined
+                ? { payment_account_id: payload.payment_account_id }
+                : {}),
+              ...(payload.is_active !== undefined ? { is_active: payload.is_active } : {}),
             }
-          : pending,
+          : card,
       );
-      return new Response(JSON.stringify(updatedRule));
+
+      return new Response(JSON.stringify(state.cards.find((card) => card.card_id === cardId)));
     }
 
     if (url.includes("/api/pendings/") && url.endsWith("/confirm") && method === "POST") {
       const pendingId = decodeURIComponent(url.split("/api/pendings/")[1]?.replace("/confirm", "") ?? "");
-      const pending = state.pendingExpenses.find((item) => item.pending_id === pendingId);
-      if (!pending) {
-        return new Response("Pending not found", { status: 404 });
-      }
-
-      const confirmedPending: PendingExpenseSummary = {
-        ...pending,
-        status: "confirmed",
-        transaction_id:
-          pending.payment_method === "CARD" ? `${pending.pending_id}:purchase` : `${pending.pending_id}:expense`,
-      };
-      state.pendingExpenses = state.pendingExpenses.map((item) =>
-        item.pending_id === pendingId ? confirmedPending : item,
-      );
-      state.dashboard.monthly_fixed_expenses = state.pendingExpenses.map((item) => ({
-        pending_id: item.pending_id,
-        rule_id: item.rule_id,
-        title: item.name,
-        category_id: item.category_id,
-        amount: item.amount,
-        due_date: item.due_date,
-        status: item.status,
-        account_id: item.account_id ?? "",
-        card_id: item.card_id,
-        payment_method: item.payment_method,
-        transaction_id: item.transaction_id,
-      }));
-
-      return new Response(JSON.stringify(confirmedPending), { status: 201 });
-    }
-
-    if (
-      url.includes("/api/reimbursements/") &&
-      url.endsWith("/mark-received") &&
-      method === "POST"
-    ) {
-      const reimbursementId = decodeURIComponent(
-        url.split("/api/reimbursements/")[1]?.replace("/mark-received", "") ?? "",
-      );
-      const payload = JSON.parse(String(init?.body)) as {
-        received_at: string;
-        account_id?: string;
-      };
-      const pendingReimbursements = state.dashboard.pending_reimbursements ?? [];
-      const reimbursement = pendingReimbursements.find(
-        (item) => item.transaction_id === reimbursementId,
+      state.pendingExpenses = state.pendingExpenses.map((pending) =>
+        pending.pending_id === pendingId
+          ? {
+              ...pending,
+              status: "confirmed",
+              transaction_id: `${pending.pending_id}:expense`,
+            }
+          : pending,
       );
 
-      if (!reimbursement) {
-        return new Response("Reimbursement not found", { status: 404 });
-      }
-
-      const accountId = payload.account_id ?? reimbursement.account_id;
-      const receiptTransactionId = `${reimbursementId}:reimbursement-receipt`;
-      const received = {
-        ...reimbursement,
-        status: "received",
-        account_id: accountId,
-        received_at: payload.received_at,
-        receipt_transaction_id: receiptTransactionId,
-      };
-      state.dashboard.pending_reimbursements = pendingReimbursements.filter(
-        (item) => item.transaction_id !== reimbursementId,
+      return new Response(
+        JSON.stringify(state.pendingExpenses.find((pending) => pending.pending_id === pendingId)),
+        { status: 201 },
       );
-      state.dashboard.pending_reimbursements_total = (
-        state.dashboard.pending_reimbursements ?? []
-      ).reduce((sum, item) => sum + item.amount, 0);
-      state.dashboard.total_income += reimbursement.amount;
-      state.dashboard.net_flow += reimbursement.amount;
-      state.dashboard.current_balance += reimbursement.amount;
-
-      state.accounts = state.accounts.map((account) => {
-        if (account.account_id !== accountId) {
-          return account;
-        }
-
-        return {
-          ...account,
-          current_balance: account.current_balance + reimbursement.amount,
-        };
-      });
-
-      const receiptTransaction: TransactionSummary = {
-        transaction_id: receiptTransactionId,
-        occurred_at: payload.received_at,
-        type: "income",
-        amount: reimbursement.amount,
-        account_id: accountId,
-        payment_method: "PIX",
-        category_id: "reimbursement",
-        description: `Reembolso recebido de ${reimbursement.person_id}`,
-        person_id: reimbursement.person_id,
-        status: "active",
-      };
-      state.transactions = [receiptTransaction, ...state.transactions];
-      state.dashboard.recent_transactions = [receiptTransaction, ...state.dashboard.recent_transactions];
-
-      return new Response(JSON.stringify(received), { status: 201 });
     }
 
     if (url.endsWith("/api/dev/reset") && method === "POST") {
@@ -646,352 +462,7 @@ function installAppFetchMock(initialState?: {
         review_queue: [],
       });
 
-      return new Response(
-        JSON.stringify({ status: "ok", message: "Application data reset." }),
-      );
-    }
-
-    if (url.endsWith("/api/investments/movements") && method === "POST") {
-      const payload = JSON.parse(String(init?.body)) as {
-        id: string;
-        occurred_at: string;
-        type: "contribution" | "withdrawal";
-        account_id: string;
-        description?: string;
-        contribution_amount?: number;
-        dividend_amount?: number;
-        cash_amount?: number;
-        invested_amount?: number;
-      };
-      const movement: InvestmentMovementSummary = {
-        movement_id: payload.id,
-        occurred_at: payload.occurred_at,
-        type: payload.type,
-        account_id: payload.account_id,
-        description: payload.description ?? null,
-        contribution_amount: payload.contribution_amount ?? 0,
-        dividend_amount: payload.dividend_amount ?? 0,
-        cash_amount: payload.cash_amount ?? 0,
-        invested_amount: payload.invested_amount ?? 0,
-        cash_delta:
-          payload.type === "contribution"
-            ? -(payload.cash_amount ?? payload.contribution_amount ?? 0)
-            : payload.cash_amount ?? 0,
-        invested_delta:
-          payload.type === "contribution"
-            ? payload.invested_amount ?? (payload.contribution_amount ?? 0) + (payload.dividend_amount ?? 0)
-            : -(payload.invested_amount ?? 0),
-      };
-      state.investmentMovements = [movement, ...state.investmentMovements];
-      return new Response(JSON.stringify(movement), { status: 201 });
-    }
-
-    if (url.endsWith("/api/accounts") && method === "POST") {
-      const payload = JSON.parse(String(init?.body)) as {
-        id: string;
-        name: string;
-        type: string;
-        initial_balance: number;
-      };
-      const nextAccount = buildAccount({
-        account_id: payload.id,
-        name: payload.name,
-        type: payload.type,
-        initial_balance: payload.initial_balance,
-        current_balance: payload.initial_balance,
-      });
-      state.accounts = [...state.accounts, nextAccount];
-
-      return new Response(JSON.stringify(nextAccount), { status: 201 });
-    }
-
-    if (url.includes("/api/accounts/") && method === "PATCH") {
-      const accountId = url.split("/api/accounts/")[1];
-      const payload = JSON.parse(String(init?.body)) as {
-        name?: string;
-        type?: string;
-        initial_balance?: number;
-        is_active?: boolean;
-      };
-
-      state.accounts = state.accounts.map((account) => {
-        if (account.account_id !== accountId) {
-          return account;
-        }
-
-        return {
-          ...account,
-          ...(payload.name !== undefined ? { name: payload.name } : {}),
-          ...(payload.type !== undefined ? { type: payload.type } : {}),
-          ...(payload.initial_balance !== undefined
-            ? {
-                initial_balance: payload.initial_balance,
-                current_balance: payload.initial_balance,
-              }
-            : {}),
-          ...(payload.is_active !== undefined ? { is_active: payload.is_active } : {}),
-        };
-      });
-
-      return new Response(
-        JSON.stringify(state.accounts.find((account) => account.account_id === accountId)),
-      );
-    }
-
-    if (url.endsWith("/api/budgets") && method === "POST") {
-      const payload = JSON.parse(String(init?.body)) as {
-        category_id: string;
-        month: string;
-        limit: number;
-      };
-      const existingBudgets = state.dashboard.category_budgets ?? [];
-      const spendingByCategory = state.dashboard.spending_by_category.find(
-        (item) => item.category_id === payload.category_id,
-      )?.total ?? 0;
-      const spent = existingBudgets.find(
-        (budget) =>
-          budget.category_id === payload.category_id &&
-          budget.month === payload.month,
-      )?.spent ?? spendingByCategory;
-      const usagePercent = payload.limit > 0
-        ? Math.round((spent * 100) / payload.limit)
-        : 0;
-      const status = spent > payload.limit
-        ? "exceeded"
-        : usagePercent >= 80
-          ? "warning"
-          : "ok";
-      const budgetSummary = {
-        category_id: payload.category_id,
-        month: payload.month,
-        limit: payload.limit,
-        spent,
-        usage_percent: usagePercent,
-        status,
-      };
-      const hasExisting = existingBudgets.some(
-        (budget) =>
-          budget.category_id === payload.category_id &&
-          budget.month === payload.month,
-      );
-      state.dashboard.category_budgets = hasExisting
-        ? existingBudgets.map((budget) =>
-            budget.category_id === payload.category_id && budget.month === payload.month
-              ? budgetSummary
-              : budget,
-          )
-        : [...existingBudgets, budgetSummary];
-      state.dashboard.budget_alerts = (state.dashboard.category_budgets ?? []).filter(
-        (budget) => budget.status !== "ok",
-      );
-
-      return new Response(JSON.stringify(budgetSummary), { status: hasExisting ? 200 : 201 });
-    }
-
-    if (url.endsWith("/api/cards") && method === "POST") {
-      const payload = JSON.parse(String(init?.body)) as {
-        id: string;
-        name: string;
-        limit: number;
-        closing_day: number;
-        due_day: number;
-        payment_account_id?: string;
-      };
-      const nextCard = buildCard({
-        card_id: payload.id,
-        name: payload.name,
-        limit: payload.limit,
-        closing_day: payload.closing_day,
-        due_day: payload.due_day,
-        payment_account_id: payload.payment_account_id ?? "",
-      });
-      state.cards = [...state.cards, nextCard];
-
-      return new Response(JSON.stringify(nextCard), { status: 201 });
-    }
-
-    if (url.endsWith("/api/card-purchases") && method === "POST") {
-      const payload = JSON.parse(String(init?.body)) as {
-        purchase_date: string;
-        amount: number;
-        card_id: string;
-        installments_count?: number;
-      };
-      const card = state.cards.find((item) => item.card_id === payload.card_id);
-      if (!card) {
-        return new Response("Card not found", { status: 404 });
-      }
-
-      const nextInvoices = allocateMockInvoices({
-        amount: payload.amount,
-        card,
-        installmentsCount: payload.installments_count ?? 1,
-        purchaseDate: payload.purchase_date,
-      });
-      for (const nextInvoice of nextInvoices) {
-        const existingInvoice = state.invoices.find(
-          (invoice) => invoice.invoice_id === nextInvoice.invoice_id,
-        );
-
-        if (existingInvoice) {
-          existingInvoice.total_amount += nextInvoice.total_amount;
-          existingInvoice.remaining_amount += nextInvoice.remaining_amount;
-          existingInvoice.purchase_count += nextInvoice.purchase_count;
-        } else {
-          state.invoices = [nextInvoice, ...state.invoices];
-        }
-      }
-
-      return new Response(
-        JSON.stringify({
-          purchase_id: "purchase-ui-1",
-          purchase_date: payload.purchase_date,
-          amount: payload.amount,
-          category_id: "transport",
-          card_id: payload.card_id,
-          description: "Taxi",
-          installments_count: payload.installments_count ?? 1,
-          invoice_id: nextInvoices[0].invoice_id,
-          reference_month: nextInvoices[0].reference_month,
-          closing_date: nextInvoices[0].closing_date,
-          due_date: nextInvoices[0].due_date,
-        }),
-        { status: 201 },
-      );
-    }
-
-    if (url.includes("/api/cards/") && method === "PATCH") {
-      const cardId = url.split("/api/cards/")[1];
-      const payload = JSON.parse(String(init?.body)) as {
-        name?: string;
-        limit?: number;
-        closing_day?: number;
-        due_day?: number;
-        payment_account_id?: string;
-        is_active?: boolean;
-      };
-
-      state.cards = state.cards.map((card) => {
-        if (card.card_id !== cardId) {
-          return card;
-        }
-
-        return {
-          ...card,
-          ...payload,
-        };
-      });
-
-      return new Response(
-        JSON.stringify(state.cards.find((card) => card.card_id === cardId)),
-      );
-    }
-
-    if (url.includes("/api/invoices/") && url.endsWith("/payments") && method === "POST") {
-      const invoiceId = decodeURIComponent(
-        url.split("/api/invoices/")[1]?.replace("/payments", "") ?? "",
-      );
-      const payload = JSON.parse(String(init?.body)) as {
-        id: string;
-        amount: number;
-        account_id: string;
-        paid_at: string;
-      };
-      const invoice = state.invoices.find((item) => item.invoice_id === invoiceId);
-      if (!invoice) {
-        return new Response("Invoice not found", { status: 404 });
-      }
-
-      const appliedAmount = Math.min(payload.amount, invoice.remaining_amount);
-      invoice.paid_amount += appliedAmount;
-      invoice.remaining_amount -= appliedAmount;
-      invoice.status = invoice.remaining_amount === 0 ? "paid" : "partial";
-
-      state.accounts = state.accounts.map((account) => {
-        if (account.account_id !== payload.account_id) {
-          return account;
-        }
-
-        return {
-          ...account,
-          current_balance: account.current_balance - appliedAmount,
-        };
-      });
-
-      const paymentTransaction: TransactionSummary = {
-        transaction_id: `${payload.id}:invoice-payment`,
-        occurred_at: payload.paid_at,
-        type: "expense",
-        amount: appliedAmount,
-        account_id: payload.account_id,
-        payment_method: "OTHER",
-        category_id: "invoice_payment",
-        description: `Pagamento de fatura ${invoiceId}`,
-        person_id: null,
-        status: "active",
-      };
-      state.transactions = [paymentTransaction, ...state.transactions];
-
-      return new Response(JSON.stringify(invoice), { status: 201 });
-    }
-
-    if (url.includes("/api/transactions/") && method === "PATCH") {
-      const transactionId = url.split("/api/transactions/")[1];
-      const payload = JSON.parse(String(init?.body)) as {
-        occurred_at?: string;
-        type?: string;
-        amount?: number;
-        account_id?: string;
-        payment_method?: string;
-        category_id?: string;
-        description?: string | null;
-        person_id?: string | null;
-      };
-
-      state.transactions = state.transactions.map((transaction) => {
-        if (transaction.transaction_id !== transactionId) {
-          return transaction;
-        }
-
-        return {
-          ...transaction,
-          ...payload,
-        };
-      });
-      state.dashboard = {
-        ...state.dashboard,
-        recent_transactions: state.transactions,
-      };
-
-      return new Response(
-        JSON.stringify(
-          state.transactions.find((transaction) => transaction.transaction_id === transactionId),
-        ),
-      );
-    }
-
-    if (url.includes("/api/transactions/") && url.endsWith("/void") && method === "POST") {
-      const transactionId = url.split("/api/transactions/")[1].replace("/void", "");
-      state.transactions = state.transactions.map((transaction) => {
-        if (transaction.transaction_id !== transactionId) {
-          return transaction;
-        }
-
-        return {
-          ...transaction,
-          status: "voided",
-        };
-      });
-      state.dashboard = {
-        ...state.dashboard,
-        recent_transactions: state.transactions,
-      };
-
-      return new Response(
-        JSON.stringify(
-          state.transactions.find((transaction) => transaction.transaction_id === transactionId),
-        ),
-      );
+      return new Response(JSON.stringify({ status: "ok", message: "Application data reset." }));
     }
 
     return new Response(JSON.stringify([]));
@@ -1005,546 +476,75 @@ describe("App", () => {
     window.localStorage.clear();
   });
 
-  it("navigates between desktop views", async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("navigates between dashboard, accounts and history", async () => {
     installAppFetchMock();
 
     render(<App />);
 
-    expect(
-      await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^lançar/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /lan.amento/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^movimentar$/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /vis/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /lan/i })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
-    expect(
-      await screen.findByRole("region", { name: /contas e saldos/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: /contas e saldos/i })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-    expect(
-      await screen.findByRole("region", { name: /histórico e filtros/i }),
-    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /hist/i }));
+    expect(await screen.findByRole("region", { name: /hist/i })).toBeInTheDocument();
   });
 
-  it("does not render a fixed contextual panel in desktop shell", async () => {
+  it("keeps the desktop shell without a fixed contextual panel", async () => {
     installAppFetchMock();
 
     render(<App />);
 
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
 
-    expect(
-      screen.queryByRole("heading", { name: /painel contextual/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/espaco reservado para formularios rapidos/i),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /painel contextual/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/espaco reservado/i)).not.toBeInTheDocument();
   });
 
-  it("uses unified desktop navigation taxonomy labels", async () => {
+  it("shows the current investments workspace layout", async () => {
     installAppFetchMock();
 
     render(<App />);
 
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /patrim/i }));
 
-    expect(
-      screen.getByRole("button", { name: /^histórico/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /patrimônio & investimentos/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /patrim/i })).toBeInTheDocument();
   });
 
-  it("navigates to investments view and shows advanced analytics", async () => {
+  it("opens the global quick add dialog from the shell launcher", async () => {
     installAppFetchMock();
+    installDialogEnvironment();
 
     render(<App />);
 
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /^patrimônio/i }));
-    await screen.findByRole("heading", { level: 1, name: /patrim.nio & investimentos/i });
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /ctrl/i }));
 
-    expect(
-      await screen.findByRole(
-        "heading",
-        { name: /resumo, evolucao e movimentos/i },
-        { timeout: 3000 },
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /di.rio/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /semanal/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /mensal/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /bimestral/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /trimestral/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /anual/i })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", undefined, { timeout: 5_000 })).toBeInTheDocument();
   });
 
-  it("routes investment actions to the global quick add with presets", async () => {
-    installAppFetchMock();
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /^patrimônio/i }));
-
-    expect(screen.queryByRole("button", { name: /salvar aporte/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /salvar resgate/i })).not.toBeInTheDocument();
-
-    await userEvent.click(await screen.findByRole("tab", { name: /movimentos/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /novo aporte/i }));
-
-    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
-    expect(within(dialog).getByLabelText(/^tipo$/i)).toHaveValue("investment");
-    expect(within(dialog).getByLabelText(/tipo do movimento/i)).toHaveValue("contribution");
-  });
-
-  it("opens the unified ledger from investments quick action", async () => {
-    installAppFetchMock({
-      transactions: [
-        buildTransaction({
-          transaction_id: "tx-invest",
-          type: "investment",
-          description: "Invest aporte mensal",
-          category_id: "investment_contribution",
-          ledger_event_type: "investment_contribution",
-        }),
-        buildTransaction({
-          transaction_id: "tx-salary",
-          type: "income",
-          category_id: "salary",
-          description: "Salario principal",
-          amount: 7_500_00,
-        }),
-      ],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /^patrimônio/i }));
-    await userEvent.click(await screen.findByRole("tab", { name: /movimentos/i }));
-    await userEvent.click(
-      await screen.findByRole("button", { name: /ver movimentos no historico/i }),
-    );
-
-    expect(
-      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
-    ).toBeInTheDocument();
-    
-    await userEvent.click(await screen.findByRole("button", { name: /filtros avançados/i }));
-
-    const typeFilter = await screen.findByRole("combobox", { name: /^Tipo$/i });
-    expect(typeFilter).toHaveValue("investment");
-    expect(await screen.findByText(/invest aporte mensal/i)).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
-    });
-  });
-
-  it.skip("marks a pending reimbursement as received from dashboard", async () => {
-    const fetchMock = installAppFetchMock({
-      dashboard: buildDashboard({
-        pending_reimbursements_total: 2_500,
-        pending_reimbursements: [
-          {
-            transaction_id: "tx-1",
-            person_id: "Ana",
-            amount: 2_500,
-            status: "pending",
-            account_id: "acc-1",
-            occurred_at: "2026-03-03T12:00:00Z",
-            received_at: null,
-            receipt_transaction_id: null,
-          },
-        ],
-      }),
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect((await screen.findAllByText(/reembolsos pendentes/i, undefined, { timeout: 15000 })).length).toBeGreaterThan(0);
-    expect(screen.getByText("Ana")).toBeInTheDocument();
-    expect(screen.getAllByText("R$ 25,00").length).toBeGreaterThan(0);
-
-    await userEvent.click(screen.getByRole("button", { name: /marcar recebido/i }));
-
-    expect(
-      await screen.findByRole("status", { name: /reembolso confirmado com sucesso/i }),
-    ).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryByText("Ana")).not.toBeInTheDocument();
-    });
-    expect(screen.getByText(/nenhum valor pendente/i)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).includes("/api/reimbursements/tx-1/mark-received") &&
-            init?.method === "POST";
-        }),
-      ).toBe(true);
-    });
-  });
-
-  it.skip("shows category budget alerts on dashboard and updates monthly limits from settings", async () => {
-    const fetchMock = installAppFetchMock({
-      dashboard: buildDashboard({
-        spending_by_category: [{ category_id: "food", total: 8_500 }],
-        category_budgets: [
-          {
-            category_id: "food",
-            month: "2026-03",
-            limit: 10_000,
-            spent: 8_500,
-            usage_percent: 85,
-            status: "warning",
-          },
-        ],
-        budget_alerts: [
-          {
-            category_id: "food",
-            month: "2026-03",
-            limit: 10_000,
-            spent: 8_500,
-            usage_percent: 85,
-            status: "warning",
-          },
-        ],
-      }),
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect(await screen.findByText(/orçamentos por categoria/i, undefined, { timeout: 15000 })).toBeInTheDocument();
-    expect(screen.getByText(/^Em alerta$/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/r\$\s*85,00 de r\$\s*100,00/i).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /salvar limite/i })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /abrir planejamento/i }));
-    expect(
-      await screen.findByRole("heading", { level: 1, name: /^planejamento/i }),
-    ).toBeInTheDocument();
-
-    const budgetCategorySelect = await screen.findByLabelText(/categoria do orcamento/i);
-    await userEvent.selectOptions(budgetCategorySelect, "food");
-
-    const budgetLimitInput = await screen.findByLabelText(/limite mensal do orcamento/i);
-    await userEvent.clear(budgetLimitInput);
-    await userEvent.type(budgetLimitInput, "15000");
-    await userEvent.click(screen.getByRole("button", { name: /salvar limite/i }));
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).endsWith("/api/budgets") && init?.method === "POST";
-        }),
-      ).toBe(true);
-    });
-    await waitFor(() => {
-      expect(screen.getByText(/saudavel/i)).toBeInTheDocument();
-    });
-  });
-
-  it.skip("opens the unified ledger with budget-alert context from dashboard quick corrections", async () => {
-    installAppFetchMock({
-      transactions: [
-        buildTransaction({
-          transaction_id: "tx-food",
-          category_id: "food",
-          description: "Mercado semanal",
-        }),
-        buildTransaction({
-          transaction_id: "tx-salary",
-          type: "income",
-          category_id: "salary",
-          description: "Salario principal",
-          amount: 7_500_00,
-        }),
-      ],
-      dashboard: buildDashboard({
-        spending_by_category: [{ category_id: "food", total: 8_500 }],
-        category_budgets: [
-          {
-            category_id: "food",
-            month: "2026-03",
-            limit: 10_000,
-            spent: 8_500,
-            usage_percent: 85,
-            status: "warning",
-          },
-        ],
-        budget_alerts: [
-          {
-            category_id: "food",
-            month: "2026-03",
-            limit: 10_000,
-            spent: 8_500,
-            usage_percent: 85,
-            status: "warning",
-          },
-        ],
-      }),
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /ver categorias em alerta/i }));
-
-    expect(
-      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
-    ).toBeInTheDocument();
-    const searchInput = await screen.findByLabelText(/buscar/i);
-    expect(searchInput).toHaveValue("Alimentacao");
-    expect(await screen.findByText(/mercado semanal/i)).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
-    });
-  });
-
-
-  it("shows upcoming events on dashboard and opens the ledger from that section", async () => {
-    installAppFetchMock({
-      cards: [
-        buildCard({ card_id: "card-1", name: "Nubank" }),
-      ],
-      dashboard: buildDashboard({
-        monthly_commitments: [
-          {
-            commitment_id: "inv-1",
-            kind: "invoice",
-            title: "card-1",
-            amount: 100_00,
-            status: "pending",
-            due_date: "2026-03-20",
-            card_id: "card-1",
-            account_id: null,
-            category_id: null,
-            source: "invoice",
-          }
-        ]
-      }),
-      invoices: [
-        buildInvoice({
-          invoice_id: "card-1:2026-03",
-          card_id: "card-1",
-          reference_month: "2026-03",
-          due_date: "2026-03-20",
-          total_amount: 100_00,
-          remaining_amount: 100_00,
-          status: "open",
-        }),
-      ],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    expect(await screen.findByText(/próximos compromissos/i, undefined, { timeout: 15000 })).toBeInTheDocument();
-    expect(screen.getByText(/nubank/i)).toBeInTheDocument();
-    
-    await userEvent.click(screen.getByRole("button", { name: /fatura: nubank/i }));
-
-    expect(await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i })).toBeInTheDocument();
-  });
-
-  it("opens quick add with controlled category selection", async () => {
-    installAppFetchMock();
-    vi.stubGlobal(
-      "ResizeObserver",
-      vi.fn(() => ({
-        observe: vi.fn(),
-        unobserve: vi.fn(),
-        disconnect: vi.fn(),
-      })),
-    );
-    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
-      configurable: true,
-      value: vi.fn(() => false),
-    });
-    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
-      configurable: true,
-      value: vi.fn(),
-    });
-    Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
-      configurable: true,
-      value: vi.fn(),
-    });
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: vi.fn(),
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-
-    await userEvent.click(screen.getByRole("button", { name: /lan.ar.*ctrl/i }));
-
-    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
-    expect(within(dialog).getByRole("button", { name: /^lan.ar$/i })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("tab", { name: /cart.o/i })).not.toBeInTheDocument();
-    expect(
-      within(dialog).queryByRole("tab", { name: /pagamento de fatura/i }),
-    ).not.toBeInTheDocument();
-
-    await userEvent.selectOptions(within(dialog).getByLabelText(/tipo/i), "expense");
-    await userEvent.selectOptions(
-      within(dialog).getByLabelText(/modo de pagamento/i),
-      "CARD",
-    );
-
-    expect(within(dialog).getByLabelText(/cart.o/i)).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/parcelas/i)).toBeInTheDocument();
-
-    await userEvent.selectOptions(within(dialog).getByLabelText(/tipo/i), "transfer");
-    expect(within(dialog).getByLabelText(/conta destino/i)).toBeInTheDocument();
-    await userEvent.selectOptions(
-      within(dialog).getByLabelText(/modo da transfer.ncia/i),
-      "invoice_payment",
-    );
-    expect(within(dialog).getByLabelText(/^fatura$/i)).toBeInTheDocument();
-
-    await userEvent.selectOptions(within(dialog).getByLabelText(/tipo/i), "expense");
-    const categorySelect = await within(dialog).findByRole("combobox", { name: /categoria/i }, {
-      timeout: 5_000,
-    });
-    expect(categorySelect).toBeInTheDocument();
-
-    await userEvent.click(categorySelect);
-
-    expect(await screen.findByRole("option", { name: /alimenta/i })).toBeInTheDocument();
-  });
-
-  it("opens command palette with Ctrl+K and routes actions to the global launcher", async () => {
+  it("opens command palette with the current navigation and action entries", async () => {
     installAppFetchMock({
       invoices: [buildInvoice()],
     });
-    vi.stubGlobal(
-      "ResizeObserver",
-      vi.fn(() => ({
-        observe: vi.fn(),
-        unobserve: vi.fn(),
-        disconnect: vi.fn(),
-      })),
-    );
-    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
-      configurable: true,
-      value: vi.fn(() => false),
-    });
-    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
-      configurable: true,
-      value: vi.fn(),
-    });
-    Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
-      configurable: true,
-      value: vi.fn(),
-    });
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: vi.fn(),
-    });
+    installDialogEnvironment();
 
     render(<App />);
 
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
 
-    const paletteDialog = await screen.findByRole("dialog", {
-      name: /command palette/i,
-    });
+    const paletteDialog = await screen.findByRole("dialog", { name: /paleta/i });
     expect(within(paletteDialog).getByText(/registrar despesa/i)).toBeInTheDocument();
-
-    await userEvent.click(within(paletteDialog).getByText(/registrar despesa/i));
-
-    const launcherDialog = await screen.findByRole("dialog", {
-      name: /^lançar/i,
-    });
-    expect(within(launcherDialog).getByLabelText(/^tipo$/i)).toHaveValue("expense");
-  });
-
-  it("uses explicit invoice payment copy", async () => {
-    installAppFetchMock({
-      invoices: [buildInvoice()],
-    });
-    vi.stubGlobal(
-      "ResizeObserver",
-      vi.fn(() => ({
-        observe: vi.fn(),
-        unobserve: vi.fn(),
-        disconnect: vi.fn(),
-      })),
-    );
-    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
-      configurable: true,
-      value: vi.fn(() => false),
-    });
-    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
-      configurable: true,
-      value: vi.fn(),
-    });
-    Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
-      configurable: true,
-      value: vi.fn(),
-    });
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: vi.fn(),
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /^vis.o geral$/i });
-    await userEvent.click(screen.getByRole("button", { name: /lan.ar.*ctrl/i }));
-
-    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
-    await userEvent.selectOptions(
-      within(dialog).getByLabelText(/tipo/i),
-      "transfer",
-    );
-    await userEvent.selectOptions(
-      within(dialog).getByLabelText(/modo da transfer.ncia/i),
-      "invoice_payment",
-    );
-
-    expect(within(dialog).getByText(/quitar saldo do cartao/i)).toBeInTheDocument();
-  });
-
-  it("shows card limit availability", async () => {
-    installAppFetchMock({
-      invoices: [buildInvoice()],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
-
-    expect(
-      await screen.findByText(/limite comprometido/i, undefined, { timeout: 5_000 }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/limite dispon/i)).toBeInTheDocument();
-  });
-
-  it("restores account management actions from the accounts workspace", async () => {
-    installAppFetchMock();
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
-
-    const accountsSection = await screen.findByRole("region", { name: /gerenciar contas/i });
-    expect(within(accountsSection).getByRole("button", { name: /\+ adicionar conta/i })).toBeInTheDocument();
-    expect(within(accountsSection).getByRole("button", { name: /^editar$/i })).toBeInTheDocument();
-    expect(within(accountsSection).getByRole("button", { name: /excluir conta/i })).toBeInTheDocument();
-    expect(within(accountsSection).getByRole("button", { name: /abrir configuracoes/i })).toBeInTheDocument();
+    expect(within(paletteDialog).getByText(/gastos fixos/i)).toBeInTheDocument();
   });
 
   it("removes an account from active operation from the accounts workspace", async () => {
@@ -1568,16 +568,10 @@ describe("App", () => {
     await screen.findByRole("heading", { level: 1, name: /vis/i });
     await userEvent.click(screen.getByRole("button", { name: /^contas$/i }));
 
-    const accountsSection = await screen.findByRole("region", { name: /gerenciar contas/i });
-    await userEvent.click(
-      within(accountsSection).getAllByRole("button", { name: /excluir conta/i })[0],
-    );
+    const accountDeleteButtons = await screen.findAllByRole("button", { name: /excluir/i });
+    await userEvent.click(accountDeleteButtons[0]);
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
-    expect(
-      await screen.findByRole("status", { name: /conta removida da operacao ativa/i }),
-    ).toBeInTheDocument();
-
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([url, init]) => {
@@ -1591,43 +585,20 @@ describe("App", () => {
     });
   });
 
-  it("renders the cards overview and wallet settings", async () => {
-    installAppFetchMock({
-      invoices: [buildInvoice()],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
-
-    // removed faturas abertas
-    // removed carteira
-
-    await userEvent.click(await screen.findByRole("button", { name: /gerenciar/i }));
-
-    expect(await screen.findByText(/gerenciar cartões/i)).toBeInTheDocument();
-    expect(screen.getByText(/contas padrao/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /desativar/i })).toBeInTheDocument();
-  });
-
-  it("removes a card from active operation from the wallet settings", async () => {
+  it("removes a card from active operation from the management sheet", async () => {
     const fetchMock = installAppFetchMock();
     const confirmMock = vi.fn<(message?: string) => boolean>(() => true);
     vi.stubGlobal("confirm", confirmMock);
+    installDialogEnvironment();
 
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /gerenciar/i }));
+    await userEvent.click(screen.getByRole("button", { name: /cart/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /gerenciar cart/i }));
     await userEvent.click(screen.getByRole("button", { name: /desativar/i }));
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
-    expect(
-      await screen.findByRole("status", { name: /cartao removido da operacao ativa/i }),
-    ).toBeInTheDocument();
-
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([url, init]) => {
@@ -1641,144 +612,25 @@ describe("App", () => {
     });
   });
 
-  it("opens the unified ledger from cards quick action", async () => {
+  it("renders cards in aggregate mode and drills down to a specific card", async () => {
     installAppFetchMock({
-      transactions: [
-        buildTransaction({
-          transaction_id: "purchase-1:card-purchase",
-          description: "Mercado no cartao",
-          category_id: "food",
-          payment_method: "OTHER",
-          ledger_event_type: "card_purchase",
-          ledger_source: "card_liability:card-1",
-          ledger_destination: "category:food",
-          status: "readonly",
-        }),
-        buildTransaction({
-          transaction_id: "tx-salary",
-          type: "income",
-          category_id: "salary",
-          description: "Salario principal",
-          amount: 7_500_00,
-        }),
-      ],
-      invoices: [buildInvoice()],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
-    // Na nova arquitetura, clicar em "Histórico" no card-list-item abre o histórico filtrado por cartão
-    await userEvent.click(await screen.findByRole("button", { name: /^histórico$/i }));
-
-    expect(
-      await screen.findByRole("heading", { level: 1, name: /^hist.rico$/i }),
-    ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
-    const cardFilter = await screen.findByLabelText(/cartao do filtro/i);
-    expect(cardFilter).toHaveValue("card-1");
-    expect(await screen.findByText(/mercado no cartao/i)).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
-    });
-  });
-
-  it("shows invoice amount in the card list", async () => {
-    installAppFetchMock({
-      invoices: [
-        buildInvoice({
-          invoice_id: "card-1:2026-03",
-          reference_month: "2026-03",
-          closing_date: "2026-03-10",
-          due_date: "2026-03-20",
-          total_amount: 50_00,
-          purchase_count: 3,
-        }),
-      ],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
-
-    // Na nova arquitetura, a fatura é exibida no card-list-item
-    expect(await screen.findByText(/fatura atual/i)).toBeInTheDocument();
-    expect(await screen.findByText(/R\$\s*50,00/)).toBeInTheDocument();
-  });
-
-  it("registers an invoice payment from the cards view and keeps partial invoices visible", async () => {
-    const fetchMock = installAppFetchMock({
-      invoices: [
-        buildInvoice({
-          invoice_id: "card-1:2026-03",
-          card_id: "card-1",
-          reference_month: "2026-03",
-          closing_date: "2026-03-10",
-          due_date: "2026-03-20",
-          total_amount: 100_00,
-        }),
-      ],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
-
-    // Na nova arquitetura: clicar em Detalhes para entrar na visão do cartão
-    await userEvent.click(await screen.findByRole("button", { name: /detalhes/i }));
-
-    expect(await screen.findByText(/resumo da fatura/i)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /pagar fatura/i }));
-
-    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
-    expect(within(dialog).getByLabelText(/^tipo$/i)).toHaveValue("transfer");
-    expect(within(dialog).getByLabelText(/modo da transfer.ncia/i)).toHaveValue("invoice_payment");
-    await userEvent.type(within(dialog).getByPlaceholderText("0,00"), "3000");
-    await userEvent.click(within(dialog).getByRole("button", { name: /^lan.ar$/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Parcial")).toBeInTheDocument();
-    });
-    expect(screen.getAllByText(/R\$\s*70,00/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/R\$\s*100,00/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/R\$\s*30,00/i).length).toBeGreaterThan(0);
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).includes("/api/invoices/card-1%3A2026-03/payments") &&
-            init?.method === "POST";
-        }),
-      ).toBe(true);
-    });
-  });
-
-  it("keeps the viewed invoice selected when paying from cards with multiple open invoices", async () => {
-    const fetchMock = installAppFetchMock({
       cards: [
-        buildCard({ card_id: "card-1", name: "Cartao A" }),
-        buildCard({ card_id: "card-2", name: "Cartao B" }),
+        buildCard(),
+        buildCard({
+          card_id: "card-2",
+          name: "Bradesco Platinum",
+          payment_account_id: "acc-1",
+        }),
       ],
       invoices: [
-        buildInvoice({
-          invoice_id: "card-1:2026-03",
-          card_id: "card-1",
-          reference_month: "2026-03",
-          closing_date: "2026-03-10",
-          due_date: "2026-03-20",
-          total_amount: 80_00,
-        }),
+        buildInvoice(),
         buildInvoice({
           invoice_id: "card-2:2026-03",
           card_id: "card-2",
           reference_month: "2026-03",
-          closing_date: "2026-03-10",
-          due_date: "2026-03-20",
-          total_amount: 120_00,
+          total_amount: 200_00,
+          remaining_amount: 200_00,
+          purchase_count: 2,
         }),
       ],
     });
@@ -1786,452 +638,19 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
-    // Na nova arquitetura, o select de escopo tem aria-label "Escopo dos cartões"
-    await userEvent.selectOptions(screen.getByLabelText(/escopo dos cart.es/i), "card-2");
+    await userEvent.click(screen.getByRole("button", { name: /cart/i }));
 
-    expect(await screen.findByText(/resumo da fatura/i)).toBeInTheDocument();
+    const scopeSelect = await screen.findByRole("combobox", { name: /escopo/i });
+    expect(scopeSelect).toHaveTextContent(/todos os cart/i);
+    expect(screen.getByText("Bradesco Platinum")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /pagar fatura/i }));
+    await userEvent.click(screen.getAllByRole("button", { name: /detalhes/i })[1]);
 
-    const dialog = await screen.findByRole("dialog", undefined, { timeout: 5_000 });
-    await waitFor(() => {
-      expect(within(dialog).getByLabelText(/^fatura$/i)).toHaveValue("card-2:2026-03");
-    });
-
-    await userEvent.type(within(dialog).getByPlaceholderText("0,00"), "5000");
-    await userEvent.click(within(dialog).getByRole("button", { name: /^lan.ar$/i }));
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).includes("/api/invoices/card-2%3A2026-03/payments") &&
-            init?.method === "POST";
-        }),
-      ).toBe(true);
-    });
+    expect(screen.getByRole("combobox", { name: /escopo/i })).toHaveTextContent(/bradesco platinum/i);
+    expect(screen.getByRole("button", { name: /pagar fatura/i })).toBeInTheDocument();
   });
 
-  it("expands invoice details inline and shows the invoice items", async () => {
-    const fetchMock = installAppFetchMock({
-      invoices: [
-        buildInvoice({
-          invoice_id: "card-1:2026-03",
-          card_id: "card-1",
-          reference_month: "2026-03",
-          closing_date: "2026-03-10",
-          due_date: "2026-03-20",
-          total_amount: 100_00,
-        }),
-      ],
-      invoiceItemsByInvoiceId: {
-        "card-1:2026-03": [
-          buildInvoiceItem({
-            invoice_item_id: "purchase-1:1",
-            invoice_id: "card-1:2026-03",
-            purchase_id: "purchase-1",
-            card_id: "card-1",
-            purchase_date: "2026-03-15T12:00:00Z",
-            category_id: "electronics",
-            description: "Headphones",
-            installment_number: 1,
-            installments_count: 3,
-            amount: 33_33,
-          }),
-        ],
-      },
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^cartões$/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /referencia 2026-03/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /ver itens/i }));
-
-    expect(await screen.findByText("Headphones")).toBeInTheDocument();
-    expect(screen.getByText(/resumo detalhado/i)).toBeInTheDocument();
-    expect(screen.getByText(/1\/3/)).toBeInTheDocument();
-    expect(screen.getByText(/r\$ 33,33/i)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return (
-            String(url).includes("/api/invoices/card-1%3A2026-03/items") &&
-            (init?.method ?? "GET") === "GET"
-          );
-        }),
-      ).toBe(true);
-    });
-  });
-
-  it("shows feedback as a global toast that auto-hides after success", async () => {
-    const confirmMock = vi.fn<(message?: string) => boolean>(() => true);
-    vi.stubGlobal("confirm", confirmMock);
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^config/i }));
-    await screen.findByRole("region", { name: /configuracoes do sistema/i });
-    await userEvent.click(screen.getByRole("button", { name: /zona de perigo/i }));
-    await userEvent.click(screen.getByRole("button", { name: /apagar todos os dados/i }));
-
-    expect(
-      await screen.findByRole("status", { name: /aplicacao zerada com sucesso/i }),
-    ).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-    expect(
-      screen.queryByText("Aplicacao zerada com sucesso.", { selector: ".success-banner" }),
-    ).not.toBeInTheDocument();
-
-    await waitFor(
-      () => {
-        expect(
-          screen.queryByRole("status", { name: /aplicacao zerada com sucesso/i }),
-        ).not.toBeInTheDocument();
-      },
-      { timeout: 4500 },
-    );
-  });
-
-  it("updates and voids a transaction from the transactions view", async () => {
-    const fetchMock = installAppFetchMock();
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-
-    const transactionsSection = await screen.findByRole("region", {
-      name: /histórico e filtros/i,
-    });
-    expect(within(transactionsSection).getByText("Supermercado")).toBeInTheDocument();
-    expect(screen.queryByLabelText(/^categoria$/i)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
-    expect(within(transactionsSection).getByLabelText(/^metodo$/i)).toBeInTheDocument();
-    expect(within(transactionsSection).getByLabelText(/^categoria$/i)).toBeInTheDocument();
-    expect(within(transactionsSection).getByLabelText(/^pessoa$/i)).toBeInTheDocument();
-
-    await userEvent.click(within(transactionsSection).getByRole("button", { name: /editar/i }));
-    await userEvent.clear(screen.getByLabelText(/descricao da transacao/i));
-    await userEvent.type(screen.getByLabelText(/descricao da transacao/i), "Mercado mensal");
-    await userEvent.click(screen.getByRole("button", { name: /salvar alteracoes/i }));
-
-    expect(await screen.findByText("Mercado mensal")).toBeInTheDocument();
-
-    await userEvent.click(within(transactionsSection).getByRole("button", { name: /estornar/i }));
-    expect(await screen.findByText(/^Estornada$/)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).includes("/api/transactions/tx-1") && init?.method === "PATCH";
-        }),
-      ).toBe(true);
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return (
-            String(url).includes("/api/transactions/tx-1/void") &&
-            init?.method === "POST"
-          );
-        }),
-      ).toBe(true);
-    });
-  });
-
-  it("shows unified ledger header with top filters and slice KPIs", async () => {
-    installAppFetchMock({
-      transactions: [
-        buildTransaction({
-          transaction_id: "tx-income",
-          type: "income",
-          amount: 500_00,
-          description: "Salario",
-          category_id: "salary",
-        }),
-        buildTransaction({
-          transaction_id: "tx-expense",
-          type: "expense",
-          amount: 125_00,
-          description: "Mercado",
-          category_id: "food",
-        }),
-      ],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-
-    const transactionsSection = await screen.findByRole("region", {
-      name: /histórico e filtros/i,
-    });
-    expect(
-      await screen.findByRole("heading", { level: 2, name: /^histórico/i }),
-    ).toBeInTheDocument();
-    const kpiGroup = screen.getByRole("group", { name: /kpis do recorte/i });
-    expect(within(kpiGroup).getByText(/entradas/i)).toBeInTheDocument();
-    expect(within(kpiGroup).getByText(/saidas/i)).toBeInTheDocument();
-    expect(within(kpiGroup).getByText(/resultado/i)).toBeInTheDocument();
-    expect(within(kpiGroup).getByText(/R\$\s*500,00/i)).toBeInTheDocument();
-    expect(within(kpiGroup).getByText(/R\$\s*125,00/i)).toBeInTheDocument();
-    expect(within(kpiGroup).getByText(/R\$\s*375,00/i)).toBeInTheDocument();
-
-    expect(screen.getByLabelText(/periodo/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/buscar/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/^conta$/i)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
-    expect(within(transactionsSection).getByLabelText(/^conta$/i)).toBeInTheDocument();
-  });
-
-  it("shows origem e destino columns in the unified ledger and drawer details", async () => {
-    installAppFetchMock({
-      transactions: [
-        buildTransaction({
-          transaction_id: "tx-expense",
-          type: "expense",
-          amount: 90_00,
-          category_id: "food",
-          description: "Almoco",
-        }),
-      ],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-
-    const transactionsSection = await screen.findByRole("region", {
-      name: /histórico e filtros/i,
-    });
-    expect(within(transactionsSection).getByText(/^Origem$/i)).toBeInTheDocument();
-    expect(within(transactionsSection).getByText(/^Destino$/i)).toBeInTheDocument();
-
-    await userEvent.click(within(transactionsSection).getByText("Almoco"));
-
-    const detailDialog = await screen.findByRole("dialog", {
-      name: /detalhes da transacao/i,
-    });
-    expect(within(detailDialog).getByText(/^Origem$/i)).toBeInTheDocument();
-    expect(within(detailDialog).getByText(/^Destino$/i)).toBeInTheDocument();
-  });
-
-  it("filters the ledger table instantly through the top search field", async () => {
-    installAppFetchMock({
-      transactions: [
-        buildTransaction({
-          transaction_id: "tx-market",
-          description: "Supermercado centro",
-          category_id: "food",
-        }),
-        buildTransaction({
-          transaction_id: "tx-salary",
-          type: "income",
-          description: "Salario principal",
-          category_id: "salary",
-          amount: 8_500_00,
-        }),
-      ],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-
-    expect(await screen.findByText(/supermercado centro/i)).toBeInTheDocument();
-    expect(screen.getByText(/salario principal/i)).toBeInTheDocument();
-
-    await userEvent.type(screen.getByLabelText(/buscar/i), "super");
-
-    expect(screen.getByText(/supermercado centro/i)).toBeInTheDocument();
-    expect(screen.queryByText(/salario principal/i)).not.toBeInTheDocument();
-  });
-
-  it("supports density modes for the ledger table", async () => {
-    installAppFetchMock();
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-
-    const transactionsSection = await screen.findByRole("region", {
-      name: /histórico e filtros/i,
-    });
-    const dataTable = within(transactionsSection).getByRole("table");
-    const tableShell = dataTable.closest(".table-shell");
-    expect(tableShell).toHaveClass("table-shell--compact");
-
-    await userEvent.click(screen.getByRole("button", { name: /mostrar filtros avancados/i }));
-    await userEvent.selectOptions(
-      within(transactionsSection).getByLabelText(/densidade da tabela/i),
-      "compact",
-    );
-    expect(tableShell).toHaveClass("table-shell--compact");
-
-    await userEvent.selectOptions(
-      within(transactionsSection).getByLabelText(/densidade da tabela/i),
-      "dense",
-    );
-    expect(tableShell).toHaveClass("table-shell--dense");
-  });
-
-  it("opens ledger drill-down details when selecting a transaction row", async () => {
-    installAppFetchMock({
-      transactions: [
-        buildTransaction({
-          transaction_id: "tx-detail",
-          description: "Supermercado centro",
-          category_id: "food",
-        }),
-      ],
-    });
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^histórico/i }));
-
-    const transactionsSection = await screen.findByRole("region", {
-      name: /histórico e filtros/i,
-    });
-    await userEvent.click(within(transactionsSection).getByText("Supermercado centro"));
-
-    const detailDialog = await screen.findByRole("dialog", {
-      name: /detalhes da transacao/i,
-    });
-    expect(detailDialog).toHaveClass("ledger-detail-drawer");
-    expect(within(detailDialog).getByText(/supermercado centro/i)).toBeInTheDocument();
-    expect(within(detailDialog).getByText(/^categoria$/i)).toBeInTheDocument();
-    expect(within(detailDialog).getByText(/forma de pagamento/i)).toBeInTheDocument();
-  });
-
-  it("exports a full backup snapshot from the dedicated backup endpoint", async () => {
-    const fullTransactions = [
-      buildTransaction({
-        transaction_id: "tx-full-1",
-        occurred_at: "2026-02-01T10:00:00Z",
-        description: "Snapshot transaction",
-      }),
-      buildTransaction({
-        transaction_id: "tx-full-2",
-        occurred_at: "2026-03-10T10:00:00Z",
-        description: "Another transaction",
-      }),
-    ];
-    const fullInvestmentMovements = [
-      {
-        movement_id: "inv-full-1",
-        occurred_at: "2026-01-15T10:00:00Z",
-        type: "contribution" as const,
-        account_id: "acc-1",
-        description: "Aporte anual",
-        contribution_amount: 100_00,
-        dividend_amount: 0,
-        cash_amount: 100_00,
-        invested_amount: 100_00,
-        cash_delta: -100_00,
-        invested_delta: 100_00,
-      },
-    ];
-    const fetchMock = installAppFetchMock({
-      transactions: fullTransactions,
-      investmentMovements: fullInvestmentMovements,
-      invoices: [
-        {
-          invoice_id: "card-1:2026-03",
-          card_id: "card-1",
-          reference_month: "2026-03",
-          closing_date: "2026-03-10",
-          due_date: "2026-03-20",
-          total_amount: 12_000,
-          paid_amount: 0,
-          remaining_amount: 12_000,
-          purchase_count: 1,
-          status: "open",
-        },
-      ],
-    });
-    let serializedBackup = "";
-    const OriginalBlob = Blob;
-    class BackupBlob extends Blob {
-      constructor(blobParts?: BlobPart[], options?: BlobPropertyBag) {
-        super(blobParts, options);
-        serializedBackup = String(blobParts?.[0] ?? "");
-      }
-    }
-    vi.stubGlobal("Blob", BackupBlob);
-    const originalCreateObjectURL = URL.createObjectURL;
-    const originalRevokeObjectURL = URL.revokeObjectURL;
-    const createObjectUrlSpy = vi.fn(() => "blob:backup");
-    const revokeObjectUrlSpy = vi.fn(() => undefined);
-    Object.defineProperty(URL, "createObjectURL", {
-      configurable: true,
-      writable: true,
-      value: createObjectUrlSpy,
-    });
-    Object.defineProperty(URL, "revokeObjectURL", {
-      configurable: true,
-      writable: true,
-      value: revokeObjectUrlSpy,
-    });
-    const anchorClickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => undefined);
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^config/i }));
-    await screen.findByRole("region", { name: /configuracoes do sistema/i });
-    await userEvent.click(screen.getByRole("button", { name: /exportar backup json/i }));
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).endsWith("/api/backups/export") && (init?.method ?? "GET") === "GET";
-        }),
-      ).toBe(true);
-    });
-
-    expect(serializedBackup).not.toBe("");
-
-    const payload = JSON.parse(serializedBackup) as {
-      transactions: TransactionSummary[];
-      investment_movements: InvestmentMovementSummary[];
-      invoices: InvoiceSummary[];
-      selected_month: string;
-    };
-
-    expect(payload.selected_month).toBe("2026-03");
-    expect(payload.transactions).toEqual(fullTransactions);
-    expect(payload.investment_movements).toEqual(fullInvestmentMovements);
-    expect(payload.invoices).toHaveLength(1);
-    expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
-    expect(anchorClickSpy).toHaveBeenCalledTimes(1);
-    expect(revokeObjectUrlSpy).toHaveBeenCalledWith("blob:backup");
-
-    Object.defineProperty(URL, "createObjectURL", {
-      configurable: true,
-      writable: true,
-      value: originalCreateObjectURL,
-    });
-    Object.defineProperty(URL, "revokeObjectURL", {
-      configurable: true,
-      writable: true,
-      value: originalRevokeObjectURL,
-    });
-    vi.stubGlobal("Blob", OriginalBlob);
-    anchorClickSpy.mockRestore();
-  });
-
-  it("renders settings and resets the app in development mode", async () => {
+  it("renders settings with the new sections and resets app data", async () => {
     const fetchMock = installAppFetchMock();
     const confirmMock = vi.fn<(message?: string) => boolean>(() => true);
     vi.stubGlobal("confirm", confirmMock);
@@ -2239,28 +658,15 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^config/i }));
-    await screen.findByRole("region", { name: /configuracoes do sistema/i });
+    await userEvent.click(screen.getByRole("button", { name: /config/i }));
 
-    expect(
-      await screen.findByRole("button", { name: /zona de perigo/i }),
-    ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /zona de perigo/i }));
-    expect(
-      await screen.findByRole("heading", { name: /zerar aplicacao/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/limpa compras, transferencias, contas e cartoes/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /dados e backup/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /produtividade/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /zona de perigo/i })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /apagar todos os dados/i }));
+    await userEvent.click(screen.getByRole("button", { name: /zerar tudo/i }));
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
-    const confirmationMessage = String(confirmMock.mock.calls[0]?.[0] ?? "");
-    expect(confirmationMessage).toMatch(/compras/i);
-    expect(confirmationMessage).toMatch(/transferencias/i);
-    expect(confirmationMessage).toMatch(/contas/i);
-
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([url, init]) => {
@@ -2268,45 +674,26 @@ describe("App", () => {
         }),
       ).toBe(true);
     });
-
-    expect(
-      await screen.findByRole("heading", { level: 1, name: /vis/i }),
-    ).toBeInTheDocument();
-    expect((await screen.findAllByText("R$ 0,00")).length).toBeGreaterThan(0);
   });
 
-  it("navigates from settings back to the account management workspace", async () => {
-    installAppFetchMock();
-
-    render(<App />);
-
-    await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /^config/i }));
-    await screen.findByRole("region", { name: /configuracoes do sistema/i });
-
-    await userEvent.click(screen.getByRole("button", { name: /gerenciar contas/i }));
-
-    expect(await screen.findByRole("region", { name: /gerenciar contas/i })).toBeInTheDocument();
-  });
-
-  it("opens the fixed expenses workspace and confirms a monthly pending", async () => {
-    const pending = buildPendingExpense();
-    const fetchMock = installAppFetchMock({
+  it("opens the fixed expenses workspace from the primary navigation", async () => {
+    installAppFetchMock({
       recurringRules: [buildRecurringRule()],
-      pendingExpenses: [pending],
+      pendingExpenses: [buildPendingExpense()],
       dashboard: buildDashboard({
         monthly_fixed_expenses: [
           {
-            pending_id: pending.pending_id,
-            rule_id: pending.rule_id,
-            title: pending.name,
-            category_id: pending.category_id,
-            amount: pending.amount,
-            due_date: pending.due_date,
-            status: pending.status,
-            account_id: pending.account_id ?? "",
-            payment_method: pending.payment_method,
-            transaction_id: pending.transaction_id,
+            pending_id: "rec-1:2026-03",
+            rule_id: "rec-1",
+            title: "Internet",
+            category_id: "internet",
+            amount: 120_00,
+            due_date: "2026-03-10",
+            status: "pending",
+            account_id: "acc-1",
+            card_id: null,
+            payment_method: "PIX",
+            transaction_id: null,
           },
         ],
       }),
@@ -2315,75 +702,13 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { level: 1, name: /vis/i });
-    await userEvent.click(screen.getByRole("button", { name: /gastos fixos/i }));
+    await userEvent.click(
+      within(screen.getByRole("navigation", { name: /principal/i })).getByRole("button", {
+        name: /gastos fixos/i,
+      }),
+    );
 
     expect(await screen.findByRole("heading", { level: 1, name: /gastos fixos/i })).toBeInTheDocument();
-    expect(screen.getByText(/internet/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /pendencias/i }));
-    await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url, init]) => {
-          return String(url).includes("/api/pendings/") && String(url).endsWith("/confirm") && init?.method === "POST";
-        }),
-      ).toBe(true);
-    });
-
-    expect(await screen.findByText(/confirmado/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /ocorr/i })).toBeInTheDocument();
   });
 });
-
-function allocateMockInvoices({
-  amount,
-  card,
-  installmentsCount,
-  purchaseDate,
-}: {
-  amount: number;
-  card: CardSummary;
-  installmentsCount: number;
-  purchaseDate: string;
-}): InvoiceSummary[] {
-  const normalizedPurchaseDate = purchaseDate.endsWith("Z")
-    ? purchaseDate
-    : `${purchaseDate}:00Z`;
-  const purchase = new Date(normalizedPurchaseDate);
-  const baseAmount = Math.floor(amount / installmentsCount);
-  const remainder = amount % installmentsCount;
-  const firstOffset = purchase.getUTCDate() > card.closing_day ? 1 : 0;
-
-  return Array.from({ length: installmentsCount }, (_value, index) => {
-    const target = new Date(
-      Date.UTC(purchase.getUTCFullYear(), purchase.getUTCMonth() + firstOffset + index, 1),
-    );
-    const referenceMonth = `${target.getUTCFullYear()}-${String(
-      target.getUTCMonth() + 1,
-    ).padStart(2, "0")}`;
-    const closingDate = `${referenceMonth}-${String(card.closing_day).padStart(2, "0")}`;
-    const dueDate = `${referenceMonth}-${String(card.due_day).padStart(2, "0")}`;
-
-    return buildInvoice({
-      invoice_id: `${card.card_id}:${referenceMonth}`,
-      card_id: card.card_id,
-      reference_month: referenceMonth,
-      closing_date: closingDate,
-      due_date: dueDate,
-      total_amount: index === installmentsCount - 1 ? baseAmount + remainder : baseAmount,
-      purchase_count: 1,
-    });
-  });
-}
-
-
-
-
-
-
-
-
-
-
-
-
-

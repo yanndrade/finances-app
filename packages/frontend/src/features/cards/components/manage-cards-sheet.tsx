@@ -77,7 +77,7 @@ export function ManageCardsSheet({
                       <p className="text-xs font-bold text-slate-500">
                         Limite {formatCurrency(card.limit)} • Fecha dia {card.closing_day} • Vence dia {card.due_day}
                       </p>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      <p className="text-[12px] font-black uppercase tracking-widest text-slate-400">
                         Conta: {accountName(card.payment_account_id, accounts)}
                       </p>
                     </div>

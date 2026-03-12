@@ -1346,13 +1346,13 @@ function resolveLedgerFallback(
   if (transaction.type === "transfer") {
     if (endpoint === "source") {
       if (transaction.direction === "credit") {
-        return "Transferencia interna";
+        return "Transferência interna";
       }
       return resolveAccountName(transaction.account_id, accounts);
     }
 
     if (transaction.direction === "debit") {
-      return "Transferencia interna";
+      return "Transferência interna";
     }
     return resolveAccountName(transaction.account_id, accounts);
   }
@@ -1378,13 +1378,13 @@ function resolveLedgerFallback(
   if (transaction.type === "investment") {
     if (transaction.category_id === "investment_withdrawal") {
       return endpoint === "source"
-        ? "Patrimonio investido"
+        ? "Patrimônio investido"
         : resolveAccountName(transaction.account_id, accounts);
     }
 
     return endpoint === "source"
       ? resolveAccountName(transaction.account_id, accounts)
-      : "Patrimonio investido";
+      : "Patrimônio investido";
   }
 
   return "--";
@@ -1402,16 +1402,16 @@ function formatLedgerEntity(value: string, accounts: AccountSummary[]): string {
     return formatCategoryName(id);
   }
   if (kind === "transfer") {
-    return "Transferencia interna";
+    return "Transferência interna";
   }
   if (kind === "card_liability") {
-    return `Passivo ${id || "cartao"}`;
+    return `Passivo ${id || "cartão"}`;
   }
   if (kind === "person") {
     return id || "Pessoa";
   }
   if (kind === "investment_asset") {
-    return "Patrimonio investido";
+    return "Patrimônio investido";
   }
 
   return "--";
@@ -1598,7 +1598,7 @@ function SortHeaderButton({
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+      <p className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
       <p className="text-sm font-semibold text-slate-800">{value}</p>

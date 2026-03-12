@@ -531,12 +531,15 @@ def test_transactions_ledger_mode_aggregates_card_purchases_and_investment_movem
         params={"ledger": "true", "type": "investment"},
     )
     assert investment_only_response.status_code == 200
-    assert {
-        item["transaction_id"] for item in investment_only_response.json()
-    } == {"inv-1:investment", "inv-2:investment"}
+    assert {item["transaction_id"] for item in investment_only_response.json()} == {
+        "inv-1:investment",
+        "inv-2:investment",
+    }
 
 
-def test_transactions_endpoint_exposes_ledger_projection_contract_in_openapi(tmp_path) -> None:
+def test_transactions_endpoint_exposes_ledger_projection_contract_in_openapi(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -555,9 +558,9 @@ def test_transactions_endpoint_exposes_ledger_projection_contract_in_openapi(tmp
     assert parameter_map["ledger"]["schema"]["type"] == "boolean"
     assert "type" in parameter_map
 
-    response_schema = transactions_get["responses"]["200"]["content"]["application/json"][
-        "schema"
-    ]
+    response_schema = transactions_get["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
     assert response_schema["type"] == "array"
 
     item_ref = response_schema["items"]["$ref"]
@@ -570,7 +573,9 @@ def test_transactions_endpoint_exposes_ledger_projection_contract_in_openapi(tmp
     assert "ledger_destination" in item_properties
 
 
-def test_cash_transaction_endpoints_require_existing_account_and_utc_timestamp(tmp_path) -> None:
+def test_cash_transaction_endpoints_require_existing_account_and_utc_timestamp(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -765,7 +770,9 @@ def test_transfer_endpoint_rejects_same_origin_and_destination(tmp_path) -> None
     assert response.status_code == 422
 
 
-def test_voiding_transfer_credit_reverses_destination_balance_correctly(tmp_path) -> None:
+def test_voiding_transfer_credit_reverses_destination_balance_correctly(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -1034,11 +1041,14 @@ def test_reimbursements_are_pending_until_marked_received(tmp_path) -> None:
             "transaction_id": "tx-1",
             "person_id": "friend",
             "amount": 20_00,
+            "amount_received": 0,
             "status": "pending",
             "account_id": "acc-1",
             "occurred_at": "2026-03-02T12:02:00Z",
+            "expected_at": None,
             "received_at": None,
             "receipt_transaction_id": None,
+            "notes": None,
         }
     ]
 
@@ -1051,11 +1061,14 @@ def test_reimbursements_are_pending_until_marked_received(tmp_path) -> None:
         "transaction_id": "tx-1",
         "person_id": "friend",
         "amount": 20_00,
+        "amount_received": 20_00,
         "status": "received",
         "account_id": "acc-1",
         "occurred_at": "2026-03-02T12:02:00Z",
+        "expected_at": None,
         "received_at": "2026-03-05T10:00:00Z",
         "receipt_transaction_id": "tx-1:reimbursement-receipt",
+        "notes": None,
     }
 
     accounts_response = client.get("/api/accounts")
@@ -1121,11 +1134,14 @@ def test_card_purchases_can_generate_pending_reimbursements(tmp_path) -> None:
             "transaction_id": "purchase-1:1",
             "person_id": "friend",
             "amount": 30_00,
+            "amount_received": 0,
             "status": "pending",
             "account_id": "acc-1",
             "occurred_at": "2026-03-10T00:00:00Z",
+            "expected_at": None,
             "received_at": None,
             "receipt_transaction_id": None,
+            "notes": None,
         }
     ]
 
@@ -1135,7 +1151,10 @@ def test_card_purchases_can_generate_pending_reimbursements(tmp_path) -> None:
     )
     assert received_response.status_code == 201
     assert received_response.json()["status"] == "received"
-    assert received_response.json()["receipt_transaction_id"] == "purchase-1:1:reimbursement-receipt"
+    assert (
+        received_response.json()["receipt_transaction_id"]
+        == "purchase-1:1:reimbursement-receipt"
+    )
 
     accounts_response = client.get("/api/accounts")
     assert accounts_response.status_code == 200
@@ -1154,11 +1173,14 @@ def test_card_purchases_can_generate_pending_reimbursements(tmp_path) -> None:
             "transaction_id": "purchase-1:2",
             "person_id": "friend",
             "amount": 30_00,
+            "amount_received": 0,
             "status": "pending",
             "account_id": "acc-1",
             "occurred_at": "2026-04-10T00:00:00Z",
+            "expected_at": None,
             "received_at": None,
             "receipt_transaction_id": None,
+            "notes": None,
         }
     ]
 
@@ -1207,11 +1229,14 @@ def test_card_purchase_reimbursement_stays_in_reference_month_when_due_date_is_n
             "transaction_id": "purchase-1:1",
             "person_id": "friend",
             "amount": 30_00,
+            "amount_received": 0,
             "status": "pending",
             "account_id": "acc-1",
             "occurred_at": "2026-03-10T00:00:00Z",
+            "expected_at": None,
             "received_at": None,
             "receipt_transaction_id": None,
+            "notes": None,
         }
     ]
 
@@ -1309,7 +1334,232 @@ def test_mark_reimbursement_received_updates_projection_account_when_custom_acco
     )
 
 
-def test_recurring_rules_generate_monthly_pendings_without_affecting_balance(tmp_path) -> None:
+def test_list_reimbursements_endpoint(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    # Create two expenses with person_id
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "alice",
+        },
+    )
+    _create_expense(
+        client,
+        {
+            "id": "tx-2",
+            "occurred_at": "2026-03-05T10:00:00Z",
+            "amount": 50_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "transport",
+            "description": "Taxi",
+            "person_id": "bob",
+        },
+    )
+
+    # List all
+    all_response = client.get("/api/reimbursements")
+    assert all_response.status_code == 200
+    assert len(all_response.json()) == 2
+
+    # Filter by person
+    alice_response = client.get("/api/reimbursements", params={"person": "alice"})
+    assert alice_response.status_code == 200
+    assert len(alice_response.json()) == 1
+    assert alice_response.json()[0]["transaction_id"] == "tx-1"
+
+    # Filter by status
+    pending_response = client.get("/api/reimbursements", params={"status": "pending"})
+    assert pending_response.status_code == 200
+    assert len(pending_response.json()) == 2
+
+    # Filter by month
+    march_response = client.get("/api/reimbursements", params={"month": "2026-03"})
+    assert march_response.status_code == 200
+    assert len(march_response.json()) == 2
+
+    april_response = client.get("/api/reimbursements", params={"month": "2026-04"})
+    assert april_response.status_code == 200
+    assert len(april_response.json()) == 0
+
+
+def test_reimbursements_summary_endpoint(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 30_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+
+    summary_response = client.get("/api/reimbursements/summary")
+    assert summary_response.status_code == 200
+    summary = summary_response.json()
+    assert summary["total_outstanding"] == 30_00
+    assert "received_in_month" in summary
+    assert "overdue_count" in summary
+    assert "overdue_total" in summary
+    assert "expiring_soon_count" in summary
+    assert "expiring_soon_total" in summary
+
+
+def test_update_reimbursement_expected_at_and_notes(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+
+    # Set expected_at and notes
+    update_response = client.patch(
+        "/api/reimbursements/tx-1",
+        json={"expected_at": "2026-03-20", "notes": "Agreed to pay by end of month"},
+    )
+    assert update_response.status_code == 200
+    result = update_response.json()
+    assert result["expected_at"] == "2026-03-20"
+    assert result["notes"] == "Agreed to pay by end of month"
+    assert result["status"] == "pending"
+
+    # Verify persisted
+    list_response = client.get("/api/reimbursements")
+    assert list_response.status_code == 200
+    reimbursement = next(
+        r for r in list_response.json() if r["transaction_id"] == "tx-1"
+    )
+    assert reimbursement["expected_at"] == "2026-03-20"
+    assert reimbursement["notes"] == "Agreed to pay by end of month"
+
+
+def test_cancel_reimbursement(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+
+    cancel_response = client.post("/api/reimbursements/tx-1/cancel")
+    assert cancel_response.status_code == 200
+    assert cancel_response.json()["status"] == "canceled"
+
+    # Canceling again returns 409
+    repeat_response = client.post("/api/reimbursements/tx-1/cancel")
+    assert repeat_response.status_code == 409
+
+    # Canceled reimbursement doesn't show in dashboard pending total
+    dashboard = client.get("/api/dashboard", params={"month": "2026-03"})
+    assert dashboard.json()["pending_reimbursements_total"] == 0
+
+
+def test_partial_reimbursement_payment(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 60_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Dinner",
+            "person_id": "friend",
+        },
+    )
+
+    # First partial payment
+    partial1 = client.post(
+        "/api/reimbursements/tx-1/mark-received",
+        json={"received_at": "2026-03-10T10:00:00Z", "amount": 20_00},
+    )
+    assert partial1.status_code == 201
+    result1 = partial1.json()
+    assert result1["status"] == "partial"
+    assert result1["amount_received"] == 20_00
+
+    # Second partial payment
+    partial2 = client.post(
+        "/api/reimbursements/tx-1/mark-received",
+        json={"received_at": "2026-03-15T10:00:00Z", "amount": 40_00},
+    )
+    assert partial2.status_code == 201
+    result2 = partial2.json()
+    assert result2["status"] == "received"
+    assert result2["amount_received"] == 60_00
+
+    # Overpayment rejected
+    over_response = client.post(
+        "/api/reimbursements/tx-1/mark-received",
+        json={"received_at": "2026-03-20T10:00:00Z", "amount": 1_00},
+    )
+    assert over_response.status_code == 409
+
+
+def test_recurring_rules_generate_monthly_pendings_without_affecting_balance(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -1553,7 +1803,9 @@ def test_recurring_rules_can_be_listed_and_updated(tmp_path) -> None:
     assert active_response.json() == []
 
 
-def test_confirm_pending_for_card_recurring_rule_creates_card_purchase(tmp_path) -> None:
+def test_confirm_pending_for_card_recurring_rule_creates_card_purchase(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -1603,7 +1855,9 @@ def test_confirm_pending_for_card_recurring_rule_creates_card_purchase(tmp_path)
         "transaction_id": "rule-streaming:2026-03:purchase",
     }
 
-    card_purchases_response = client.get("/api/card-purchases", params={"card": "card-1"})
+    card_purchases_response = client.get(
+        "/api/card-purchases", params={"card": "card-1"}
+    )
     assert card_purchases_response.status_code == 200
     assert card_purchases_response.json() == [
         {
@@ -1662,7 +1916,9 @@ def test_backend_allows_cors_for_local_frontend_origins(tmp_path) -> None:
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
 
 
-def test_dev_reset_endpoint_clears_accounts_transfers_and_card_purchases(tmp_path) -> None:
+def test_dev_reset_endpoint_clears_accounts_transfers_and_card_purchases(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -1723,7 +1979,10 @@ def test_dev_reset_endpoint_clears_accounts_transfers_and_card_purchases(tmp_pat
     reset_response = client.post("/api/dev/reset")
 
     assert reset_response.status_code == 200
-    assert reset_response.json() == {"status": "ok", "message": "Application data reset."}
+    assert reset_response.json() == {
+        "status": "ok",
+        "message": "Application data reset.",
+    }
 
     accounts_response = client.get("/api/accounts")
     cards_response = client.get("/api/cards")
@@ -1846,7 +2105,9 @@ def test_cards_endpoints_support_create_list_and_update(tmp_path) -> None:
     }
 
 
-def test_cards_endpoints_validate_cycle_days_and_optional_payment_account(tmp_path) -> None:
+def test_cards_endpoints_validate_cycle_days_and_optional_payment_account(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -1950,7 +2211,9 @@ def test_cards_endpoints_return_422_for_card_domain_validation_errors(tmp_path) 
     assert update_response.json()["payment_account_id"] == ""
 
 
-def test_card_purchase_endpoint_allocates_purchases_into_prd_invoice_cycles(tmp_path) -> None:
+def test_card_purchase_endpoint_allocates_purchases_into_prd_invoice_cycles(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -2111,7 +2374,9 @@ def test_card_purchase_endpoint_can_reassign_purchase_to_another_card(tmp_path) 
     ]
 
 
-def test_invoice_list_aggregates_card_purchases_without_zero_value_rows(tmp_path) -> None:
+def test_invoice_list_aggregates_card_purchases_without_zero_value_rows(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -2498,7 +2763,9 @@ def test_budget_endpoints_support_create_update_and_alert_states(tmp_path) -> No
     assert updated_dashboard.json()["budget_alerts"] == []
 
 
-def test_reports_endpoint_supports_period_category_weekly_and_future_commitments(tmp_path) -> None:
+def test_reports_endpoint_supports_period_category_weekly_and_future_commitments(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -2611,7 +2878,9 @@ def test_reports_endpoint_supports_period_category_weekly_and_future_commitments
     }
 
 
-def test_reports_endpoint_applies_same_filter_dimensions_as_transactions(tmp_path) -> None:
+def test_reports_endpoint_applies_same_filter_dimensions_as_transactions(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -2667,7 +2936,9 @@ def test_reports_endpoint_applies_same_filter_dimensions_as_transactions(tmp_pat
         "expense_total": 20_00,
         "net_total": -20_00,
     }
-    assert response.json()["category_breakdown"] == [{"category_id": "food", "total": 20_00}]
+    assert response.json()["category_breakdown"] == [
+        {"category_id": "food", "total": 20_00}
+    ]
 
 
 def test_reports_endpoint_rejects_custom_period_without_range(tmp_path) -> None:
@@ -2691,7 +2962,9 @@ def test_reports_endpoint_rejects_custom_period_without_range(tmp_path) -> None:
     }
 
 
-def test_reports_endpoint_accepts_custom_range_with_millisecond_precision(tmp_path) -> None:
+def test_reports_endpoint_accepts_custom_range_with_millisecond_precision(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -2715,7 +2988,9 @@ def test_reports_endpoint_accepts_custom_range_with_millisecond_precision(tmp_pa
     }
 
 
-def test_reports_endpoint_respects_custom_subday_range_for_installments(tmp_path) -> None:
+def test_reports_endpoint_respects_custom_subday_range_for_installments(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -2831,7 +3106,10 @@ def test_backup_export_endpoint_returns_full_unfiltered_snapshot(tmp_path) -> No
     assert payload["accounts"] == client.get("/api/accounts").json()
     assert payload["cards"] == client.get("/api/cards").json()
     assert payload["invoices"] == client.get("/api/invoices").json()
-    assert payload["investment_movements"] == client.get("/api/investments/movements").json()
+    assert (
+        payload["investment_movements"]
+        == client.get("/api/investments/movements").json()
+    )
     assert payload["transactions"] == client.get("/api/transactions").json()
     assert all("ledger_event_type" not in row for row in payload["transactions"])
     assert payload["report_summary"] is not None
@@ -3020,7 +3298,9 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
     assert accounts_response.json()[0]["current_balance"] == 68_00
 
 
-def test_investment_endpoints_reject_contribution_from_investment_account(tmp_path) -> None:
+def test_investment_endpoints_reject_contribution_from_investment_account(
+    tmp_path,
+) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
         event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
@@ -3128,9 +3408,14 @@ def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -
         }
     ]
     assert accounts_response.status_code == 200
-    assert next(
-        account for account in accounts_response.json() if account["account_id"] == "acc-2"
-    )["current_balance"] == 210_00
+    assert (
+        next(
+            account
+            for account in accounts_response.json()
+            if account["account_id"] == "acc-2"
+        )["current_balance"]
+        == 210_00
+    )
     assert transactions_response.status_code == 200
     assert transactions_response.json() == [
         {
@@ -3223,7 +3508,13 @@ def test_invoice_items_endpoint_lists_only_requested_invoice_rows(tmp_path) -> N
     assert missing_response.status_code == 404
 
 
-def _create_account(client: TestClient, account_id: str, name: str, account_type: str, initial_balance: int) -> None:
+def _create_account(
+    client: TestClient,
+    account_id: str,
+    name: str,
+    account_type: str,
+    initial_balance: int,
+) -> None:
     response = client.post(
         "/api/accounts",
         json={

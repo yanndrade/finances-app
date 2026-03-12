@@ -109,7 +109,7 @@ function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border leading-none select-none",
+        "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[12px] font-semibold border leading-none select-none",
         className,
       )}
     >
@@ -192,7 +192,7 @@ export function MovementRow({
     >
       <time
         dateTime={posted_at}
-        className="text-[11px] text-muted-foreground tabular-nums w-10 shrink-0 leading-tight"
+        className="text-[13px] text-muted-foreground tabular-nums w-10 shrink-0 leading-tight"
       >
         {formatDate(posted_at).slice(0, 5)}
       </time>
@@ -223,12 +223,12 @@ export function MovementRow({
 
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           {subtitleParts.length > 0 && (
-            <span className="text-[11px] text-muted-foreground truncate">
+            <span className="text-[13px] text-muted-foreground truncate">
               {subtitleParts.join(" · ")}
             </span>
           )}
           {kind === "transfer" && transferDestName && (
-            <span className="text-[11px] text-finance-transfer font-medium">
+            <span className="text-[13px] text-finance-transfer font-medium">
               {`-> ${transferDestName}`}
             </span>
           )}
@@ -246,15 +246,15 @@ export function MovementRow({
       <div className="shrink-0 hidden md:flex flex-col items-end gap-0.5 w-28">
         {cardName ? (
           <>
-            <span className="text-[11px] font-medium text-foreground/70 truncate max-w-full">
+            <span className="text-[13px] font-medium text-foreground/70 truncate max-w-full">
               {cardName}
             </span>
-            <span className="text-[10px] text-muted-foreground truncate max-w-full">
+            <span className="text-[12px] text-muted-foreground truncate max-w-full">
               {accountName}
             </span>
           </>
         ) : (
-          <span className="text-[11px] font-medium text-foreground/70 truncate max-w-full">
+          <span className="text-[13px] font-medium text-foreground/70 truncate max-w-full">
             {accountName}
           </span>
         )}
@@ -277,7 +277,7 @@ export function MovementRow({
             payment_method !== "OTHER" &&
             payment_method !== "BALANCE" && (
               <span
-                className="text-[9px] font-bold text-muted-foreground leading-none"
+                className="text-[13px] font-bold text-muted-foreground leading-none"
                 title={formatPaymentMethodExpanded(payment_method)}
               >
                 {methodIcon(payment_method)}
@@ -285,7 +285,7 @@ export function MovementRow({
             )}
 
           {lifecycle_status !== "cleared" && (
-            <Badge className={cn("text-[9px]", lifecycleBadgeClass(lifecycle_status))}>
+            <Badge className={cn("text-[13px]", lifecycleBadgeClass(lifecycle_status))}>
               {formatLifecycleStatus(lifecycle_status)}
             </Badge>
           )}

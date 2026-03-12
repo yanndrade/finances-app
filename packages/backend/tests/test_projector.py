@@ -6,7 +6,10 @@ from sqlalchemy import text
 from sqlalchemy.exc import NoSuchTableError
 
 from finance_app.application.event_store import AppendEventUseCase
-from finance_app.application.projector import ProjectEventsUseCase, RebuildProjectionsUseCase
+from finance_app.application.projector import (
+    ProjectEventsUseCase,
+    RebuildProjectionsUseCase,
+)
 from finance_app.domain.events import NewEvent
 from finance_app.infrastructure import projector as projector_module
 from finance_app.infrastructure.db import get_engine
@@ -108,7 +111,9 @@ def test_projector_rerun_without_new_events_is_idempotent(tmp_path: Path) -> Non
     assert len(projector.list_accounts()) == 1
 
 
-def test_projector_rebuild_replays_history_into_fresh_projection(tmp_path: Path) -> None:
+def test_projector_rebuild_replays_history_into_fresh_projection(
+    tmp_path: Path,
+) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
     )
@@ -433,7 +438,9 @@ def test_projector_rebuilds_issue_14_projection_when_transactions_table_is_missi
     assert projector.list_transactions() == []
 
 
-def test_projector_materializes_cash_transactions_and_updates_balance(tmp_path: Path) -> None:
+def test_projector_materializes_cash_transactions_and_updates_balance(
+    tmp_path: Path,
+) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
     )
@@ -574,7 +581,9 @@ def test_projector_bootstrap_serializes_concurrent_schema_creation(
             with state_lock:
                 active_calls -= 1
 
-    monkeypatch.setattr(projector_module.ProjectionBase.metadata, "create_all", wrapped_create_all)
+    monkeypatch.setattr(
+        projector_module.ProjectionBase.metadata, "create_all", wrapped_create_all
+    )
 
     def call_bootstrap() -> None:
         try:
@@ -616,7 +625,9 @@ def test_projector_rebuilds_when_account_table_disappears_during_introspection(
     assert projector._projection_schema_requires_rebuild() is True
 
 
-def test_projector_materializes_card_purchases_into_invoice_cycles(tmp_path: Path) -> None:
+def test_projector_materializes_card_purchases_into_invoice_cycles(
+    tmp_path: Path,
+) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
     )
@@ -705,7 +716,9 @@ def test_projector_materializes_card_purchases_into_invoice_cycles(tmp_path: Pat
     ]
 
 
-def test_projector_distributes_installments_into_future_invoice_cycles(tmp_path: Path) -> None:
+def test_projector_distributes_installments_into_future_invoice_cycles(
+    tmp_path: Path,
+) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
     )
@@ -812,7 +825,9 @@ def test_projector_distributes_installments_into_future_invoice_cycles(tmp_path:
     ]
 
 
-def test_projector_reassigns_card_purchase_without_duplicating_invoices(tmp_path: Path) -> None:
+def test_projector_reassigns_card_purchase_without_duplicating_invoices(
+    tmp_path: Path,
+) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
     )
@@ -919,7 +934,9 @@ def test_projector_reassigns_card_purchase_without_duplicating_invoices(tmp_path
     ]
 
 
-def test_projector_tracks_card_purchase_reimbursements_by_installment_month(tmp_path: Path) -> None:
+def test_projector_tracks_card_purchase_reimbursements_by_installment_month(
+    tmp_path: Path,
+) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
     )
@@ -986,11 +1003,14 @@ def test_projector_tracks_card_purchase_reimbursements_by_installment_month(tmp_
             "transaction_id": "purchase-1:1",
             "person_id": "friend",
             "amount": 30_00,
+            "amount_received": 0,
             "status": "pending",
             "account_id": "acc-1",
             "occurred_at": "2026-03-10T00:00:00Z",
+            "expected_at": None,
             "received_at": None,
             "receipt_transaction_id": None,
+            "notes": None,
         }
     ]
 
@@ -1001,11 +1021,14 @@ def test_projector_tracks_card_purchase_reimbursements_by_installment_month(tmp_
             "transaction_id": "purchase-1:2",
             "person_id": "friend",
             "amount": 30_00,
+            "amount_received": 0,
             "status": "pending",
             "account_id": "acc-1",
             "occurred_at": "2026-04-10T00:00:00Z",
+            "expected_at": None,
             "received_at": None,
             "receipt_transaction_id": None,
+            "notes": None,
         }
     ]
 
@@ -1079,11 +1102,14 @@ def test_projector_anchors_card_reimbursement_to_reference_month_not_due_month(
             "transaction_id": "purchase-1:1",
             "person_id": "friend",
             "amount": 30_00,
+            "amount_received": 0,
             "status": "pending",
             "account_id": "acc-1",
             "occurred_at": "2026-03-10T00:00:00Z",
+            "expected_at": None,
             "received_at": None,
             "receipt_transaction_id": None,
+            "notes": None,
         }
     ]
 
@@ -1586,6 +1612,7 @@ def test_projector_repairs_stale_single_card_purchase_history_classification(
 
     assert [item["movement_id"] for item in variable_page["items"]] == ["purchase-1:1"]
     assert installments_page["items"] == []
+
 
 def test_projector_updates_voids_and_filters_transactions(tmp_path: Path) -> None:
     event_store = EventStore(

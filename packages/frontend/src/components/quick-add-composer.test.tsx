@@ -204,7 +204,7 @@ describe("QuickAddComposer", () => {
     const { onSubmitInvoicePayment } = renderComposer();
 
     await user.type(screen.getByPlaceholderText("0,00"), "12");
-    await user.selectOptions(screen.getByLabelText(/tipo/i), "transfer");
+    await user.click(screen.getByRole("button", { name: /^transferência$/i }));
     await user.selectOptions(screen.getByLabelText(/modo da transfer.ncia/i), "invoice_payment");
     await user.click(screen.getByRole("button", { name: /^lançar$/i }));
 
@@ -236,7 +236,6 @@ describe("QuickAddComposer", () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/modo da transfer.ncia/i)).toHaveValue("invoice_payment");
     });
-    expect(screen.getByLabelText(/tipo/i)).toHaveValue("transfer");
     expect(screen.getByLabelText(/^fatura$/i)).toBeInTheDocument();
   });
 
@@ -288,8 +287,8 @@ describe("QuickAddComposer", () => {
 
     await user.type(screen.getByPlaceholderText("0,00"), "2500");
 
-    const typeSelect = screen.getByLabelText(/tipo/i);
-    typeSelect.focus();
+    const paymentModeSelect = screen.getByLabelText(/modo de pagamento/i);
+    paymentModeSelect.focus();
     await user.keyboard("{ArrowDown}{Enter}");
 
     await new Promise((resolve) => setTimeout(resolve, 60));
@@ -350,7 +349,7 @@ describe("QuickAddComposer", () => {
 
     expect(screen.queryByLabelText(/pessoa relacionada/i)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /abrir modo avançado/i }));
+    await user.click(screen.getByRole("button", { name: /modo avançado/i }));
 
     expect(screen.getByText(/modo avançado/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/pessoa relacionada/i)).toBeInTheDocument();

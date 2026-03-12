@@ -156,15 +156,18 @@ class ReimbursementProjectionRecord(ProjectionBase):
     )
     person_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_received: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(
         String, nullable=False, index=True, default="pending"
     )
     account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     occurred_at: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    expected_at: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     received_at: Mapped[str | None] = mapped_column(String, nullable=True)
     receipt_transaction_id: Mapped[str | None] = mapped_column(
         String, nullable=True, index=True
     )
+    notes: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class RecurringRuleProjectionRecord(ProjectionBase):
@@ -253,6 +256,9 @@ class UnifiedMovementRecord(ProjectionBase):
     installment_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     installment_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_event_type: Mapped[str] = mapped_column(String)
+    reimbursement_source_tx_id: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
 
 
 class Projector:
@@ -327,9 +333,7 @@ class Projector:
                 installment_row_count or purchase_installments_count or 1
             )
             expected_origin_type = (
-                "installment"
-                if expected_installments_count > 1
-                else "card_purchase"
+                "installment" if expected_installments_count > 1 else "card_purchase"
             )
             expected_payment_method = (
                 "CREDIT_INSTALLMENT"
@@ -342,9 +346,7 @@ class Projector:
                 else None
             )
             expected_installment_total = (
-                expected_installments_count
-                if expected_installments_count > 1
-                else None
+                expected_installments_count if expected_installments_count > 1 else None
             )
 
             movement.origin_type = expected_origin_type
@@ -1073,16 +1075,32 @@ class Projector:
         *,
         status: str | None = None,
         person_id: str | None = None,
+        month: str | None = None,
     ) -> list[dict[str, str | int | None]]:
         with self._lock:
             self.bootstrap()
             with self._session_factory() as session:
                 query = session.query(ReimbursementProjectionRecord)
                 if status is not None:
-                    query = query.filter(ReimbursementProjectionRecord.status == status)
+                    # "overdue" is a computed status: stored as "pending" but past expected_at
+                    if status == "overdue":
+                        today = date.today().isoformat()
+                        query = query.filter(
+                            ReimbursementProjectionRecord.status == "pending",
+                            ReimbursementProjectionRecord.expected_at.isnot(None),
+                            ReimbursementProjectionRecord.expected_at < today,
+                        )
+                    else:
+                        query = query.filter(
+                            ReimbursementProjectionRecord.status == status
+                        )
                 if person_id is not None:
                     query = query.filter(
                         ReimbursementProjectionRecord.person_id == person_id
+                    )
+                if month is not None:
+                    query = query.filter(
+                        ReimbursementProjectionRecord.occurred_at.like(f"{month}%")
                     )
 
                 rows = query.order_by(
@@ -1090,19 +1108,100 @@ class Projector:
                     ReimbursementProjectionRecord.transaction_id.desc(),
                 ).all()
 
-        return [
-            ReimbursementProjection(
-                transaction_id=row.transaction_id,
-                person_id=row.person_id,
-                amount=row.amount,
-                status=row.status,
-                account_id=row.account_id,
-                occurred_at=row.occurred_at,
-                received_at=row.received_at,
-                receipt_transaction_id=row.receipt_transaction_id,
-            ).to_dict()
-            for row in rows
-        ]
+        today_str = date.today().isoformat()
+        result = []
+        for row in rows:
+            computed_status = row.status
+            if (
+                row.status == "pending"
+                and row.expected_at is not None
+                and row.expected_at < today_str
+            ):
+                computed_status = "overdue"
+            result.append(
+                ReimbursementProjection(
+                    transaction_id=row.transaction_id,
+                    person_id=row.person_id,
+                    amount=row.amount,
+                    amount_received=row.amount_received,
+                    status=computed_status,
+                    account_id=row.account_id,
+                    occurred_at=row.occurred_at,
+                    expected_at=row.expected_at,
+                    received_at=row.received_at,
+                    receipt_transaction_id=row.receipt_transaction_id,
+                    notes=row.notes,
+                ).to_dict()
+            )
+        return result
+
+    def reimbursement_summary(
+        self,
+        *,
+        month: str | None = None,
+    ) -> dict[str, int]:
+        """Return aggregated reimbursement metrics for the given month (or all-time)."""
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                base_query = session.query(ReimbursementProjectionRecord)
+                if month is not None:
+                    base_query = base_query.filter(
+                        ReimbursementProjectionRecord.occurred_at.like(f"{month}%")
+                    )
+
+                all_rows = base_query.all()
+
+        today_str = date.today().isoformat()
+        week_ahead = (date.today() + timedelta(days=7)).isoformat()
+
+        total_outstanding = 0
+        received_in_month = 0
+        expiring_soon_count = 0
+        expiring_soon_total = 0
+        overdue_count = 0
+        overdue_total = 0
+
+        for row in all_rows:
+            outstanding = row.amount - (row.amount_received or 0)
+            is_overdue = (
+                row.status == "pending"
+                and row.expected_at is not None
+                and row.expected_at < today_str
+            )
+            is_expiring = (
+                row.status == "pending"
+                and row.expected_at is not None
+                and today_str <= row.expected_at <= week_ahead
+                and not is_overdue
+            )
+
+            if row.status in ("pending", "partial"):
+                total_outstanding += outstanding
+                if is_overdue:
+                    overdue_count += 1
+                    overdue_total += outstanding
+                elif is_expiring:
+                    expiring_soon_count += 1
+                    expiring_soon_total += outstanding
+            elif row.status == "received":
+                if (
+                    month is not None
+                    and row.received_at
+                    and row.received_at.startswith(month)
+                ):
+                    received_in_month += row.amount
+                elif month is None:
+                    received_in_month += row.amount
+
+        return {
+            "total_outstanding": total_outstanding,
+            "received_in_month": received_in_month,
+            "expiring_soon_count": expiring_soon_count,
+            "expiring_soon_total": expiring_soon_total,
+            "overdue_count": overdue_count,
+            "overdue_total": overdue_total,
+        }
 
     def list_investment_movements(
         self,
@@ -1613,11 +1712,14 @@ class Projector:
                 transaction_id=row.transaction_id,
                 person_id=row.person_id,
                 amount=row.amount,
+                amount_received=row.amount_received,
                 status=row.status,
                 account_id=row.account_id,
                 occurred_at=row.occurred_at,
+                expected_at=row.expected_at,
                 received_at=row.received_at,
                 receipt_transaction_id=row.receipt_transaction_id,
+                notes=row.notes,
             ).to_dict()
             for row in pending_reimbursement_rows
         ]
@@ -1899,6 +2001,18 @@ class Projector:
             self._apply_reimbursement_received(session, event.payload)
             return
 
+        if event.type == "ReimbursementPaymentReceived":
+            self._apply_reimbursement_payment_received(session, event.payload)
+            return
+
+        if event.type == "ReimbursementUpdated":
+            self._apply_reimbursement_updated(session, event.payload)
+            return
+
+        if event.type == "ReimbursementCanceled":
+            self._apply_reimbursement_canceled(session, event.payload)
+            return
+
         if event.type == "PendingConfirmed":
             self._apply_pending_confirmed(session, event.payload)
             return
@@ -2106,9 +2220,7 @@ class Projector:
                 group_id=None,
                 transfer_direction=None,
                 installment_number=(
-                    allocation.installment_number
-                    if _installments_count > 1
-                    else None
+                    allocation.installment_number if _installments_count > 1 else None
                 ),
                 installment_total=(
                     _installments_count if _installments_count > 1 else None
@@ -2540,10 +2652,11 @@ class Projector:
         _tx_status = str(payload.get("status", "active"))
         _description = _optional_string(payload.get("description"))
         _category_id = str(payload["category_id"])
+        _unified_kind = "reimbursement" if _category_id == "reimbursement" else _tx_type
         self._upsert_unified_movement(
             session,
             movement_id=transaction_id,
-            kind=_tx_type,
+            kind=_unified_kind,
             origin_type="manual",
             title=_description or _category_id,
             description=_description,
@@ -2631,10 +2744,15 @@ class Projector:
             account_id=existing.account_id,
             occurred_at=existing.occurred_at,
         )
+        _updated_unified_kind = (
+            "reimbursement"
+            if existing.category_id == "reimbursement"
+            else existing.type
+        )
         self._upsert_unified_movement(
             session,
             movement_id=transaction_id,
-            kind=existing.type,
+            kind=_updated_unified_kind,
             origin_type="manual",
             title=existing.description or existing.category_id,
             description=existing.description,
@@ -2685,10 +2803,15 @@ class Projector:
             account_id=existing.account_id,
             occurred_at=existing.occurred_at,
         )
+        _voided_unified_kind = (
+            "reimbursement"
+            if existing.category_id == "reimbursement"
+            else existing.type
+        )
         self._upsert_unified_movement(
             session,
             movement_id=transaction_id,
-            kind=existing.type,
+            kind=_voided_unified_kind,
             origin_type="manual",
             title=existing.description or existing.category_id,
             description=existing.description,
@@ -2717,17 +2840,72 @@ class Projector:
         session: Session,
         payload: dict[str, object],
     ) -> None:
+        """Backward-compat handler for old ReimbursementReceived events (full payment)."""
         transaction_id = str(payload["transaction_id"])
         receivable = session.get(ReimbursementProjectionRecord, transaction_id)
         if receivable is None:
             return
 
+        amount = receivable.amount
+        receivable.amount_received = amount
         receivable.status = "received"
         receivable.account_id = str(payload.get("account_id", receivable.account_id))
         receivable.received_at = str(payload["received_at"])
         receivable.receipt_transaction_id = _optional_string(
             payload.get("receipt_transaction_id")
         )
+
+    def _apply_reimbursement_payment_received(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        """Handler for new ReimbursementPaymentReceived events (supports partial)."""
+        transaction_id = str(payload["transaction_id"])
+        receivable = session.get(ReimbursementProjectionRecord, transaction_id)
+        if receivable is None:
+            return
+
+        payment_amount = int(payload["payment_amount"])
+        receivable.amount_received = (receivable.amount_received or 0) + payment_amount
+        receivable.account_id = str(payload.get("account_id", receivable.account_id))
+        receivable.receipt_transaction_id = _optional_string(
+            payload.get("receipt_transaction_id")
+        )
+
+        if receivable.amount_received >= receivable.amount:
+            receivable.status = "received"
+            receivable.received_at = str(payload["received_at"])
+        else:
+            receivable.status = "partial"
+
+    def _apply_reimbursement_updated(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        transaction_id = str(payload["transaction_id"])
+        receivable = session.get(ReimbursementProjectionRecord, transaction_id)
+        if receivable is None:
+            return
+
+        if "expected_at" in payload:
+            receivable.expected_at = _optional_string(payload.get("expected_at"))
+        if "notes" in payload:
+            receivable.notes = _optional_string(payload.get("notes"))
+
+    def _apply_reimbursement_canceled(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        transaction_id = str(payload["transaction_id"])
+        receivable = session.get(ReimbursementProjectionRecord, transaction_id)
+        if receivable is None:
+            return
+
+        if receivable.status not in ("received",):
+            receivable.status = "canceled"
 
     def _apply_pending_confirmed(
         self,
@@ -3774,11 +3952,14 @@ class Projector:
             "source_transaction_id",
             "person_id",
             "amount",
+            "amount_received",
             "status",
             "account_id",
             "occurred_at",
+            "expected_at",
             "received_at",
             "receipt_transaction_id",
+            "notes",
         }
         if reimbursement_columns != expected_reimbursement_columns:
             return True
@@ -4032,6 +4213,7 @@ class Projector:
         installment_number: int | None,
         installment_total: int | None,
         source_event_type: str,
+        reimbursement_source_tx_id: str | None = None,
     ) -> None:
         existing = session.get(UnifiedMovementRecord, movement_id)
         if existing is None:
@@ -4058,6 +4240,7 @@ class Projector:
                     installment_number=installment_number,
                     installment_total=installment_total,
                     source_event_type=source_event_type,
+                    reimbursement_source_tx_id=reimbursement_source_tx_id,
                 )
             )
         else:
@@ -4081,6 +4264,7 @@ class Projector:
             existing.installment_number = installment_number
             existing.installment_total = installment_total
             existing.source_event_type = source_event_type
+            existing.reimbursement_source_tx_id = reimbursement_source_tx_id
 
     def _remove_unified_movements_by_parent(
         self, session: Session, *, parent_id: str
@@ -4290,6 +4474,7 @@ class Projector:
                 reimbursement_q = base.filter(
                     UnifiedMovementRecord.kind == "reimbursement"
                 )
+
                 def _sum(q) -> int:  # type: ignore[no-untyped-def]
                     return (
                         q.with_entities(func.sum(UnifiedMovementRecord.amount)).scalar()
@@ -4323,7 +4508,7 @@ class Projector:
             "total_investments": total_investments,
             "total_reimbursements": total_reimbursements,
             "total_expenses": total_expenses,
-            "total_result": total_income - total_expenses,
+            "total_result": total_income - total_expenses + total_reimbursements,
             "counts": counts,
         }
 
@@ -4362,6 +4547,7 @@ class Projector:
             "installment_number",
             "installment_total",
             "source_event_type",
+            "reimbursement_source_tx_id",
         }
         return expected.issubset(cols)
 

@@ -12,6 +12,10 @@ export default {
       fontFamily: {
         sans: ['"Geist Sans"', '"Inter"', '"Segoe UI"', "sans-serif"],
       },
+      fontSize: {
+        xs: ["0.8rem", { lineHeight: "1.2" }],
+        sm: ["0.925rem", { lineHeight: "1.4" }],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

@@ -213,22 +213,28 @@ class ReimbursementProjection:
     transaction_id: str
     person_id: str
     amount: int
+    amount_received: int
     status: str
     account_id: str
     occurred_at: str
+    expected_at: str | None
     received_at: str | None
     receipt_transaction_id: str | None
+    notes: str | None
 
     def to_dict(self) -> dict[str, str | int | None]:
         return {
             "transaction_id": self.transaction_id,
             "person_id": self.person_id,
             "amount": self.amount,
+            "amount_received": self.amount_received,
             "status": self.status,
             "account_id": self.account_id,
             "occurred_at": self.occurred_at,
+            "expected_at": self.expected_at,
             "received_at": self.received_at,
             "receipt_transaction_id": self.receipt_transaction_id,
+            "notes": self.notes,
         }
 
 
@@ -342,6 +348,7 @@ class InvestmentMovementProjection:
             "cash_delta": self.cash_delta,
             "invested_delta": self.invested_delta,
         }
+
 
 @dataclass(frozen=True)
 class UnifiedMovementProjection:

@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { MOBILE_NAV_ITEMS, Sidebar, isMobileEssentialView, type AppView } from "./sidebar";
@@ -6,6 +6,8 @@ import { Button } from "./ui/button";
 import { MonthPicker } from "./ui/month-picker";
 import { cn } from "../lib/utils";
 import type { UiDensity } from "../lib/ui-density";
+
+const SIDEBAR_COLLAPSED_KEY = "finance.sidebar-collapsed";
 
 type AppShellProps = {
   activeView: AppView;
@@ -39,6 +41,26 @@ export function AppShell({
   onMonthChange,
 }: AppShellProps) {
   const isMobile = useMediaQuery(MOBILE_QUERY);
+
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleCollapse = useCallback(() => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -100,7 +122,7 @@ export function AppShell({
           </Button>
         ) : null}
 
-        <nav aria-label="Navegacao mobile" className="mobile-nav">
+        <nav aria-label="Navegação mobile" className="mobile-nav">
           {MOBILE_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeView === item.id;
@@ -124,8 +146,13 @@ export function AppShell({
   }
 
   return (
-    <div className={`app-layout app-layout--desktop ui-density--${uiDensity}`}>
-      <Sidebar activeView={activeView} onNavigate={onNavigate} />
+    <div className={`app-layout app-layout--desktop ui-density--${uiDensity}${isCollapsed ? " sidebar-is-collapsed" : ""}`}>
+      <Sidebar
+        activeView={activeView}
+        isCollapsed={isCollapsed}
+        onNavigate={onNavigate}
+        onToggleCollapse={handleToggleCollapse}
+      />
 
       <div className="app-workspace">
         <main className="app-main">
@@ -160,7 +187,7 @@ export function AppShell({
                 >
                   <Plus className="mr-1.5 h-4 w-4" />
                   Lançar
-                  <kbd className="ml-2 hidden sm:inline-flex h-4 items-center gap-0.5 rounded border border-primary-foreground/20 bg-primary-foreground/10 px-1 font-mono text-[9px] font-medium opacity-100">
+                  <kbd className="ml-2 hidden sm:inline-flex h-4 items-center gap-0.5 rounded border border-primary-foreground/20 bg-primary-foreground/10 px-1 font-mono text-[13px] font-medium opacity-100">
                     <span>Ctrl</span>
                     <span>N</span>
                   </kbd>

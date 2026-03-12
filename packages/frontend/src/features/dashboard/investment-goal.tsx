@@ -109,7 +109,7 @@ export function InvestmentGoal({
             <CardTitle className={cn("text-sm font-semibold", theme.text)}>
               Compromisso com o Futuro
             </CardTitle>
-            <p className={cn("text-[10px] opacity-80", theme.text)}>
+            <p className={cn("text-[12px] opacity-80", theme.text)}>
               {theme.statusMsg}
             </p>
           </div>

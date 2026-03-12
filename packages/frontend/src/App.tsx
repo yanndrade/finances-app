@@ -105,6 +105,11 @@ const TransactionsView = lazy(async () => {
   return { default: module.TransactionsView };
 });
 
+const ReimbursementsView = lazy(async () => {
+  const module = await import("./features/reimbursements/reimbursements-view");
+  return { default: module.ReimbursementsView };
+});
+
 const HistoryPage = lazy(async () => {
   const module = await import("./features/history/history-page");
   return { default: module.HistoryPage };
@@ -143,6 +148,10 @@ const VIEW_META: Record<
     title: "Histórico",
     description: "Filtro, ajuste e linha do tempo financeira.",
   },
+  reimbursements: {
+    title: "Reembolsos",
+    description: "Pendências, cobranças e recebimentos.",
+  },
   accounts: {
     title: "Contas",
     description: "Saldos e estrutura da carteira.",
@@ -153,7 +162,7 @@ const VIEW_META: Record<
   },
   fixedExpenses: {
     title: "Gastos fixos",
-    description: "Cadastro, revisao e confirmacao das recorrencias.",
+    description: "Cadastro, revisão e confirmação das recorrências.",
   },
   settings: {
     title: "Configurações",
@@ -173,6 +182,7 @@ export function App() {
     readStoredCategoryOptions(),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [quickAddPreset, setQuickAddPreset] = useState<
@@ -297,6 +307,7 @@ export function App() {
       await refreshData({
         filters: options?.filters,
       });
+      setRefreshKey((k) => k + 1);
       showToast("success", successMessage);
       return true;
     } catch (error) {
@@ -316,7 +327,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel registrar a transacao.");
+      throw new Error("Não foi possível registrar a transação.");
     }
   }
 
@@ -332,7 +343,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel registrar a transferencia.");
+      throw new Error("Não foi possível registrar a transferência.");
     }
   }
 
@@ -343,7 +354,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel criar a conta.");
+      throw new Error("Não foi possível criar a conta.");
     }
   }
 
@@ -357,7 +368,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel atualizar a conta.");
+      throw new Error("Não foi possível atualizar a conta.");
     }
   }
 
@@ -388,7 +399,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel atualizar a conta.");
+      throw new Error("Não foi possível atualizar a conta.");
     }
   }
 
@@ -399,7 +410,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel criar o cartao.");
+      throw new Error("Não foi possível criar o cartão.");
     }
   }
 
@@ -413,7 +424,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel atualizar o cartao.");
+      throw new Error("Não foi possível atualizar o cartão.");
     }
   }
 
@@ -437,7 +448,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel atualizar o cartao.");
+      throw new Error("Não foi possível atualizar o cartão.");
     }
   }
 
@@ -450,7 +461,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel registrar a compra no cartao.");
+      throw new Error("Não foi possível registrar a compra no cartão.");
     }
   }
 
@@ -473,7 +484,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel registrar o pagamento da fatura.");
+      throw new Error("Não foi possível registrar o pagamento da fatura.");
     }
   }
 
@@ -486,7 +497,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel criar o gasto fixo.");
+      throw new Error("Não foi possível criar o gasto fixo.");
     }
   }
 
@@ -500,18 +511,18 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel atualizar o gasto fixo.");
+      throw new Error("Não foi possível atualizar o gasto fixo.");
     }
   }
 
   async function handleConfirmPendingExpense(pendingId: string): Promise<void> {
     const wasSuccessful = await runMutation(
       () => confirmPendingExpense(pendingId),
-      "Pendencia confirmada com sucesso.",
+      "Pendência confirmada com sucesso.",
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel confirmar a pendencia.");
+      throw new Error("Não foi possível confirmar a pendência.");
     }
   }
 
@@ -559,7 +570,7 @@ export function App() {
     );
 
     if (!wasSuccessful) {
-      throw new Error("Nao foi possivel registrar movimento de investimento.");
+      throw new Error("Não foi possível registrar movimento de investimento.");
     }
   }
 
@@ -584,7 +595,7 @@ export function App() {
   async function handleResetAllData(): Promise<void> {
     if (
       !globalThis.confirm(
-        "Isso vai limpar compras, transferencias e contas da aplicacao. Deseja continuar?",
+        "Isso vai limpar compras, transferências e contas da aplicação. Deseja continuar?",
       )
     ) {
       return;
@@ -713,6 +724,15 @@ export function App() {
             accounts={accounts}
             cards={cards}
             month={selectedMonth}
+            refreshKey={refreshKey}
+          />
+        ) : null}
+
+        {activeView === "reimbursements" ? (
+          <ReimbursementsView
+            accounts={accounts}
+            month={selectedMonth}
+            refreshKey={refreshKey}
           />
         ) : null}
 
@@ -764,17 +784,10 @@ export function App() {
 
         {activeView === "settings" ? (
           <SettingsView
-            accountsCount={accounts.length}
-            cardsCount={cards.length}
-            categories={categoryOptions}
             isSubmitting={isSubmitting}
-            onCreateCategory={handleCreateCategory}
-            onOpenAccounts={() => setActiveView("accounts")}
-            onOpenCards={() => setActiveView("cards")}
             onExportBackup={() => {
               void handleExportBackup();
             }}
-            onRemoveCategory={handleRemoveCategory}
             onResetApplicationData={handleResetAllData}
           />
         ) : null}
@@ -805,6 +818,9 @@ export function App() {
             accounts={accounts}
             cards={cards}
             invoices={invoices}
+            categories={categoryOptions}
+            onCreateCategory={handleCreateCategory}
+            onRemoveCategory={handleRemoveCategory}
             onSubmitTransaction={async (payload) => {
               await handleTransactionSubmit(payload);
             }}
@@ -836,7 +852,7 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
     return (
       <div className="space-y-8" aria-hidden="true">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+          <p className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-300">
             Carregando informações...
           </p>
           <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
@@ -880,5 +896,5 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return "Nao foi possivel concluir a operacao.";
+  return "Não foi possível concluir a operação.";
 }

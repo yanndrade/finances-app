@@ -4,6 +4,7 @@ import {
   Home,
   Landmark,
   Repeat,
+  RotateCcw,
   Settings2,
   TrendingUp,
   Wallet,
@@ -100,6 +101,13 @@ const NAVIGATION_COMMANDS: Array<{
     value: "histórico ledger movimentos",
     view: "transactions",
     icon: Landmark,
+  },
+  {
+    label: "Reembolsos",
+    hint: "Cobranças e recebimentos",
+    value: "reembolsos cobranças recebimentos pendências",
+    view: "reimbursements",
+    icon: RotateCcw,
   },
   {
     label: "Gastos fixos",

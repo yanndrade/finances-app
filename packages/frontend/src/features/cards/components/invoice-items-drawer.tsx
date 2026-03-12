@@ -49,7 +49,7 @@ export function InvoiceItemsDrawer({
           <div className="flex-1 overflow-auto rounded-[2.5rem] border border-slate-50 bg-white shadow-inner">
             {isLoading ? (
               <div className="p-20 text-center">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+                <p className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-300">
                   Sincronizando faturas...
                 </p>
               </div>
@@ -83,16 +83,16 @@ function InvoiceItemsTable({ invoiceItems }: { invoiceItems: InvoiceItemSummary[
     <Table>
       <TableHeader className="bg-slate-50/50">
         <TableRow className="border-slate-50 hover:bg-transparent">
-          <TableHead className="px-8 h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">
+          <TableHead className="px-8 h-14 font-black text-[12px] uppercase tracking-widest text-slate-400">
             Data
           </TableHead>
-          <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">
+          <TableHead className="h-14 font-black text-[12px] uppercase tracking-widest text-slate-400">
             Descrição
           </TableHead>
-          <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400">
+          <TableHead className="h-14 font-black text-[12px] uppercase tracking-widest text-slate-400">
             Parcela
           </TableHead>
-          <TableHead className="h-14 font-black text-[10px] uppercase tracking-widest text-slate-400 text-right pr-8">
+          <TableHead className="h-14 font-black text-[12px] uppercase tracking-widest text-slate-400 text-right pr-8">
             Valor
           </TableHead>
         </TableRow>
