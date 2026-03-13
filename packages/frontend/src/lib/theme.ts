@@ -146,6 +146,9 @@ export function applyThemeColor(themeColor: string): void {
     root.style.setProperty("--chart-primary", `${h} ${Math.min(100, s + 5)}% ${accentL}%`);
     root.style.setProperty("--theme-primary-hex", hex);
     root.style.setProperty("--theme-primary-rgb", `${red}, ${green}, ${blue}`);
+    root.style.setProperty("--focus-ring", `rgba(${red}, ${green}, ${blue}, 0.5)`);
+    root.style.setProperty("--focus-ring-shadow", `0 0 0 4px rgba(${red}, ${green}, ${blue}, 0.15)`);
+    root.style.setProperty("--input-focus-border", `rgba(${red}, ${green}, ${blue}, 0.45)`);
   } else {
     // Light mode: keep the existing low-lightness logic
     const red = parseInt(normalized.slice(1, 3), 16);
@@ -159,6 +162,9 @@ export function applyThemeColor(themeColor: string): void {
     root.style.setProperty("--chart-primary", `${h} ${Math.min(100, s)}% ${Math.max(32, l)}%`);
     root.style.setProperty("--theme-primary-hex", normalized);
     root.style.setProperty("--theme-primary-rgb", `${red}, ${green}, ${blue}`);
+    root.style.setProperty("--focus-ring", `rgba(${red}, ${green}, ${blue}, 0.5)`);
+    root.style.setProperty("--focus-ring-shadow", `0 0 0 4px rgba(${red}, ${green}, ${blue}, 0.12)`);
+    root.style.setProperty("--input-focus-border", `rgba(${red}, ${green}, ${blue}, 0.4)`);
   }
 }
 

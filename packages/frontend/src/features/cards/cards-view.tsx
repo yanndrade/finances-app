@@ -211,6 +211,7 @@ export function CardsView({
             invoicesByCard={invoicesByCardId}
             onSelectCard={handleSelectCard}
             onOpenHistory={handleOpenHistory}
+            onOpenManageCards={!isMobileSurface ? () => setIsManageSheetOpen(true) : undefined}
           />
         </div>
       ) : (

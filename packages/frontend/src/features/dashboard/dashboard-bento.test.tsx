@@ -193,7 +193,7 @@ describe("DashboardBento", () => {
 
     // Hero metrics
     expect(screen.getByText(/entradas/i)).toBeInTheDocument();
-    expect(screen.getByText(/gasto do mês/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Gastos$/i)).toBeInTheDocument();
     expect(screen.getByText(/resultado/i)).toBeInTheDocument();
 
     // Metric strip

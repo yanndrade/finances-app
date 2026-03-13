@@ -57,7 +57,7 @@
         --secondary: 210 16% 92%;
         --secondary-foreground: 214 32% 18%;
         --muted: 210 18% 92%;
-        --muted-foreground: 215 13% 43%;
+        --muted-foreground: 215 16% 36%;
         --accent: 205 52% 93%;
         --accent-foreground: 214 32% 18%;
         --success: 160 84% 39%;
@@ -87,6 +87,14 @@
         --theme-primary-hex: #0f5ea8;
         --theme-primary-rgb: 15, 94, 168;
         --radius: 0.75rem;
+        /* Derived surface tokens */
+        --panel-border: hsl(214 20% 88%);
+        --panel-shadow: 0 1px 3px rgba(30, 41, 59, 0.06), 0 4px 12px rgba(30, 41, 59, 0.04);
+        --focus-ring: rgba(15, 94, 168, 0.5);
+        --focus-ring-shadow: 0 0 0 4px rgba(15, 94, 168, 0.12);
+        --input-focus-border: rgba(15, 94, 168, 0.4);
+        --text-positive: hsl(var(--finance-income));
+        --text-negative: hsl(var(--finance-expense));
         color-scheme: light;
     }
 
@@ -121,7 +129,7 @@
         --secondary: 218 14% 20%;
         --secondary-foreground: 210 20% 92%;
         --muted: 218 15% 18%;
-        --muted-foreground: 213 12% 66%;
+        --muted-foreground: 213 14% 72%;
         --accent: 214 18% 22%;
         --accent-foreground: 210 20% 92%;
         --success: 160 84% 39%;
@@ -141,6 +149,14 @@
         --chart-transfer: var(--finance-transfer);
         --theme-primary-hex: #76b2f7;
         --theme-primary-rgb: 118, 178, 247;
+        /* Derived surface tokens */
+        --panel-border: hsl(218 14% 28%);
+        --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.2);
+        --focus-ring: rgba(118, 178, 247, 0.5);
+        --focus-ring-shadow: 0 0 0 4px rgba(118, 178, 247, 0.15);
+        --input-focus-border: rgba(118, 178, 247, 0.45);
+        --text-positive: hsl(var(--success));
+        --text-negative: hsl(var(--danger));
         color-scheme: dark;
     }
 }
@@ -278,6 +294,7 @@ button {
     line-height: 1.1;
     letter-spacing: -0.03em;
     white-space: nowrap;
+    color: hsl(var(--primary));
 }
 
 .mobile-brand-mark {
@@ -338,9 +355,9 @@ button {
 .eyebrow {
     margin: 0;
     color: hsl(var(--primary));
-    font-size: 0.75rem;
-    font-weight: 900;
-    letter-spacing: 0.22em;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
 }
 
@@ -367,9 +384,9 @@ button {
 .nav-group__label {
     margin: 0 0 0.2rem;
     padding: 0 0.65rem;
-    font-size: 0.7rem;
-    font-weight: 800;
-    letter-spacing: 0.14em;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: hsl(var(--muted-foreground));
     white-space: nowrap;
@@ -412,13 +429,14 @@ button {
 }
 
 .nav-item.is-active {
-    background: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
+    background: rgba(var(--theme-primary-rgb), 0.1);
+    color: hsl(var(--primary));
+    box-shadow: inset 3px 0 0 hsl(var(--primary));
 }
 
 .nav-item.is-active:hover {
-    background: hsl(var(--primary));
-    filter: brightness(0.93);
+    background: rgba(var(--theme-primary-rgb), 0.14);
+    filter: none;
 }
 
 .nav-item--footer {
@@ -927,6 +945,7 @@ button {
 .account-card__balance,
 .stat-card__value {
     font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
 }
 
 .money-value {
@@ -972,12 +991,16 @@ button {
 .stat-card__label {
     margin: 0;
     color: hsl(var(--muted-foreground));
-    font-size: 0.92rem;
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: 1.3;
 }
 
 .stat-card__value {
     font-size: clamp(1.3rem, 1.8vw, 1.6rem);
+    font-weight: 800;
     line-height: 1.05;
+    letter-spacing: -0.025em;
 }
 
 .form-card {
@@ -1068,10 +1091,10 @@ button {
     display: grid;
     gap: 0.35rem;
     color: hsl(var(--muted-foreground));
-    font-size: 0.78rem;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-transform: none;
 }
 
 .quick-entry-field--value input {
@@ -1171,10 +1194,10 @@ button {
     display: grid;
     gap: 0.35rem;
     color: hsl(var(--muted-foreground));
-    font-size: 0.78rem;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-transform: none;
 }
 
 .checkbox-field {
@@ -1342,7 +1365,8 @@ select:focus {
 .account-card__balance {
     margin: 0;
     font-size: 1.5rem;
-    font-weight: 700;
+    font-weight: 800;
+    letter-spacing: -0.025em;
 }
 
 .status-badge {
@@ -1456,10 +1480,10 @@ select:focus {
 
 .data-table th {
     color: hsl(var(--muted-foreground));
-    font-size: 0.76rem;
-    font-weight: 900;
+    font-size: 0.78rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.08em;
 }
 
 .table-sort-button {
@@ -1645,14 +1669,18 @@ select:focus {
 .health-card__label {
     margin: 0;
     color: hsl(var(--muted-foreground));
-    font-size: 0.92rem;
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: 1.3;
 }
 
 .health-card__value {
     font-size: clamp(1.8rem, 3vw, 2.6rem);
+    font-weight: 800;
     line-height: 1;
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: -0.03em;
 }
 
 .health-card__hint {
@@ -1725,13 +1753,18 @@ select:focus {
 
 .cashflow-item__label {
     color: hsl(var(--muted-foreground));
-    font-size: 0.875rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1.3;
 }
 
 .cashflow-item__value {
     font-size: clamp(1.15rem, 1.6vw, 1.5rem);
+    font-weight: 800;
     line-height: 1.1;
     font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: -0.02em;
 }
 
 .cashflow-item__value--positive {
@@ -2317,8 +2350,9 @@ select:focus {
 }
 
 .nav-item.is-active {
-    background: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
+    background: rgba(var(--theme-primary-rgb), 0.1);
+    color: hsl(var(--primary));
+    box-shadow: inset 3px 0 0 hsl(var(--primary));
 }
 
 .context-panel,
@@ -2575,6 +2609,7 @@ select:focus,
 
 .ui-density--dense .stat-card__value {
     font-size: clamp(1.1rem, 1.5vw, 1.3rem);
+    letter-spacing: -0.02em;
 }
 
 .ui-density--dense .section-title {
@@ -3116,6 +3151,12 @@ select:focus,
 
 .dark .finance-acrylic-surface {
     background: hsl(var(--surface));
+}
+
+.dark .nav-item.is-active {
+    background: rgba(var(--theme-primary-rgb), 0.14);
+    color: hsl(var(--primary));
+    box-shadow: inset 3px 0 0 hsl(var(--primary));
 }
 
 /* Section title */

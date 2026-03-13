@@ -1024,6 +1024,7 @@ export function App() {
             month={selectedMonth}
             refreshKey={refreshKey}
             onError={(message) => showToast("error", message)}
+            onOpenQuickAdd={() => openQuickAdd("expense")}
           />
         ) : null}
 

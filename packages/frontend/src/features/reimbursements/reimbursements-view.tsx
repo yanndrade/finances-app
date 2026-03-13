@@ -23,6 +23,7 @@ type ReimbursementsViewProps = {
   month: string;
   refreshKey?: number;
   onError?: (message: string) => void;
+  onOpenQuickAdd?: () => void;
 };
 
 const EMPTY_SUMMARY: ReimbursementSummary = {
@@ -40,6 +41,7 @@ export function ReimbursementsView({
   month,
   refreshKey,
   onError,
+  onOpenQuickAdd,
 }: ReimbursementsViewProps) {
   const isMobileSurface = surface === "mobile";
   const [reimbursements, setReimbursements] = useState<PendingReimbursementSummary[]>([]);
@@ -156,13 +158,12 @@ export function ReimbursementsView({
     <div className="space-y-6">
       <SummaryStrip summary={summary} loading={isSummaryLoading} />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <ReimbursementList
-          reimbursements={reimbursements}
-          loading={isListLoading}
-          onSelectReimbursement={handleSelectReimbursement}
-        />
-      </div>
+      <ReimbursementList
+        reimbursements={reimbursements}
+        loading={isListLoading}
+        onSelectReimbursement={handleSelectReimbursement}
+        onOpenQuickAdd={onOpenQuickAdd}
+      />
 
       <ReimbursementDrawer
         reimbursement={selectedReimbursement}

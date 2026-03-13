@@ -15,33 +15,35 @@ export function MonthSummary({ invoices, totalLimitCommitted }: MonthSummaryProp
     : 0;
 
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {/* Âncora principal: A pagar */}
-      <div className="col-span-1 flex items-center justify-between rounded-xl border border-border bg-surface px-5 py-3 shadow-sm gap-3 overflow-hidden">
-        <p className="text-[12px] font-semibold uppercase tracking-widest text-muted-foreground shrink-0">A pagar</p>
-        <p className="text-xl font-black tracking-tight text-foreground truncate tabular-nums">
+    <div className="flex items-baseline gap-6 pb-5 border-b border-border/40">
+      {/* Dominant: A pagar */}
+      <div className="flex flex-col gap-0.5">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">A pagar</p>
+        <p className="text-4xl font-black tracking-tight text-foreground tabular-nums">
           {formatCurrency(totalEmAberto)}
         </p>
       </div>
 
-      <div className="col-span-1 flex items-center justify-between rounded-xl border border-border bg-surface px-5 py-3 shadow-sm gap-3 overflow-hidden">
-        <p className="text-[12px] font-semibold uppercase tracking-widest text-muted-foreground shrink-0">Total do mês</p>
-        <p className="text-xl font-black tracking-tight text-foreground truncate tabular-nums">
-          {formatCurrency(totalFaturas)}
-        </p>
-      </div>
-
-      <div className="col-span-1 flex items-center justify-between rounded-xl border border-border bg-surface px-5 py-3 shadow-sm gap-3 overflow-hidden">
-        <p className="text-[12px] font-semibold uppercase tracking-widest text-muted-foreground shrink-0">Já pago</p>
-        <div className="text-right min-w-0">
-          <p className="text-xl font-black tracking-tight text-muted-foreground truncate tabular-nums">
-            {formatCurrency(totalPago)}
+      {/* Supporting: total + pago — inline, subordinate */}
+      <div className="flex gap-6 ml-auto">
+        <div className="flex flex-col gap-0.5">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Total do mês</p>
+          <p className="text-lg font-bold text-foreground tabular-nums">
+            {formatCurrency(totalFaturas)}
           </p>
-          {totalFaturas > 0 && (
-            <p className="text-[12px] font-semibold text-muted-foreground">
-              {Math.round((totalPago / totalFaturas) * 100)}% do total
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Já pago</p>
+          <div>
+            <p className="text-lg font-bold text-muted-foreground tabular-nums">
+              {formatCurrency(totalPago)}
             </p>
-          )}
+            {totalFaturas > 0 && (
+              <p className="text-[11px] text-muted-foreground/60">
+                {Math.round((totalPago / totalFaturas) * 100)}%
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
