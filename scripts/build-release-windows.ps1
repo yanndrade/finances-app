@@ -67,6 +67,7 @@ function Invoke-CodeSign {
     if ($LASTEXITCODE -ne 0) {
         if ($isSelfSigned) {
             Write-Warning "signtool verify failed for $ArtifactPath because the certificate is self-signed and not trusted on the runner. Signature creation succeeded; skipping trust verification for test certificates."
+            $global:LASTEXITCODE = 0
         }
         else {
             throw "signtool verify failed for $ArtifactPath (exit code $LASTEXITCODE)"
@@ -212,3 +213,4 @@ if ($shouldSign) {
 }
 
 Write-Host "Windows release build completed."
+$global:LASTEXITCODE = 0
