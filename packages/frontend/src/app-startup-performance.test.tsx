@@ -69,7 +69,6 @@ describe("App startup performance", () => {
       'import { QuickAddComposer } from "./components/quick-add-composer";',
     );
     expect(tailwindConfigSource).toContain('"!./src/**/node_modules/**"');
-    expect(tailwindConfigSource).toContain('"!./src/my-app/**"');
 
     await act(async () => {
       render(<App />);

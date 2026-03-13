@@ -5,7 +5,6 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
     "!./src/**/node_modules/**",
-    "!./src/my-app/**",
   ],
   theme: {
     extend: {
