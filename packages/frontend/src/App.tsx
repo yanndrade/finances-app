@@ -1207,11 +1207,11 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
     return (
       <div className="space-y-8" aria-hidden="true">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <p className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-300">
+          <p className="text-[12px] font-black uppercase tracking-[0.2em] text-muted-foreground/50">
             Carregando informações...
           </p>
-          <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
-          <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
+          <div className="h-32 rounded-[2rem] bg-muted animate-pulse" />
+          <div className="h-32 rounded-[2rem] bg-muted animate-pulse" />
         </div>
       </div>
     );
@@ -1221,7 +1221,7 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
     return (
       <section aria-label="Contas e saldos" className="panel-card">
         <div
-          className="h-5 w-48 rounded-full bg-slate-200 animate-pulse"
+          className="h-5 w-48 rounded-full bg-muted animate-pulse"
           aria-hidden="true"
         />
       </section>
@@ -1232,7 +1232,7 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
     return (
       <section aria-label="Historico e filtros" className="panel-card">
         <div
-          className="h-5 w-56 rounded-full bg-slate-200 animate-pulse"
+          className="h-5 w-56 rounded-full bg-muted animate-pulse"
           aria-hidden="true"
         />
       </section>
@@ -1240,8 +1240,8 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
   }
 
   return (
-    <div className="rounded-[2rem] bg-white p-8 shadow-sm" aria-hidden="true">
-      <div className="h-5 w-40 rounded-full bg-slate-200 animate-pulse" />
+    <div className="rounded-[2rem] bg-surface p-8 shadow-sm" aria-hidden="true">
+      <div className="h-5 w-40 rounded-full bg-muted animate-pulse" />
     </div>
   );
 }

@@ -33,6 +33,7 @@ type DashboardViewProps = {
     month?: string,
   ) => void;
   onOpenQuickAdd: () => void;
+  onRetry?: () => void;
   uiDensity: UiDensity;
 };
 
@@ -51,6 +52,7 @@ export function DashboardView({
   onNavigate,
   onOpenLedgerFiltered,
   onOpenQuickAdd,
+  onRetry,
   uiDensity,
 }: DashboardViewProps) {
   if (surface === "mobile") {
@@ -75,15 +77,29 @@ export function DashboardView({
     >
       {loading && dashboard === null ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="h-32 bg-slate-200 animate-pulse rounded-[2rem]" />
-          <div className="h-32 bg-slate-200 animate-pulse rounded-[2rem]" />
-          <div className="h-32 bg-slate-200 animate-pulse rounded-[2rem]" />
+          <div className="h-32 bg-muted animate-pulse rounded-[2rem]" />
+          <div className="h-32 bg-muted animate-pulse rounded-[2rem]" />
+          <div className="h-32 bg-muted animate-pulse rounded-[2rem]" />
         </div>
       ) : null}
 
       {!loading && dashboard === null ? (
-        <div className="p-12 text-center bg-white rounded-[2rem] border-none shadow-sm">
-          <p className="text-slate-500 font-medium">Nao foi possivel carregar o dashboard.</p>
+        <div className="p-12 text-center bg-surface rounded-[2rem] border border-border/40 shadow-sm">
+          <p className="text-sm font-medium text-foreground mb-1">
+            Não foi possível carregar o dashboard.
+          </p>
+          <p className="text-xs text-muted-foreground mb-4">
+            Verifique a conexão com o servidor e tente novamente.
+          </p>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+            >
+              Tentar novamente
+            </button>
+          ) : null}
         </div>
       ) : null}
 

@@ -193,10 +193,12 @@ export function formatShortDate(isoOrDateValue: string): string {
   const normalized = isoOrDateValue.includes("T")
     ? isoOrDateValue
     : `${isoOrDateValue}T12:00:00Z`;
+  const date = new Date(normalized);
+  if (isNaN(date.getTime())) return isoOrDateValue;
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
-  }).format(new Date(normalized));
+  }).format(date);
 }
 
 export function humanizeLedgerId(
