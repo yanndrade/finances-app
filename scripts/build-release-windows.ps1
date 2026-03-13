@@ -56,8 +56,11 @@ function Invoke-CodeSign {
         throw "signtool sign failed for $ArtifactPath (exit code $LASTEXITCODE)"
     }
 
-    $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
-    $certificate.Import($CertificatePath, $CertificatePassword, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet)
+    $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
+        $CertificatePath,
+        $CertificatePassword,
+        [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet
+    )
     $isSelfSigned = $certificate.Subject -eq $certificate.Issuer
 
     & $SignToolPath verify /pa $ArtifactPath
