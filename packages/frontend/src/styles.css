@@ -14,6 +14,17 @@
     }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 @layer base {
     :root {
         --background: 210 22% 96%;
@@ -204,18 +215,7 @@ button {
     overflow-y: auto;
     overflow-x: hidden;
     border-right: 1px solid rgba(83, 106, 131, 0.16);
-    background:
-        linear-gradient(
-            180deg,
-            rgba(255, 255, 255, 0.78),
-            rgba(246, 250, 255, 0.74)
-        ),
-        linear-gradient(
-            140deg,
-            rgba(var(--theme-primary-rgb), 0.16),
-            rgba(var(--theme-primary-rgb), 0.05)
-        );
-    backdrop-filter: blur(22px) saturate(1.2);
+    background: hsl(var(--surface));
     transition: width 220ms ease;
     width: 100%;
 }
@@ -411,12 +411,12 @@ button {
 }
 
 .nav-item.is-active {
-    background: linear-gradient(145deg, hsl(var(--primary)), hsl(var(--primary-accent)));
-    color: #ffffff;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
 }
 
 .nav-item.is-active:hover {
-    background: linear-gradient(145deg, hsl(var(--primary)), hsl(var(--primary-accent)));
+    background: hsl(var(--primary));
     filter: brightness(0.93);
 }
 
@@ -652,8 +652,8 @@ button {
 }
 
 .mobile-nav__item.is-active {
-    background: rgba(130, 56, 179, 0.14);
-    color: #3d0066;
+    background: rgba(var(--theme-primary-rgb), 0.12);
+    color: hsl(var(--primary));
 }
 
 .mobile-nav__icon {
@@ -1963,11 +1963,11 @@ select:focus {
 
 /* — Text Utilities — */
 .text-positive {
-    color: #059669;
+    color: var(--text-positive);
 }
 
 .text-negative {
-    color: #e11d48;
+    color: var(--text-negative);
 }
 
 /* — Skeleton Loading — */
@@ -2190,7 +2190,7 @@ select:focus {
     padding: 1rem;
     background: transparent;
     border: none;
-    color: #2b1d3d;
+    color: hsl(var(--foreground));
     font-weight: 700;
     font-size: 0.95rem;
     cursor: pointer;
@@ -2198,11 +2198,11 @@ select:focus {
 }
 
 .accordion-trigger:hover {
-    background: rgba(111, 71, 164, 0.05);
+    background: rgba(var(--theme-primary-rgb), 0.05);
 }
 
 .accordion-icon {
-    color: #6a5f7e;
+    color: hsl(var(--muted-foreground));
     transition: transform 0.2s ease;
 }
 
@@ -2214,12 +2214,12 @@ select:focus {
     overflow: hidden;
     padding: 0;
     transition: all 0.3s ease;
-    background: rgba(255, 255, 255, 0.3);
+    background: transparent;
 }
 
 .accordion-content-inner {
     padding: 1rem;
-    border-top: 1px solid rgba(111, 71, 164, 0.06);
+    border-top: 1px solid hsl(var(--border));
 }
 
 /* Progress */
@@ -2228,14 +2228,14 @@ select:focus {
     width: 100%;
     overflow: hidden;
     border-radius: 999px;
-    background: rgba(111, 71, 164, 0.12);
+    background: hsl(var(--muted));
     margin-top: 0.5rem;
 }
 
 .progress-indicator {
     height: 100%;
     width: 100%;
-    background: linear-gradient(135deg, #3d0066, #8238b3);
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-accent)));
     transition: transform 0.4s ease-out;
 }
 
@@ -2547,6 +2547,10 @@ select:focus,
     padding: 0.9rem;
 }
 
+/* ==========================================================================
+   UI Density — Dense
+   ========================================================================== */
+
 .ui-density--dense .sidebar {
     padding: 1rem 0.8rem 0.9rem;
 }
@@ -2582,17 +2586,17 @@ select:focus,
 
 .ui-density--dense .app-main {
     width: min(100%, 1820px);
-    padding: 1.05rem 1.2rem 1.4rem;
+    padding: 0.75rem 1.5rem 1.5rem;
 }
 
 .ui-density--dense .page-header {
-    gap: 1rem;
-    margin-bottom: 0.9rem;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
 }
 
 .ui-density--dense .page-title {
     margin: 0;
-    font-size: clamp(2rem, 3vw, 2.7rem);
+    font-size: clamp(1.5rem, 2.5vw, 2rem);
 }
 
 .ui-density--dense .page-body,
@@ -2607,13 +2611,23 @@ select:focus,
 .ui-density--dense .ledger-header,
 .ui-density--dense .dashboard-list,
 .ui-density--dense .review-list {
-    gap: 0.8rem;
+    gap: 0.75rem;
 }
 
 .ui-density--dense .panel-card,
+.ui-density--dense .finance-card,
 .ui-density--dense .hero-panel {
     padding: 1rem;
     border-radius: 1.25rem;
+}
+
+.ui-density--dense .dashboard-kpi-grid {
+    gap: 0.75rem;
+}
+
+.ui-density--dense .dashboard-workbench,
+.ui-density--dense .investments-workbench {
+    gap: 0.75rem;
 }
 
 .ui-density--dense .panel-card--nested,
@@ -2624,31 +2638,20 @@ select:focus,
 .ui-density--dense .review-item,
 .ui-density--dense .invoice-item-row,
 .ui-density--dense .trend-panel {
-    padding: 0.82rem;
+    padding: 0.75rem;
     border-radius: 1rem;
+    gap: 0.25rem;
+}
+
+.ui-density--dense .stat-card__value {
+    font-size: clamp(1.1rem, 1.5vw, 1.3rem);
 }
 
 .ui-density--dense .section-title {
     font-size: clamp(1.2rem, 1.5vw, 1.45rem);
 }
 
-@media (min-width: 1536px) {
-    .reports-workbench {
-        display: grid;
-        grid-template-columns: minmax(18rem, 21rem) minmax(0, 1fr);
-        align-items: start;
-        gap: 1.25rem;
-    }
-
-    @media (min-width: 1536px) {
-    .reports-workbench {
-        display: grid;
-        grid-template-columns: minmax(18rem, 21rem) minmax(0, 1fr);
-        align-items: start;
-        gap: 1.25rem;
-    }
-
-    .reports-workbench > * {
+.reports-workbench > * {
         min-width: 0;
     }
 
@@ -2682,55 +2685,6 @@ select:focus,
     .dashboard-support-grid {
         grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.85fr);
     }
-}
-
-/* =====================================
-   UI Density Overrides
-   ===================================== */
-
-.ui-density--dense .app-main {
-    padding: 0.75rem 1.5rem 1.5rem;
-}
-
-.ui-density--dense .page-header {
-    margin-bottom: 0.75rem;
-    gap: 0.75rem;
-}
-
-.ui-density--dense .page-title {
-    font-size: clamp(1.5rem, 2.5vw, 2rem);
-}
-
-.ui-density--dense .page-copy {
-    font-size: 0.92rem;
-}
-
-.ui-density--dense .dashboard-workbench,
-.ui-density--dense .investments-workbench {
-    gap: 0.75rem;
-}
-
-.ui-density--dense .finance-card,
-.ui-density--dense .panel-card {
-    padding: 1rem;
-    border-radius: 1.25rem;
-}
-
-.ui-density--dense .dashboard-kpi-grid {
-    gap: 0.75rem;
-}
-
-.ui-density--dense .page-body {
-    gap: 0.75rem;
-}
-
-.ui-density--dense .stat-card {
-    padding: 0.75rem;
-    gap: 0.25rem;
-}
-
-.ui-density--dense .stat-card__value {
-    font-size: clamp(1.1rem, 1.5vw, 1.3rem);
 }
 
 /* Settings — redesign */

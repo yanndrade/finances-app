@@ -1109,7 +1109,7 @@ export function TransactionsView({
                     {uiDensity !== "dense" && (
                       <td>{formatPaymentMethod(transaction.payment_method)}</td>
                     )}
-                    <td>{transaction.person_id?.trim() || "--"}</td>
+                    <td>{transaction.person_id ? formatPersonLabel(transaction.person_id) : "--"}</td>
                     <td>{formatTransactionType(transaction.type)}</td>
                     <td>
                       <span className={`status-badge status-badge--${transaction.status}`}>
@@ -1418,7 +1418,9 @@ function formatLedgerEntity(value: string, accounts: AccountSummary[]): string {
 }
 
 function toCents(rawValue: string): number {
-  return Math.round(Number(rawValue.replace(",", ".")) * 100);
+  const parsed = Number(rawValue.replace(",", "."));
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * 100);
 }
 
 function defaultSortDirection(column: LedgerSortColumn): LedgerSortDirection {
@@ -1604,4 +1606,11 @@ function DetailItem({ label, value }: { label: string; value: string }) {
       <p className="text-sm font-semibold text-slate-800">{value}</p>
     </div>
   );
+
+function formatPersonLabel(personId: string): string {
+  const trimmed = personId.trim();
+  if (!trimmed) return "--";
+  const colonIdx = trimmed.indexOf(":");
+  return colonIdx >= 0 ? trimmed.slice(colonIdx + 1).trim() || trimmed : trimmed;
+}
 }
