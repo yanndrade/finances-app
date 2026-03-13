@@ -47,7 +47,7 @@ export function MonthMap({ dashboard, uiDensity }: MonthMapProps) {
       >
         {/* Top: 3 Main Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 min-w-0">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
               Entradas
             </span>
@@ -57,7 +57,7 @@ export function MonthMap({ dashboard, uiDensity }: MonthMapProps) {
             />
           </div>
 
-          <div className="flex flex-col gap-1 md:border-l border-slate-100 md:pl-6">
+          <div className="flex flex-col gap-1 md:border-l border-slate-100 md:pl-6 min-w-0">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
               Gasto do mês{" "}
               <span className="text-[12px] text-slate-400 normal-case ml-1 font-normal">
@@ -70,7 +70,7 @@ export function MonthMap({ dashboard, uiDensity }: MonthMapProps) {
             />
           </div>
 
-          <div className="flex flex-col gap-1 md:border-l border-slate-100 md:pl-6">
+          <div className="flex flex-col gap-1 md:border-l border-slate-100 md:pl-6 min-w-0">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
               Resultado
               {isPositive ? (

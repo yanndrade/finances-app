@@ -165,7 +165,7 @@ export function InvestmentGoal({
         </div>
 
         <div className="w-full flex justify-between items-center px-4 mb-6 text-sm">
-          <div className="flex flex-col">
+          <div className="flex flex-col min-w-0">
             <span className="text-xs text-slate-500 font-medium">
               Meta do mês
             </span>
@@ -174,7 +174,7 @@ export function InvestmentGoal({
               className="font-bold text-slate-800"
             />
           </div>
-          <div className="flex flex-col text-right">
+          <div className="flex flex-col text-right min-w-0">
             <span className="text-xs text-slate-500 font-medium">Falta</span>
             <MoneyValue
               value={remaining}

@@ -271,13 +271,26 @@ export function HistoryPage({
           </span>
         </div>
 
-        <MovementLedger
-          movements={movementPage.items}
-          accounts={accounts}
-          cards={cards}
-          selectedMovementId={selectedMovement?.movement_id ?? null}
-          onSelectMovement={handleSelectMovement}
-        />
+        {isLoading && movementPage.items.length === 0 ? (
+          <div aria-hidden="true" className="flex flex-col divide-y divide-border/40">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3">
+                <div className="h-4 w-10 rounded bg-muted animate-pulse shrink-0" />
+                <div className="h-4 flex-1 rounded bg-muted animate-pulse" />
+                <div className="h-4 w-24 rounded bg-muted animate-pulse shrink-0 hidden sm:block" />
+                <div className="h-4 w-28 rounded bg-muted animate-pulse shrink-0" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <MovementLedger
+            movements={movementPage.items}
+            accounts={accounts}
+            cards={cards}
+            selectedMovementId={selectedMovement?.movement_id ?? null}
+            onSelectMovement={handleSelectMovement}
+          />
+        )}
 
         {loadError && !isLoading ? (
           <div
