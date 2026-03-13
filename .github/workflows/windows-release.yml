@@ -2,14 +2,15 @@ name: windows-release
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
+    inputs:
+      version:
+        description: "Versao da release sem o prefixo v (ex: 0.1.1)"
+        required: true
+        type: string
+      release_name:
+        description: "Nome opcional da release"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -20,6 +21,8 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: "1"
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_TAG: v${{ inputs.version }}
       WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
       WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
       WINDOWS_SIGN_TIMESTAMP_URL: ${{ secrets.WINDOWS_SIGN_TIMESTAMP_URL }}
@@ -54,8 +57,7 @@ jobs:
           workspaces: |
             packages/desktop/src-tauri -> target
 
-      - name: Enforce signing secrets on tag releases
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Enforce signing secrets on manual releases
         shell: pwsh
         run: |
           $cert = $env:WINDOWS_CERT_PFX_BASE64
@@ -66,7 +68,7 @@ jobs:
 
       - name: Prepare signing certificate
         id: signing
-        if: ${{ github.event_name != 'pull_request' && env.WINDOWS_CERT_PFX_BASE64 != '' && env.WINDOWS_CERT_PASSWORD != '' }}
+        if: ${{ env.WINDOWS_CERT_PFX_BASE64 != '' && env.WINDOWS_CERT_PASSWORD != '' }}
         shell: pwsh
         run: |
           $certPath = Join-Path $env:RUNNER_TEMP "windows-signing-certificate.pfx"
@@ -91,6 +93,30 @@ jobs:
             packages/desktop/src-tauri/target/release/bundle/msi/*.zip
           if-no-files-found: error
 
+      - name: Resolve release metadata
+        id: release_meta
+        shell: pwsh
+        run: |
+          $releaseName = "${{ inputs.release_name }}"
+          if ([string]::IsNullOrWhiteSpace($releaseName)) {
+            $releaseName = "Windows Release $env:RELEASE_TAG"
+          }
+          "release_name=$releaseName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Create release tag
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          $existingTag = git ls-remote --tags origin $env:RELEASE_TAG
+          if (-not [string]::IsNullOrWhiteSpace($existingTag)) {
+            throw "Tag $env:RELEASE_TAG already exists on origin. Use a new version."
+          }
+
+          git tag $env:RELEASE_TAG $env:GITHUB_SHA
+          git push origin refs/tags/$env:RELEASE_TAG
+
       - name: Cleanup signing certificate
         if: always() && steps.signing.outputs.cert_path != ''
         shell: pwsh
@@ -98,9 +124,11 @@ jobs:
           Remove-Item -Path "${{ steps.signing.outputs.cert_path }}" -Force -ErrorAction SilentlyContinue
 
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ steps.release_meta.outputs.release_name }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |
             packages/desktop/src-tauri/target/release/bundle/msi/*.msi
