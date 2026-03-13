@@ -74,6 +74,6 @@ describe("App startup performance", () => {
       render(<App />);
     });
 
-    expect(screen.getByText("Versão 0.6")).toBeInTheDocument();
+    expect(screen.getByText("MeuCofri")).toBeInTheDocument();
   });
 });

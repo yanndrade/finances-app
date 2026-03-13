@@ -8,8 +8,10 @@ function renderSettingsView(overrides?: Partial<ComponentProps<typeof SettingsVi
   return render(
     <SettingsView
       isSubmitting={false}
+      themeColor="#0f5ea8"
       onExportBackup={vi.fn()}
       onResetApplicationData={vi.fn(() => Promise.resolve())}
+      onThemeColorChange={vi.fn()}
       securityState={{
         password_configured: true,
         is_locked: false,
@@ -55,6 +57,14 @@ describe("SettingsView", () => {
     expect(screen.getByText(/produtividade/i)).toBeInTheDocument();
     expect(screen.getByText(/ctrl\+n/i)).toBeInTheDocument();
     expect(screen.getByText(/ctrl\+k/i)).toBeInTheDocument();
+  });
+
+  it("allows changing the primary theme color", async () => {
+    const onThemeColorChange = vi.fn();
+    renderSettingsView({ onThemeColorChange });
+
+    await userEvent.click(screen.getByRole("listitem", { name: /verde petroleo/i }));
+    expect(onThemeColorChange).toHaveBeenCalledWith("#0f766e");
   });
 
   it("renders desktop section and toggles autostart", async () => {

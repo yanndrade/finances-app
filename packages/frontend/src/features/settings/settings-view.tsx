@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  Palette,
   Download,
   Keyboard,
   Laptop,
@@ -20,11 +21,17 @@ import type {
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Separator } from "../../components/ui/separator";
+import {
+  normalizeThemeColor,
+  THEME_PRESET_OPTIONS,
+} from "../../lib/theme";
 
 type SettingsViewProps = {
   isSubmitting: boolean;
+  themeColor: string;
   onExportBackup: () => void;
   onResetApplicationData: () => Promise<void>;
+  onThemeColorChange: (color: string) => void;
   securityState: SecurityState | null;
   desktopAutostartEnabled: boolean;
   desktopAutostartLoading: boolean;
@@ -48,8 +55,10 @@ const PRODUCTIVITY_SHORTCUTS = [
 
 export function SettingsView({
   isSubmitting,
+  themeColor,
   onExportBackup,
   onResetApplicationData,
+  onThemeColorChange,
   securityState,
   desktopAutostartEnabled,
   desktopAutostartLoading,
@@ -75,6 +84,7 @@ export function SettingsView({
   const [isGeneratingPairToken, setIsGeneratingPairToken] = useState(false);
   const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
   const [pairingQrDataUrl, setPairingQrDataUrl] = useState<string | null>(null);
+  const normalizedThemeColor = normalizeThemeColor(themeColor);
 
   useEffect(() => {
     let active = true;
@@ -229,6 +239,81 @@ export function SettingsView({
                   <Download className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
                   Exportar JSON
                 </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <Separator />
+
+        <section className="settings-section" aria-labelledby="settings-theme-heading">
+          <header className="settings-section__header">
+            <div className="flex items-center gap-2">
+              <Palette className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <h3 id="settings-theme-heading" className="settings-section__title">
+                Aparencia
+              </h3>
+            </div>
+            <p className="settings-section__description">
+              Escolha a cor principal da aplicacao e salve a preferencia neste dispositivo.
+            </p>
+          </header>
+          <div className="settings-section__body">
+            <div className="settings-theme-presets" role="list" aria-label="Paleta de cores">
+              {THEME_PRESET_OPTIONS.map((option) => {
+                const isActive = normalizedThemeColor === option.value;
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="listitem"
+                    aria-label={option.label}
+                    className={`settings-theme-option${isActive ? " is-active" : ""}`}
+                    onClick={() => onThemeColorChange(option.value)}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="settings-theme-option__swatch"
+                      style={{ backgroundColor: option.value }}
+                    />
+                    <span className="settings-theme-option__content">
+                      <span className="settings-theme-option__label">{option.label}</span>
+                      <span className="settings-theme-option__hint">{option.description}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="settings-action-item settings-action-item--stacked">
+              <div>
+                <p className="settings-action-item__label">Cor personalizada</p>
+                <p className="settings-action-item__hint">
+                  Use o seletor para definir qualquer cor principal.
+                </p>
+              </div>
+              <div className="settings-theme-customizer">
+                <label className="settings-color-picker" htmlFor="theme-color-picker">
+                  <span
+                    aria-hidden="true"
+                    className="settings-color-picker__preview"
+                    style={{ backgroundColor: normalizedThemeColor }}
+                  />
+                  <input
+                    id="theme-color-picker"
+                    aria-label="Selecionar cor principal"
+                    type="color"
+                    value={normalizedThemeColor}
+                    onChange={(event) => onThemeColorChange(event.target.value)}
+                  />
+                </label>
+                <Input
+                  aria-label="Hex da cor principal"
+                  value={normalizedThemeColor}
+                  onChange={(event) => onThemeColorChange(event.target.value)}
+                  placeholder="#0f5ea8"
+                />
               </div>
             </div>
           </div>

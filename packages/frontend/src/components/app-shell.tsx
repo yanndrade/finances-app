@@ -100,7 +100,11 @@ export function AppShell({
         <main className="app-main app-main--mobile">
           <header className="page-header page-header--mobile">
             <div>
-              <p className="eyebrow">Versão 0.6</p>
+              <img
+                src="/meucofri-logo.png"
+                alt="MeuCofri"
+                className="mobile-brand-mark"
+              />
               <h1 className="page-title">{title}</h1>
               <p className="page-copy">{description}</p>
             </div>
@@ -156,7 +160,6 @@ export function AppShell({
         <main className="app-main">
           <header className="page-header">
             <div className="page-header__intro">
-              <p className="eyebrow">Versão 0.6</p>
               <h1 className="page-title">{title}</h1>
               <p className="page-copy">{description}</p>
             </div>

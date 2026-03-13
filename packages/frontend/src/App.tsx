@@ -78,6 +78,11 @@ import {
   type UiDensity,
 } from "./lib/ui-density";
 import {
+  APP_THEME_STORAGE_KEY,
+  applyThemeColor,
+  readStoredThemeColor,
+} from "./lib/theme";
+import {
   getAutostartEnabled,
   listenDesktopEvent,
   setAutostartEnabled,
@@ -218,6 +223,7 @@ export function App() {
   const [uiDensity, setUiDensity] = useState<UiDensity>(() =>
     readStoredUiDensity(),
   );
+  const [themeColor, setThemeColor] = useState(() => readStoredThemeColor());
   const [securityState, setSecurityState] = useState<SecurityState | null>(null);
   const [lanSecurityState, setLanSecurityState] =
     useState<LanSecurityState | null>(null);
@@ -266,6 +272,15 @@ export function App() {
   useEffect(() => {
     storeCategoryOptions(categoryOptions);
   }, [categoryOptions]);
+
+  useEffect(() => {
+    applyThemeColor(themeColor);
+    try {
+      window.localStorage.setItem(APP_THEME_STORAGE_KEY, themeColor);
+    } catch {
+      // ignore preference persistence failures
+    }
+  }, [themeColor]);
 
   useEffect(() => {
     if (toast === null) {
@@ -1042,10 +1057,12 @@ export function App() {
         {activeView === "settings" ? (
           <SettingsView
             isSubmitting={isSubmitting}
+            themeColor={themeColor}
             onExportBackup={() => {
               void handleExportBackup();
             }}
             onResetApplicationData={handleResetAllData}
+            onThemeColorChange={setThemeColor}
             securityState={securityState}
             desktopAutostartEnabled={desktopAutostartEnabled}
             desktopAutostartLoading={desktopAutostartLoading}

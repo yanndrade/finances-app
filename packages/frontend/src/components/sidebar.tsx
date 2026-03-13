@@ -149,12 +149,19 @@ export function Sidebar({
     >
       {/* Header: brand + collapse toggle */}
       <div className="sidebar-header">
-        {!isCollapsed && (
-          <div className="brand-block">
-            <p className="eyebrow">Finanças</p>
-            <strong className="brand-title">Controle pessoal</strong>
-          </div>
-        )}
+        <div className="brand-block">
+          <img
+            src="/meucofri-logo.png"
+            alt="MeuCofri"
+            className="brand-mark"
+          />
+          {!isCollapsed && (
+            <div className="brand-text">
+              <strong className="brand-title">MeuCofri</strong>
+              <p className="sidebar-copy">Controle pessoal</p>
+            </div>
+          )}
+        </div>
         <button
           aria-label={isCollapsed ? "Expandir menu" : "Recolher menu"}
           className="sidebar-toggle"

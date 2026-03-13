@@ -1,6 +1,6 @@
 # Desktop
 
-Desktop shell for the finances app (Tauri v2).
+Desktop shell for MeuCofri (Tauri v2).
 
 - `src-tauri/`: Rust host runtime, tray behavior, backend lifecycle, and autostart commands
 - `icons/`: desktop packaging icon assets
