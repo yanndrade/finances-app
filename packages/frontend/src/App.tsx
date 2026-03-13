@@ -4,6 +4,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "./components/app-shell";
 import { CommandPalette } from "./components/command-palette";
+import { ErrorBoundary } from "./components/error-boundary";
 import type { QuickAddPreset } from "./components/quick-add-composer";
 import type { AppView } from "./components/sidebar";
 import { ToastViewport, type AppToast } from "./components/toast-viewport";
@@ -79,8 +80,10 @@ import {
 } from "./lib/ui-density";
 import {
   APP_THEME_STORAGE_KEY,
-  applyThemeColor,
+  APP_DARK_MODE_STORAGE_KEY,
+  applyDarkMode,
   readStoredThemeColor,
+  readStoredDarkMode,
 } from "./lib/theme";
 import {
   getAutostartEnabled,
@@ -89,6 +92,7 @@ import {
   setAutostartEnabled,
 } from "./lib/desktop";
 import { useMediaQuery } from "./lib/use-media-query";
+import { getErrorMessage } from "./lib/utils";
 
 const QuickAddComposer = lazy(async () => {
   const module = await import("./components/quick-add-composer");
@@ -225,6 +229,7 @@ export function App() {
     readStoredUiDensity(),
   );
   const [themeColor, setThemeColor] = useState(() => readStoredThemeColor());
+  const [darkMode, setDarkMode] = useState(() => readStoredDarkMode());
   const [securityState, setSecurityState] = useState<SecurityState | null>(null);
   const [lanSecurityState, setLanSecurityState] =
     useState<LanSecurityState | null>(null);
@@ -278,13 +283,14 @@ export function App() {
   }, [categoryOptions]);
 
   useEffect(() => {
-    applyThemeColor(themeColor);
+    applyDarkMode(darkMode, themeColor);
     try {
       window.localStorage.setItem(APP_THEME_STORAGE_KEY, themeColor);
+      window.localStorage.setItem(APP_DARK_MODE_STORAGE_KEY, String(darkMode));
     } catch {
       // ignore preference persistence failures
     }
-  }, [themeColor]);
+  }, [themeColor, darkMode]);
 
   useEffect(() => {
     if (toast === null) {
@@ -954,8 +960,9 @@ export function App() {
       month={selectedMonth}
       onMonthChange={setSelectedMonth}
     >
-      <Suspense fallback={<ViewFallback activeView={activeView} />}>
-        {activeView === "dashboard" ? (
+      <ErrorBoundary>
+        <Suspense fallback={<ViewFallback activeView={activeView} />}>
+          {activeView === "dashboard" ? (
           <DashboardView
             surface={surface}
             accounts={accounts}
@@ -971,6 +978,7 @@ export function App() {
             onNavigate={setActiveView}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={() => openQuickAdd()}
+            onRetry={() => void refreshData({ month: selectedMonth })}
             transactions={transactions}
             uiDensity={uiDensity}
           />
@@ -1005,6 +1013,7 @@ export function App() {
             cards={cards}
             month={selectedMonth}
             refreshKey={refreshKey}
+            onError={(message) => showToast("error", message)}
           />
         ) : null}
 
@@ -1014,6 +1023,7 @@ export function App() {
             accounts={accounts}
             month={selectedMonth}
             refreshKey={refreshKey}
+            onError={(message) => showToast("error", message)}
           />
         ) : null}
 
@@ -1069,11 +1079,13 @@ export function App() {
           <SettingsView
             isSubmitting={isSubmitting}
             themeColor={themeColor}
+            darkMode={darkMode}
             onExportBackup={() => {
               void handleExportBackup();
             }}
             onResetApplicationData={handleResetAllData}
             onThemeColorChange={setThemeColor}
+            onDarkModeChange={setDarkMode}
             securityState={securityState}
             desktopAutostartEnabled={desktopAutostartEnabled}
             desktopAutostartLoading={desktopAutostartLoading}
@@ -1089,7 +1101,8 @@ export function App() {
             onRevokeLanDevice={handleRevokeLanDevice}
           />
         ) : null}
-      </Suspense>
+        </Suspense>
+      </ErrorBoundary>
 
       <ToastViewport onDismiss={() => setToast(null)} toast={toast} />
 
@@ -1168,9 +1181,14 @@ function LockOverlay({
   isSubmitting: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lock-overlay-title"
+    >
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <h2 className="text-lg font-bold text-slate-900">Aplicação bloqueada</h2>
+        <h2 id="lock-overlay-title" className="text-lg font-bold text-slate-900">Aplicação bloqueada</h2>
         <p className="mt-1 text-sm text-slate-600">
           Digite sua senha para continuar.
         </p>
@@ -1188,6 +1206,8 @@ function LockOverlay({
             onChange={(event) => onPasswordChange(event.target.value)}
             className="flex h-10 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
             placeholder="Senha"
+            // eslint-disable-next-line jsx-a11y/no-autofocus
+            autoFocus
           />
           <button
             type="submit"
@@ -1205,11 +1225,12 @@ function LockOverlay({
 function ViewFallback({ activeView }: { activeView: AppView }) {
   if (activeView === "dashboard") {
     return (
-      <div className="space-y-8" aria-hidden="true">
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <p className="text-[12px] font-black uppercase tracking-[0.2em] text-muted-foreground/50">
-            Carregando informações...
-          </p>
+      <div className="space-y-8">
+        <span role="status" aria-live="polite" className="sr-only">
+          Carregando informações...
+        </span>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3" aria-hidden="true">
+          <div className="h-32 rounded-[2rem] bg-muted animate-pulse" />
           <div className="h-32 rounded-[2rem] bg-muted animate-pulse" />
           <div className="h-32 rounded-[2rem] bg-muted animate-pulse" />
         </div>
@@ -1220,6 +1241,9 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
   if (activeView === "accounts") {
     return (
       <section aria-label="Contas e saldos" className="panel-card">
+        <span role="status" aria-live="polite" className="sr-only">
+          Carregando...
+        </span>
         <div
           className="h-5 w-48 rounded-full bg-muted animate-pulse"
           aria-hidden="true"
@@ -1230,7 +1254,10 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
 
   if (activeView === "transactions") {
     return (
-      <section aria-label="Historico e filtros" className="panel-card">
+      <section aria-label="Histórico e filtros" className="panel-card">
+        <span role="status" aria-live="polite" className="sr-only">
+          Carregando...
+        </span>
         <div
           className="h-5 w-56 rounded-full bg-muted animate-pulse"
           aria-hidden="true"
@@ -1240,16 +1267,12 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
   }
 
   return (
-    <div className="rounded-[2rem] bg-surface p-8 shadow-sm" aria-hidden="true">
-      <div className="h-5 w-40 rounded-full bg-muted animate-pulse" />
+    <div className="rounded-[2rem] bg-surface p-8 shadow-sm">
+      <span role="status" aria-live="polite" className="sr-only">
+        Carregando...
+      </span>
+      <div className="h-5 w-40 rounded-full bg-muted animate-pulse" aria-hidden="true" />
     </div>
   );
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Não foi possível concluir a operação.";
-}

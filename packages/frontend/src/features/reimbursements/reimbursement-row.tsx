@@ -64,7 +64,7 @@ export function ReimbursementRow({ reimbursement, onClick }: ReimbursementRowPro
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className={`truncate text-sm font-semibold ${isCanceled ? "text-slate-400 line-through" : "text-slate-800"}`}>
-            {reimbursement.person_id}
+            {reimbursement.person_id || "Pessoa não identificada"}
           </p>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${config.badgeClass}`}>
             {config.label}

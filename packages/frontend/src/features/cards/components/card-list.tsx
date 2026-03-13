@@ -36,8 +36,8 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
           >
             {/* Nome + ciclo — fixo */}
             <div className="w-40 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-slate-900">{card.name}</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="truncate text-sm font-bold text-slate-900">{card.name}</span>
                 {currentInvoice && renderStatusBadge(currentInvoice.status)}
               </div>
               <p className="mt-0.5 text-[13px] text-slate-400">

@@ -114,7 +114,7 @@ describe("api timestamp normalization", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/invoices/card-1%3A2026-04/payments");
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      id: "payment-1772539200000",
+      id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
       amount: 30_00,
       account_id: "acc-2",
       paid_at: "2026-03-20T12:00:00Z",

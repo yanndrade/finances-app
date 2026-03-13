@@ -14,6 +14,7 @@ import type { DashboardSummary, InvestmentOverview } from "../../lib/api";
 import type { UiDensity } from "../../lib/ui-density";
 import type { QuickAddPreset } from "../../components/quick-add-composer";
 import { cn } from "../../lib/utils";
+import { prefersReducedMotion } from "../../lib/motion";
 
 type InvestmentGoalProps = {
   dashboard: DashboardSummary;
@@ -142,6 +143,7 @@ export function InvestmentGoal({
               dataKey="value"
               startAngle={90}
               endAngle={-270}
+              isAnimationActive={!prefersReducedMotion()}
             >
               <Cell fill={theme.ring} stroke="none" />
               <Cell fill="hsl(var(--slate-100) / 0.8)" stroke="none" />

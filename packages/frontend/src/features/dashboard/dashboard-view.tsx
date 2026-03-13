@@ -166,7 +166,7 @@ function MobileDashboardHome({
             <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400 font-black">
               Saldo atual
             </p>
-            <p className="text-lg font-black text-slate-900">
+            <p className="text-lg font-black text-slate-900 truncate tabular-nums">
               {formatCurrency(dashboard.current_balance)}
             </p>
           </div>
@@ -174,7 +174,7 @@ function MobileDashboardHome({
             <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400 font-black">
               Fluxo liquido
             </p>
-            <p className="text-lg font-black text-slate-900">
+            <p className="text-lg font-black text-slate-900 truncate tabular-nums">
               {formatCurrency(dashboard.net_flow)}
             </p>
           </div>

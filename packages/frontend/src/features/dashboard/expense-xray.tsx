@@ -13,6 +13,7 @@ import { CHART_THEME } from "../../lib/chart-theme";
 import type { DashboardSummary, TransactionFilters } from "../../lib/api";
 import type { UiDensity } from "../../lib/ui-density";
 import { cn } from "../../lib/utils";
+import { prefersReducedMotion } from "../../lib/motion";
 
 type ExpenseXrayProps = {
   dashboard: DashboardSummary;
@@ -78,7 +79,7 @@ export function ExpenseXray({
             {/* Chart Side */}
             <div className="flex-shrink-0 flex flex-col items-center justify-center w-full md:w-auto">
               <div className="relative flex items-center justify-center">
-                <PieChart width={160} height={160}>
+                 <PieChart width={160} height={160}>
                   <Pie
                     data={categoryComposition}
                     cx="50%"
@@ -87,6 +88,7 @@ export function ExpenseXray({
                     outerRadius={76}
                     paddingAngle={2}
                     dataKey="total"
+                    isAnimationActive={!prefersReducedMotion()}
                   >
                     {categoryComposition.map((category, index) => (
                       <Cell

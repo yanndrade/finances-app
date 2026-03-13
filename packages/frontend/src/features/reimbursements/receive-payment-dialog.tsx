@@ -118,31 +118,33 @@ export function ReceivePaymentDialog({
         <DialogHeader>
           <DialogTitle>Registrar recebimento</DialogTitle>
           <DialogDescription>
-            {reimbursement.person_id} · {formatCurrency(outstanding)} pendente
+          {(reimbursement.person_id || "Pessoa não identificada")} · {formatCurrency(outstanding)} pendente
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           {/* Payment type toggle */}
-          <div className="flex gap-2">
+          <div className="flex gap-2" role="group" aria-label="Tipo de recebimento">
             <button
               type="button"
+              aria-pressed={!isPartial}
               onClick={() => setIsPartial(false)}
               className={`flex-1 rounded-lg border py-2 text-sm font-medium transition-colors ${
                 !isPartial
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-surface text-muted-foreground hover:bg-muted"
               }`}
             >
               Total ({formatCurrency(outstanding)})
             </button>
             <button
               type="button"
+              aria-pressed={isPartial}
               onClick={() => setIsPartial(true)}
               className={`flex-1 rounded-lg border py-2 text-sm font-medium transition-colors ${
                 isPartial
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-surface text-muted-foreground hover:bg-muted"
               }`}
             >
               Parcial
@@ -164,7 +166,7 @@ export function ReceivePaymentDialog({
                 className="h-9"
                 autoFocus
               />
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted-foreground">
                 Máximo: {formatCurrency(outstanding)}
               </p>
             </div>
@@ -203,7 +205,7 @@ export function ReceivePaymentDialog({
 
           {/* Error */}
           {error && (
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-sm text-destructive">{error}</p>
           )}
         </div>
 

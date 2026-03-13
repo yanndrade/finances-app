@@ -22,6 +22,7 @@ export function HistoryHeader({
           value={searchText}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Buscar movimentações..."
+          aria-label="Buscar movimentações"
           className={cn(
             "h-8 w-full rounded-lg border border-input bg-surface pl-8 pr-3 text-xs",
             "placeholder:text-muted-foreground/60 text-foreground",

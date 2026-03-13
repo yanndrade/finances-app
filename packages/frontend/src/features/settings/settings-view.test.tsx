@@ -9,9 +9,11 @@ function renderSettingsView(overrides?: Partial<ComponentProps<typeof SettingsVi
     <SettingsView
       isSubmitting={false}
       themeColor="#0f5ea8"
+      darkMode={false}
       onExportBackup={vi.fn()}
       onResetApplicationData={vi.fn(() => Promise.resolve())}
       onThemeColorChange={vi.fn()}
+      onDarkModeChange={vi.fn()}
       securityState={{
         password_configured: true,
         is_locked: false,
@@ -63,7 +65,7 @@ describe("SettingsView", () => {
     const onThemeColorChange = vi.fn();
     renderSettingsView({ onThemeColorChange });
 
-    await userEvent.click(screen.getByRole("listitem", { name: /verde petroleo/i }));
+    await userEvent.click(screen.getByRole("listitem", { name: /verde petr/i }));
     expect(onThemeColorChange).toHaveBeenCalledWith("#0f766e");
   });
 
@@ -146,5 +148,15 @@ describe("SettingsView", () => {
     renderSettingsView({ isSubmitting: true });
     expect(screen.getByRole("button", { name: /zerar tudo/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /exportar json/i })).toBeDisabled();
+  });
+
+  it("renders dark mode toggle and calls onDarkModeChange when clicked", async () => {
+    const onDarkModeChange = vi.fn();
+    renderSettingsView({ onDarkModeChange, darkMode: false });
+
+    const toggleBtn = screen.getByRole("button", { name: /escuro/i });
+    expect(toggleBtn).toBeInTheDocument();
+    await userEvent.click(toggleBtn);
+    expect(onDarkModeChange).toHaveBeenCalledWith(true);
   });
 });

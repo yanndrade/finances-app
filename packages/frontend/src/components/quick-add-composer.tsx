@@ -692,7 +692,7 @@ export function QuickAddComposer({
         }}
       />
       {validationErrors.amount && (
-        <p className="mt-1 text-xs font-medium text-rose-600">{validationErrors.amount}</p>
+        <p className="mt-1 text-xs font-medium text-danger">{validationErrors.amount}</p>
       )}
     </div>
   );
@@ -767,6 +767,7 @@ export function QuickAddComposer({
                       ? "Opcional"
                       : "Nome do gasto fixo"
             }
+            maxLength={300}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
@@ -893,6 +894,7 @@ export function QuickAddComposer({
                     id="quick-add-person"
                     className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
                     placeholder="Opcional — para rastrear reembolsos"
+                    maxLength={100}
                     value={personId}
                     onChange={(event) => setPersonId(event.target.value)}
                   />
@@ -961,6 +963,7 @@ export function QuickAddComposer({
                 id="quick-add-person-income"
                 className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
                 placeholder="Opcional"
+                maxLength={100}
                 value={personId}
                 onChange={(event) => setPersonId(event.target.value)}
               />
@@ -1059,7 +1062,7 @@ export function QuickAddComposer({
                 </select>
                 <FieldError message={validationErrors.accountId} />
               </div>
-              <div className="col-span-1 sm:col-span-2 rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+              <div className="col-span-1 sm:col-span-2 rounded-xl bg-accent px-4 py-3 text-sm font-medium text-accent-foreground">
                 Quitar saldo do cartão usando uma conta existente.
               </div>
               <div className="col-span-1 sm:col-span-2 space-y-2">
@@ -1317,7 +1320,7 @@ export function QuickAddComposer({
         )}
 
         <Button
-          disabled={isSubmitting || !amount}
+          disabled={isSubmitting || parseAmount(amount) <= 0}
           type="submit"
           size="lg"
           className={`rounded-xl px-8 shadow-lg ${activeTab.submitClass}`}
@@ -1383,7 +1386,7 @@ function FieldError({ message }: { message?: string }) {
     return null;
   }
 
-  return <p className="text-xs font-medium text-rose-600">{message}</p>;
+  return <p className="text-xs font-medium text-danger">{message}</p>;
 }
 
 function useMediaQuery(query: string): boolean {

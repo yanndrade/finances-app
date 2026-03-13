@@ -19,7 +19,7 @@ import {
   type UnifiedMovement,
 } from "../../lib/api";
 
-import { cn } from "../../lib/utils";
+import { cn, getErrorMessage } from "../../lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +29,7 @@ type HistoryPageProps = {
   cards: CardSummary[];
   month: string;
   refreshKey?: number;
+  onError?: (message: string) => void;
   className?: string;
 };
 
@@ -75,6 +76,7 @@ export function HistoryPage({
   cards,
   month,
   refreshKey,
+  onError,
   className,
 }: HistoryPageProps) {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -89,6 +91,7 @@ export function HistoryPage({
   const [movementPage, setMovementPage] = useState<MovementPage>(EMPTY_PAGE);
   const [summary, setSummary] = useState<MovementSummary>(EMPTY_SUMMARY);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
   // ── Derived filters ────────────────────────────────────────────────────────
@@ -109,15 +112,25 @@ export function HistoryPage({
   // ── Data fetching ──────────────────────────────────────────────────────────
 
   const loadMovements = useCallback(
-    async (filters: MovementFilters) => {
+    async (filters: MovementFilters, signal?: AbortSignal) => {
       setIsLoading(true);
+      setLoadError(null);
       try {
         const page = await fetchMovements(filters);
-        setMovementPage(page);
-      } catch {
-        setMovementPage(EMPTY_PAGE);
+        if (!signal?.aborted) {
+          setMovementPage(page);
+        }
+      } catch (err) {
+        if (!signal?.aborted) {
+          setMovementPage(EMPTY_PAGE);
+          setLoadError(
+            err instanceof Error ? err.message : "Não foi possível carregar as movimentações.",
+          );
+        }
       } finally {
-        setIsLoading(false);
+        if (!signal?.aborted) {
+          setIsLoading(false);
+        }
       }
     },
     [],
@@ -128,12 +141,13 @@ export function HistoryPage({
     try {
       const s = await fetchMovementsSummary(month);
       setSummary(s);
-    } catch {
+    } catch (err) {
       setSummary(EMPTY_SUMMARY);
+      onError?.(getErrorMessage(err));
     } finally {
       setSummaryLoading(false);
     }
-  }, []);
+  }, [onError]);
 
   // Load summary whenever the month changes
   useEffect(() => {
@@ -148,13 +162,17 @@ export function HistoryPage({
 
   // Load movements whenever any filter changes (debounced for text)
   useEffect(() => {
+    const controller = new AbortController();
     const handle = globalThis.setTimeout(
       () => {
-        void loadMovements(activeFilters);
+        void loadMovements(activeFilters, controller.signal);
       },
       searchText.trim() ? 300 : 0,
     );
-    return () => globalThis.clearTimeout(handle);
+    return () => {
+      globalThis.clearTimeout(handle);
+      controller.abort();
+    };
   }, [activeFilters, searchText, refreshKey, loadMovements]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -260,6 +278,15 @@ export function HistoryPage({
           selectedMovementId={selectedMovement?.movement_id ?? null}
           onSelectMovement={handleSelectMovement}
         />
+
+        {loadError && !isLoading ? (
+          <div
+            role="alert"
+            className="flex items-center gap-2 px-4 py-3 text-sm text-destructive border-t border-border/50"
+          >
+            <span>{loadError}</span>
+          </div>
+        ) : null}
 
         {/* Pagination hint */}
         {movementPage.total > movementPage.page_size && (
