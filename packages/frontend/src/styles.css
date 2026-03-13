@@ -2640,6 +2640,14 @@ select:focus,
         gap: 1.25rem;
     }
 
+    @media (min-width: 1536px) {
+    .reports-workbench {
+        display: grid;
+        grid-template-columns: minmax(18rem, 21rem) minmax(0, 1fr);
+        align-items: start;
+        gap: 1.25rem;
+    }
+
     .reports-workbench > * {
         min-width: 0;
     }
