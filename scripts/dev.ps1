@@ -4,6 +4,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $frontendPath = Join-Path $repoRoot "packages\frontend"
 $desktopPath = Join-Path $repoRoot "packages\desktop"
 $frontendPort = 5173
+$backendExecutablePath = Join-Path $repoRoot "packages\backend\.venv\Scripts\backend.exe"
 
 if (-not (Test-Path $frontendPath)) {
     throw "Frontend package not found at $frontendPath"
@@ -37,6 +38,38 @@ function Test-TcpPortReady {
     }
 }
 
+function Stop-ProcessTree {
+    param(
+        [int]$ProcessId
+    )
+
+    if ($ProcessId -le 0) {
+        return
+    }
+
+    try {
+        & taskkill /PID $ProcessId /T /F | Out-Null
+    } catch {
+        # Ignore if process already exited.
+    }
+}
+
+function Stop-StaleDevProcesses {
+    $staleProcesses = Get-CimInstance Win32_Process | Where-Object {
+        $_.Name -in @("meucofri-desktop.exe", "meucofri_desktop.exe", "cargo.exe", "rustc.exe") -or
+        $_.ExecutablePath -eq $backendExecutablePath -or
+        ($_.CommandLine -and $_.CommandLine -like "*$repoRoot*packages\\desktop\\src-tauri*") -or
+        ($_.CommandLine -and $_.CommandLine -like "*$repoRoot*packages\\frontend*vite*--port $frontendPort*")
+    }
+
+    foreach ($process in $staleProcesses) {
+        Write-Host "Stopping stale process: $($process.Name) (PID $($process.ProcessId))"
+        Stop-ProcessTree -ProcessId $process.ProcessId
+    }
+}
+
+Stop-StaleDevProcesses
+
 Write-Host "Starting frontend dev server on port $frontendPort..."
 $frontendProcess = Start-Process `
     -FilePath "npm.cmd" `
@@ -68,6 +101,6 @@ try {
 finally {
     if ($null -ne $frontendProcess -and -not $frontendProcess.HasExited) {
         Write-Host "Stopping frontend dev server..."
-        Stop-Process -Id $frontendProcess.Id -Force
+        Stop-ProcessTree -ProcessId $frontendProcess.Id
     }
 }

@@ -241,7 +241,8 @@ def build_security_router(security_store: SecurityStore) -> APIRouter:
           }}
 
           localStorage.setItem("finance.device_token", payload.device_token);
-          status.textContent = "Device paired. You can close this page.";
+          status.textContent = "Device paired. Redirecting to app...";
+          window.location.replace("/");
         }} catch (_error) {{
           status.textContent = "Failed to pair device.";
         }}

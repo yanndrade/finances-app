@@ -1,10 +1,13 @@
 import ipaddress
+import os
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import APIRouter
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 
 from finance_app.interfaces.http.bootstrap import AppServices, build_services
@@ -135,6 +138,9 @@ def create_app(
         if path.startswith(LAN_LOCAL_ONLY_PREFIXES):
             return _forbidden("LAN configuration endpoints are desktop-only.")
 
+        if not path.startswith("/api/"):
+            return await call_next(request)
+
         if request.method.upper() == "OPTIONS":
             return await call_next(request)
 
@@ -142,7 +148,9 @@ def create_app(
             return await call_next(request)
 
         origin = request.headers.get("origin")
-        allow_http_origin = getattr(request.app.state, "public_scheme", "http") != "https"
+        allow_http_origin = (
+            getattr(request.app.state, "public_scheme", "http") != "https"
+        )
         if not _is_origin_allowed(
             origin=origin,
             local_ip=network.local_ip,
@@ -163,6 +171,7 @@ def create_app(
         return await call_next(request)
 
     app.include_router(build_router(services))
+    _register_frontend_routes(app)
     return app
 
 
@@ -208,7 +217,9 @@ def _is_private_ip(host: str) -> bool:
 
 def _is_ip_in_subnet(host: str, subnet_cidr: str) -> bool:
     try:
-        return ipaddress.ip_address(host) in ipaddress.ip_network(subnet_cidr, strict=False)
+        return ipaddress.ip_address(host) in ipaddress.ip_network(
+            subnet_cidr, strict=False
+        )
     except ValueError:
         return False
 
@@ -233,3 +244,54 @@ def _is_origin_allowed(*, origin: str | None, local_ip: str, allow_http: bool) -
         return True
 
     return allow_http
+
+
+def _register_frontend_routes(app: FastAPI) -> None:
+    frontend_dist = _resolve_frontend_dist()
+    if frontend_dist is None:
+        return
+
+    index_path = frontend_dist / "index.html"
+
+    @app.get("/", include_in_schema=False)
+    async def serve_frontend_root() -> FileResponse:
+        return FileResponse(index_path)
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend_asset_or_spa(full_path: str) -> FileResponse:
+        if full_path.startswith("api/") or full_path.startswith("health"):
+            return JSONResponse(
+                status_code=404,
+                content={"detail": "Not found."},
+            )
+
+        requested = (frontend_dist / full_path).resolve()
+        if requested.is_file() and str(requested).startswith(str(frontend_dist)):
+            return FileResponse(requested)
+
+        return FileResponse(index_path)
+
+
+def _resolve_frontend_dist() -> Path | None:
+    configured = os.getenv("FINANCE_APP_FRONTEND_DIST")
+    candidates: list[Path] = []
+    if configured:
+        candidates.append(Path(configured))
+
+    backend_cwd = Path.cwd()
+    candidates.extend(
+        [
+            backend_cwd / "frontend" / "dist",
+            backend_cwd.parent / "frontend" / "dist",
+            backend_cwd / "dist",
+            Path(__file__).resolve().parents[5] / "frontend" / "dist",
+        ]
+    )
+
+    unique_candidates = list(dict.fromkeys(candidates))
+    for candidate in unique_candidates:
+        index_path = candidate / "index.html"
+        if index_path.is_file():
+            return candidate.resolve()
+
+    return None

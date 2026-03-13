@@ -1,6 +1,6 @@
 import "./styles.css";
 
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "./components/app-shell";
 import { CommandPalette } from "./components/command-palette";
@@ -84,6 +84,7 @@ import {
 } from "./lib/theme";
 import {
   getAutostartEnabled,
+  isTauriEnvironment,
   listenDesktopEvent,
   setAutostartEnabled,
 } from "./lib/desktop";
@@ -265,6 +266,9 @@ export function App() {
     },
   });
 
+  const refreshDataRef = useRef(refreshData);
+  refreshDataRef.current = refreshData;
+
   useEffect(() => {
     void refreshData({ month: selectedMonth });
   }, [selectedMonth]);
@@ -315,6 +319,9 @@ export function App() {
   }
 
   async function refreshLanSecurityState(): Promise<void> {
+    if (!isTauriEnvironment()) {
+      return;
+    }
     try {
       const [state, devices] = await Promise.all([
         fetchLanSecurityState(),
@@ -328,6 +335,9 @@ export function App() {
   }
 
   async function refreshDesktopAutostartState(): Promise<void> {
+    if (!isTauriEnvironment()) {
+      return;
+    }
     setDesktopAutostartLoading(true);
     try {
       const enabled = await getAutostartEnabled();
@@ -366,6 +376,7 @@ export function App() {
         setLanPairingSession(null);
         currentUrl.searchParams.delete("pair_token");
         globalThis.history.replaceState({}, "", currentUrl.toString());
+        void refreshDataRef.current();
         showToast("success", "Dispositivo pareado com sucesso.");
       } catch (error) {
         if (cancelled) {

@@ -36,7 +36,9 @@ def test_health_use_case_returns_expected_payload() -> None:
 def test_cli_entrypoint_runs_uvicorn_with_cli_arguments(monkeypatch) -> None:
     recorded: dict[str, object] = {}
 
-    def fake_create_app(*, database_url: str | None, event_database_url: str | None) -> str:
+    def fake_create_app(
+        *, database_url: str | None, event_database_url: str | None
+    ) -> str:
         recorded["database_url"] = database_url
         recorded["event_database_url"] = event_database_url
         return "app-instance"
@@ -70,7 +72,9 @@ def test_cli_entrypoint_uses_database_path_environment_variables(
     monkeypatch.setenv("FINANCE_APP_DATABASE_PATH", str(app_db))
     monkeypatch.setenv("FINANCE_APP_EVENT_DATABASE_PATH", str(events_db))
 
-    def fake_create_app(*, database_url: str | None, event_database_url: str | None) -> str:
+    def fake_create_app(
+        *, database_url: str | None, event_database_url: str | None
+    ) -> str:
         recorded["database_url"] = database_url
         recorded["event_database_url"] = event_database_url
         return "app-instance"
@@ -101,7 +105,9 @@ def test_cli_entrypoint_enables_https_with_generated_certificate(
         def __init__(self) -> None:
             self.state = SimpleNamespace(public_port=0, public_scheme="http")
 
-    def fake_create_app(*, database_url: str | None, event_database_url: str | None) -> DummyApp:
+    def fake_create_app(
+        *, database_url: str | None, event_database_url: str | None
+    ) -> DummyApp:
         recorded["database_url"] = database_url
         recorded["event_database_url"] = event_database_url
         return DummyApp()
@@ -340,7 +346,7 @@ def test_security_lan_pairing_page_is_reachable_without_origin_header(
 
     assert response.status_code == 200
     assert "Pair device" in response.text
-    assert "localStorage.setItem(\"finance.device_token\"" in response.text
+    assert 'localStorage.setItem("finance.device_token"' in response.text
 
 
 def test_security_lan_rejects_remote_requests_without_valid_context(
@@ -377,9 +383,7 @@ def test_security_lan_rejects_remote_requests_without_valid_context(
         headers=remote_headers,
     )
     assert blocked_missing_token.status_code == 403
-    assert blocked_missing_token.json() == {
-        "detail": "Missing X-Finance-Token header."
-    }
+    assert blocked_missing_token.json() == {"detail": "Missing X-Finance-Token header."}
 
     blocked_bad_origin = client.get(
         "/api/dashboard",
@@ -468,6 +472,41 @@ def test_security_lan_accepts_http_origin_when_server_is_running_http(
         },
     )
     assert http_origin_response.status_code == 200
+
+
+def test_security_lan_allows_frontend_routes_without_origin_or_token(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """LAN clients in the correct subnet can load frontend pages (non-API routes)
+    without an Origin header or device token.  This is necessary because browsers
+    do not send an Origin header on direct navigation requests."""
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    client.post("/api/security/lan", json={"enabled": True})
+
+    lan_headers = {"X-Finance-Client-IP": "192.168.50.20"}
+
+    root_response = client.get("/", headers=lan_headers)
+    assert root_response.status_code == 200
+
+    spa_response = client.get("/dashboard", headers=lan_headers)
+    assert spa_response.status_code == 200
+
+    api_response = client.get(
+        "/api/dashboard",
+        params={"month": "2026-03"},
+        headers=lan_headers,
+    )
+    assert api_response.status_code == 403
+    assert api_response.json() == {"detail": "Invalid request origin."}
 
 
 def test_security_public_endpoints_are_localhost_only_for_remote_clients(
