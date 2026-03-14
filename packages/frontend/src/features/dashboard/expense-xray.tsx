@@ -13,6 +13,7 @@ import { CHART_THEME } from "../../lib/chart-theme";
 import type { DashboardSummary, TransactionFilters } from "../../lib/api";
 import type { UiDensity } from "../../lib/ui-density";
 import { cn } from "../../lib/utils";
+import { prefersReducedMotion } from "../../lib/motion";
 
 type ExpenseXrayProps = {
   dashboard: DashboardSummary;
@@ -47,20 +48,18 @@ export function ExpenseXray({
   return (
     <Card
       className={cn(
-        "finance-card overflow-hidden flex flex-col h-full rounded-xl border-slate-100/40 shadow-[0_1px_2px_rgba(0,0,0,0.03)] bg-white",
+        "finance-card overflow-hidden flex flex-col h-full rounded-xl border border-border/50 shadow-none bg-surface",
         className,
       )}
     >
-      <CardHeader className="pb-4 shrink-0 border-b border-slate-50">
+      <CardHeader className="pb-4 shrink-0 border-b border-border/40">
         <div className="flex items-center gap-2">
-          <div className="rounded-lg bg-slate-100 p-2">
-            <PieChartIcon className="h-4 w-4 text-slate-600" />
-          </div>
+          <PieChartIcon className="h-4 w-4 text-muted-foreground" />
           <div>
-            <CardTitle className="text-sm font-semibold text-slate-900">
+            <CardTitle className="text-sm font-semibold text-foreground">
               Raio-X de Despesas
             </CardTitle>
-            <p className="text-[12px] text-slate-500 uppercase tracking-widest font-medium mt-0.5">
+            <p className="text-[12px] text-muted-foreground uppercase tracking-widest font-medium mt-0.5">
               Top categorias do mês
             </p>
           </div>
@@ -78,7 +77,7 @@ export function ExpenseXray({
             {/* Chart Side */}
             <div className="flex-shrink-0 flex flex-col items-center justify-center w-full md:w-auto">
               <div className="relative flex items-center justify-center">
-                <PieChart width={160} height={160}>
+                 <PieChart width={160} height={160}>
                   <Pie
                     data={categoryComposition}
                     cx="50%"
@@ -87,6 +86,7 @@ export function ExpenseXray({
                     outerRadius={76}
                     paddingAngle={2}
                     dataKey="total"
+                    isAnimationActive={!prefersReducedMotion()}
                   >
                     {categoryComposition.map((category, index) => (
                       <Cell
@@ -119,7 +119,7 @@ export function ExpenseXray({
                 return (
                   <button
                     key={category.category_id}
-                    className="flex w-full items-center justify-between gap-3 rounded-lg hover:bg-slate-50 p-2 -mx-2 transition-colors cursor-pointer"
+                    className="flex w-full items-center justify-between gap-3 rounded-lg hover:bg-muted/50 p-2 -mx-2 transition-colors cursor-pointer"
                     onClick={() =>
                       onOpenLedgerFiltered(
                         {
@@ -140,16 +140,16 @@ export function ExpenseXray({
                             categoryColors[index % categoryColors.length],
                         }}
                       />
-                      <span className="truncate text-xs font-semibold text-slate-700">
+                      <span className="truncate text-xs font-semibold text-foreground">
                         {formatCategoryName(category.category_id)}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 text-right">
                       <MoneyValue
                         value={category.total}
-                        className="text-xs font-bold text-slate-900 tabular-nums"
+                        className="text-xs font-bold text-foreground tabular-nums"
                       />
-                      <span className="text-[12px] font-semibold text-slate-400 tabular-nums w-8 text-right bg-slate-50 px-1 py-0.5 rounded">
+                      <span className="text-[12px] font-semibold text-muted-foreground tabular-nums w-8 text-right">
                         {share}%
                       </span>
                     </div>

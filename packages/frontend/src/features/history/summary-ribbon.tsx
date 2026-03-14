@@ -55,6 +55,8 @@ function SegmentCell({
     <div
       role={isClickable ? "button" : undefined}
       tabIndex={isClickable ? 0 : undefined}
+      aria-label={isClickable ? `Filtrar por ${segment.label}` : undefined}
+      aria-pressed={isClickable ? isActive : undefined}
       onClick={isClickable ? onClick : undefined}
       onKeyDown={
         isClickable

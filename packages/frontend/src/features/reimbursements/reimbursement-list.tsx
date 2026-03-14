@@ -8,6 +8,7 @@ type ReimbursementListProps = {
   reimbursements: PendingReimbursementSummary[];
   loading: boolean;
   onSelectReimbursement: (r: PendingReimbursementSummary) => void;
+  onOpenQuickAdd?: () => void;
 };
 
 type GroupKey = "overdue" | "active" | "received" | "canceled";
@@ -44,6 +45,7 @@ export function ReimbursementList({
   reimbursements,
   loading,
   onSelectReimbursement,
+  onOpenQuickAdd,
 }: ReimbursementListProps) {
   if (loading) {
     return (
@@ -59,9 +61,10 @@ export function ReimbursementList({
     return (
       <EmptyState
         className="py-16"
-        description="Nenhum reembolso encontrado. Registre uma despesa com pessoa para criar um."
+        description="Reembolsos aparecem quando você registra uma despesa com pessoa. Adicione uma para começar a rastrear."
         icon={RotateCcw}
         title="Sem reembolsos"
+        action={onOpenQuickAdd ? { label: "Nova despesa", onClick: onOpenQuickAdd } : undefined}
       />
     );
   }
@@ -85,13 +88,13 @@ export function ReimbursementList({
         const meta = GROUP_META[key];
         return (
           <div key={key}>
-            <div className="mb-2 flex items-baseline gap-2">
-              <h3 className="text-sm font-semibold text-slate-700">{meta.label}</h3>
-              <span className="text-xs text-slate-400">
+            <div className="mb-3 flex items-baseline gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{meta.label}</h3>
+              <span className="text-xs text-muted-foreground/60">
                 {items.length} {items.length === 1 ? "item" : "itens"}
               </span>
             </div>
-            <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="divide-y divide-border/60">
               {items.map((r) => (
                 <ReimbursementRow
                   key={r.transaction_id}

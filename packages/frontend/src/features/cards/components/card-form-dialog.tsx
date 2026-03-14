@@ -59,6 +59,7 @@ function CardFormFields<TForm extends CardFormState>({
           className="h-11 rounded-xl border border-slate-200 px-3"
           value={form.name}
           onChange={(event) => onChange((current) => ({ ...current, name: event.target.value }))}
+          maxLength={60}
           required
         />
       </label>
@@ -110,6 +111,8 @@ function CardFormFields<TForm extends CardFormState>({
         <input
           className="h-11 rounded-xl border border-slate-200 px-3"
           inputMode="numeric"
+          min="1"
+          max="31"
           value={form.closingDay}
           onChange={(event) =>
             onChange((current) => ({
@@ -125,6 +128,8 @@ function CardFormFields<TForm extends CardFormState>({
         <input
           className="h-11 rounded-xl border border-slate-200 px-3"
           inputMode="numeric"
+          min="1"
+          max="31"
           value={form.dueDay}
           onChange={(event) =>
             onChange((current) => ({
@@ -162,11 +167,19 @@ export function CreateCardDialog({
     event.preventDefault();
     if (!form.name.trim()) return;
 
+    const limitInCents = parseInt(form.limit || "0", 10);
+    const closingDay = parseInt(form.closingDay || "0", 10);
+    const dueDay = parseInt(form.dueDay || "0", 10);
+
+    if (limitInCents <= 0) return;
+    if (closingDay < 1 || closingDay > 31) return;
+    if (dueDay < 1 || dueDay > 31) return;
+
     await onCreateCard({
       name: form.name.trim(),
-      limitInCents: parseInt(form.limit || "0", 10),
-      closingDay: parseInt(form.closingDay || "0", 10),
-      dueDay: parseInt(form.dueDay || "0", 10),
+      limitInCents,
+      closingDay,
+      dueDay,
       paymentAccountId: form.paymentAccountId || undefined,
     });
 
@@ -245,11 +258,19 @@ export function EditCardDialog({
     event.preventDefault();
     if (!card || !form || !form.name.trim()) return;
 
+    const limitInCents = parseInt(form.limit || "0", 10);
+    const closingDay = parseInt(form.closingDay || "0", 10);
+    const dueDay = parseInt(form.dueDay || "0", 10);
+
+    if (limitInCents <= 0) return;
+    if (closingDay < 1 || closingDay > 31) return;
+    if (dueDay < 1 || dueDay > 31) return;
+
     await onUpdateCard(card.card_id, {
       name: form.name.trim(),
-      limitInCents: parseInt(form.limit || "0", 10),
-      closingDay: parseInt(form.closingDay || "0", 10),
-      dueDay: parseInt(form.dueDay || "0", 10),
+      limitInCents,
+      closingDay,
+      dueDay,
       paymentAccountId: form.paymentAccountId,
       isActive: form.isActive,
     });

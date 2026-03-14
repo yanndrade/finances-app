@@ -137,7 +137,7 @@ export function CardDetail({
               {/* Total + status + actions */}
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="text-3xl font-black tracking-tighter text-slate-900">
+                  <span className="text-3xl font-black tracking-tighter text-slate-900 truncate tabular-nums">
                     {formatCurrency(invoice.total_amount)}
                   </span>
                   {renderStatusBadge(invoice.status)}
@@ -312,7 +312,7 @@ export function CardDetail({
               </div>
               <div className="border-t border-slate-50 pt-3">
                 <p className="text-[13px] font-black uppercase tracking-[0.15em] text-slate-300">Disponível</p>
-                <p className="text-xl font-black text-slate-900">{formatCurrency(availableLimit)}</p>
+                <p className="text-xl font-black text-slate-900 truncate tabular-nums">{formatCurrency(availableLimit)}</p>
               </div>
             </CardContent>
           </Card>

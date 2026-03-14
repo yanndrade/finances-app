@@ -45,11 +45,13 @@ export function DashboardBento({
   onOpenQuickAdd,
   uiDensity,
 }: DashboardBentoProps) {
+  const hasExpenseData = dashboard.spending_by_category.length > 0;
+
   return (
     <div
       className={cn(
         "dashboard-workbench flex flex-col h-full overflow-y-auto w-full",
-        uiDensity === "dense" ? "gap-4 p-2" : "gap-6 p-4",
+        uiDensity === "dense" ? "gap-6 p-2" : "gap-8 p-4",
       )}
     >
       {/* 1. Hero: Mapa do Mês */}
@@ -68,14 +70,20 @@ export function DashboardBento({
         />
       </section>
 
-      {/* 3. Grid principal: Investimento + Raio-X */}
+      {/* 3. Grid principal: Investimento + Raio-X (oculto sem dados) */}
       <section
         className={cn(
-          "grid grid-cols-1 lg:grid-cols-12 w-full",
+          "grid grid-cols-1 w-full",
+          hasExpenseData && "lg:grid-cols-12",
           uiDensity === "dense" ? "gap-4" : "gap-6",
         )}
       >
-        <div className="lg:col-span-5 xl:col-span-4 h-full">
+        <div
+          className={cn(
+            "h-full",
+            hasExpenseData ? "lg:col-span-5 xl:col-span-4" : "",
+          )}
+        >
           <InvestmentGoal
             dashboard={dashboard}
             investmentOverview={investmentOverview}
@@ -83,13 +91,15 @@ export function DashboardBento({
             onOpenQuickAdd={onOpenQuickAdd}
           />
         </div>
-        <div className="lg:col-span-7 xl:col-span-8 h-full">
-          <ExpenseXray
-            dashboard={dashboard}
-            uiDensity={uiDensity}
-            onOpenLedgerFiltered={onOpenLedgerFiltered}
-          />
-        </div>
+        {hasExpenseData && (
+          <div className="lg:col-span-7 xl:col-span-8 h-full">
+            <ExpenseXray
+              dashboard={dashboard}
+              uiDensity={uiDensity}
+              onOpenLedgerFiltered={onOpenLedgerFiltered}
+            />
+          </div>
+        )}
       </section>
 
       {/* 4. Bloco inferior: Compromissos */}

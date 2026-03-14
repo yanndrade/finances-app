@@ -9,18 +9,18 @@ import type { UiDensity } from "../../../lib/ui-density";
 
 export function SummaryStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="space-y-1">
-      <p className="text-[12px] font-black uppercase tracking-[0.15em] text-slate-400">{label}</p>
-      <p className="text-2xl font-black tracking-tight text-slate-900">{value}</p>
+    <div className="min-w-0 space-y-1">
+      <p className="text-[12px] font-black uppercase tracking-[0.15em] text-muted-foreground">{label}</p>
+      <p className="text-2xl font-black tracking-tight text-foreground truncate">{value}</p>
     </div>
   );
 }
 
 export function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="space-y-0.5">
-      <p className="text-[13px] font-black uppercase tracking-[0.15em] text-slate-300">{label}</p>
-      <p className="text-base font-black text-slate-900">{value}</p>
+    <div className="min-w-0 space-y-0.5">
+      <p className="text-[13px] font-black uppercase tracking-[0.15em] text-muted-foreground/60">{label}</p>
+      <p className="text-base font-black text-foreground truncate">{value}</p>
     </div>
   );
 }
@@ -38,15 +38,15 @@ export function MetricPanel({
 }) {
   const toneClasses =
     tone === "danger"
-      ? "border border-rose-100/20 bg-rose-50/40 text-rose-500"
-      : "bg-slate-50 text-slate-400";
-  const valueClasses = tone === "danger" ? "text-rose-700" : "text-slate-700";
+      ? "border border-danger/20 bg-danger/5 text-danger"
+      : "bg-muted text-muted-foreground";
+  const valueClasses = tone === "danger" ? "text-danger" : "text-foreground";
 
   return (
     <div className={`flex items-center gap-4 rounded-[1.5rem] p-4 ${toneClasses}`}>
-      <div className="rounded-xl bg-white p-2.5 shadow-sm">{icon}</div>
+      <div className="rounded-xl bg-surface p-2.5 shadow-sm">{icon}</div>
       <div>
-        <p className="text-[13px] font-black uppercase tracking-[0.15em] text-slate-300">{label}</p>
+        <p className="text-[13px] font-black uppercase tracking-[0.15em] text-muted-foreground/60">{label}</p>
         <p className={`text-base font-black ${valueClasses}`}>{value}</p>
       </div>
     </div>
@@ -55,8 +55,8 @@ export function MetricPanel({
 
 export function EmptySurface({ message }: { message: string }) {
   return (
-    <Card className="rounded-[2.5rem] border-none bg-white p-16 text-center shadow-sm">
-      <p className="font-bold text-slate-400">{message}</p>
+    <Card className="rounded-[2.5rem] border-none bg-surface p-16 text-center shadow-sm">
+      <p className="font-bold text-muted-foreground">{message}</p>
     </Card>
   );
 }
@@ -65,25 +65,25 @@ export function renderStatusBadge(status: string) {
   switch (status) {
     case "paid":
       return (
-        <Badge className="rounded-lg border-none bg-emerald-100 px-3 py-1 text-emerald-700 hover:bg-emerald-100">
+        <Badge className="rounded-lg border-none bg-success/10 px-3 py-1 text-success hover:bg-success/10">
           Paga
         </Badge>
       );
     case "partial":
       return (
-        <Badge className="rounded-lg border-none bg-orange-100 px-3 py-1 text-orange-700 hover:bg-orange-100">
+        <Badge className="rounded-lg border-none bg-warning/10 px-3 py-1 text-warning hover:bg-warning/10">
           Parcial
         </Badge>
       );
     case "open":
       return (
-        <Badge className="rounded-lg border-none bg-blue-100 px-3 py-1 text-blue-700 hover:bg-blue-100">
+        <Badge className="rounded-lg border-none bg-primary/10 px-3 py-1 text-primary hover:bg-primary/10">
           Aberta
         </Badge>
       );
     case "inactive":
       return (
-        <Badge variant="outline" className="rounded-lg px-3 py-1 text-slate-500">
+        <Badge variant="outline" className="rounded-lg px-3 py-1 text-muted-foreground">
           Inativo
         </Badge>
       );
