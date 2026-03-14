@@ -10,7 +10,6 @@ import {
   type PendingReimbursementSummary,
   type ReimbursementSummary,
 } from "../../lib/api";
-import { getErrorMessage } from "../../lib/utils";
 
 import { SummaryStrip } from "./summary-strip";
 import { ReimbursementList } from "./reimbursement-list";
@@ -22,7 +21,7 @@ type ReimbursementsViewProps = {
   accounts: AccountSummary[];
   month: string;
   refreshKey?: number;
-  onError?: (message: string) => void;
+  onError?: (error: unknown) => void;
   onOpenQuickAdd?: () => void;
 };
 
@@ -70,7 +69,7 @@ export function ReimbursementsView({
       (err) => {
         if (!cancelled) {
           setReimbursements([]);
-          onError?.(getErrorMessage(err));
+          onError?.(err);
         }
       },
     ).finally(() => { if (!cancelled) setIsListLoading(false); });
@@ -85,7 +84,7 @@ export function ReimbursementsView({
       (err) => {
         if (!cancelled) {
           setSummary(EMPTY_SUMMARY);
-          onError?.(getErrorMessage(err));
+          onError?.(err);
         }
       },
     ).finally(() => { if (!cancelled) setIsSummaryLoading(false); });
@@ -114,7 +113,7 @@ export function ReimbursementsView({
       );
       setSelectedReimbursement(updated);
     } catch (error) {
-      onError?.(getErrorMessage(error));
+      onError?.(error);
     } finally {
       setIsSubmitting(false);
     }
@@ -126,7 +125,7 @@ export function ReimbursementsView({
       await cancelReimbursement(id);
       await reload();
     } catch (error) {
-      onError?.(getErrorMessage(error));
+      onError?.(error);
     } finally {
       setIsSubmitting(false);
     }
@@ -148,7 +147,7 @@ export function ReimbursementsView({
       await reload();
       setIsDrawerOpen(false);
     } catch (error) {
-      onError?.(getErrorMessage(error));
+      onError?.(error);
     } finally {
       setIsSubmitting(false);
     }

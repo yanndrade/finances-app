@@ -16,6 +16,7 @@ import {
   type CategoryOption,
 } from "./lib/categories";
 import {
+  API_BASE_URL,
   ApiError,
   confirmPendingExpense,
   createAccount,
@@ -205,6 +206,7 @@ const TOAST_DURATION_MS = {
   success: 3200,
   error: 5200,
 } as const;
+const DIAGNOSTIC_TOAST_DURATION_MS = 20_000;
 const MOBILE_QUERY = "(max-width: 900px)";
 
 export function App() {
@@ -271,7 +273,7 @@ export function App() {
     initialInvestmentFromDate: monthFirstDay(currentMonth()),
     initialInvestmentToDate: monthLastDay(currentMonth()),
     onError: (error) => {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
       if (surface === "mobile" && isLikelyLanConnectionError(error)) {
         setIsMobileLanWarningVisible(true);
       }
@@ -309,18 +311,38 @@ export function App() {
 
     const timeout = globalThis.setTimeout(() => {
       setToast((current) => (current?.id === toast.id ? null : current));
-    }, TOAST_DURATION_MS[toast.tone]);
+    }, toast.durationMs ?? TOAST_DURATION_MS[toast.tone]);
 
     return () => {
       globalThis.clearTimeout(timeout);
     };
   }, [toast]);
 
-  function showToast(tone: "success" | "error", message: string) {
+  function showToast(
+    tone: "success" | "error",
+    message: string,
+    options?: {
+      diagnostic?: string | null;
+      durationMs?: number;
+    },
+  ) {
     setToast({
       id: Date.now(),
       tone,
       message,
+      diagnostic: options?.diagnostic ?? undefined,
+      durationMs: options?.durationMs,
+    });
+  }
+
+  function showErrorToast(error: unknown) {
+    const diagnostic = buildErrorDiagnostic(error);
+    if (diagnostic) {
+      console.error("finance_frontend_diagnostic", diagnostic);
+    }
+    showToast("error", getErrorMessage(error), {
+      diagnostic,
+      durationMs: diagnostic ? DIAGNOSTIC_TOAST_DURATION_MS : undefined,
     });
   }
 
@@ -330,7 +352,7 @@ export function App() {
       setSecurityState(state);
       setIsLockOverlayVisible(state.is_locked);
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
     }
   }
 
@@ -346,7 +368,7 @@ export function App() {
       setLanSecurityState(state);
       setAuthorizedLanDevices(devices);
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
     }
   }
 
@@ -359,7 +381,7 @@ export function App() {
       const enabled = await getAutostartEnabled();
       setDesktopAutostartEnabled(enabled);
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
     } finally {
       setDesktopAutostartLoading(false);
     }
@@ -398,7 +420,7 @@ export function App() {
         if (cancelled) {
           return;
         }
-        showToast("error", getErrorMessage(error));
+        showErrorToast(error);
       }
     })();
 
@@ -493,7 +515,7 @@ export function App() {
       showToast("success", successMessage);
       return true;
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
       return false;
     } finally {
       setIsSubmitting(false);
@@ -831,7 +853,7 @@ export function App() {
           : "Inicialização automática desativada.",
       );
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
       throw error;
     }
   }
@@ -850,7 +872,7 @@ export function App() {
         enabled ? "Acesso LAN ativado." : "Acesso LAN desativado.",
       );
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -866,7 +888,7 @@ export function App() {
       await refreshLanSecurityState();
       showToast("success", "QR de pareamento gerado.");
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -881,7 +903,7 @@ export function App() {
       await refreshLanSecurityState();
       showToast("success", "Dispositivo revogado.");
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -897,7 +919,7 @@ export function App() {
       setIsLockOverlayVisible(true);
       showToast("success", "Senha definida com sucesso.");
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -910,7 +932,7 @@ export function App() {
       await refreshSecurityState();
       showToast("success", "Aplicação bloqueada.");
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
     }
   }
 
@@ -924,7 +946,7 @@ export function App() {
       setLockPassword("");
       showToast("success", "Aplicação desbloqueada.");
     } catch (error) {
-      showToast("error", getErrorMessage(error));
+      showErrorToast(error);
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -1041,7 +1063,7 @@ export function App() {
             cards={cards}
             month={selectedMonth}
             refreshKey={refreshKey}
-            onError={(message) => showToast("error", message)}
+            onError={(error) => showErrorToast(error)}
           />
         ) : null}
 
@@ -1051,7 +1073,7 @@ export function App() {
             accounts={accounts}
             month={selectedMonth}
             refreshKey={refreshKey}
-            onError={(message) => showToast("error", message)}
+            onError={(error) => showErrorToast(error)}
             onOpenQuickAdd={() => openQuickAdd("expense")}
           />
         ) : null}
@@ -1196,6 +1218,45 @@ export function App() {
       ) : null}
     </AppShell>
   );
+}
+
+function buildErrorDiagnostic(error: unknown): string | null {
+  if (error instanceof ApiError && error.diagnostic) {
+    return error.diagnostic;
+  }
+
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const location = globalThis.location;
+  const navigator = globalThis.navigator;
+  const payload = {
+    diagnostic_type: "frontend_error",
+    captured_at: new Date().toISOString(),
+    error: {
+      name: error.name,
+      message: error.message,
+      stack: truncateDiagnosticValue(error.stack ?? "", 3000),
+    },
+    runtime: {
+      api_base_url: API_BASE_URL,
+      page_href: location?.href ?? null,
+      page_origin: location?.origin ?? null,
+      page_protocol: location?.protocol ?? null,
+      user_agent: navigator?.userAgent ?? null,
+      language: navigator?.language ?? null,
+    },
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+function truncateDiagnosticValue(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  const hiddenCount = value.length - maxLength;
+  return `${value.slice(0, maxLength)}...[truncated:${hiddenCount}]`;
 }
 
 function isLikelyLanConnectionError(error: unknown): boolean {

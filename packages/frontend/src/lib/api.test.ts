@@ -474,6 +474,82 @@ describe("api timestamp normalization", () => {
     });
   });
 
+  it("sends X-Finance-Origin on same-origin requests", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          password_configured: true,
+          is_locked: false,
+          requires_lock_on_startup: false,
+          inactivity_lock_seconds: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const originalLocation = globalThis.location;
+    vi.stubGlobal(
+      "location",
+      new URL(`${api.API_BASE_URL}/dashboard`) as unknown as Location,
+    );
+
+    try {
+      await api.fetchSecurityState();
+
+      const requestHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+      expect(requestHeaders.get("X-Finance-Origin")).toBe(api.API_BASE_URL);
+    } finally {
+      vi.stubGlobal("location", originalLocation);
+    }
+  });
+
+  it("captures structured diagnostic payload on API errors", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: "Invalid request origin.",
+        }),
+        {
+          status: 403,
+          statusText: "Forbidden",
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await api.requestJson("/api/dashboard?month=2026-03");
+      throw new Error("Expected requestJson to throw ApiError.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(api.ApiError);
+      const apiError = error as api.ApiError;
+      expect(apiError.status).toBe(403);
+      expect(apiError.detail).toBe("Invalid request origin.");
+      expect(apiError.diagnostic).toEqual(expect.any(String));
+
+      const diagnostic = JSON.parse(apiError.diagnostic ?? "{}") as {
+        request?: {
+          path?: string;
+          method?: string;
+          has_device_token?: boolean;
+          x_finance_origin?: string | null;
+        };
+        response?: { status?: number; detail?: string };
+      };
+      const expectedFinanceOrigin =
+        globalThis.location.origin === api.API_BASE_URL ? api.API_BASE_URL : null;
+      expect(diagnostic.request?.path).toBe("/api/dashboard?month=2026-03");
+      expect(diagnostic.request?.method).toBe("GET");
+      expect(diagnostic.request?.has_device_token).toBe(false);
+      expect(diagnostic.request?.x_finance_origin ?? null).toBe(
+        expectedFinanceOrigin,
+      );
+      expect(diagnostic.response?.status).toBe(403);
+      expect(diagnostic.response?.detail).toBe("Invalid request origin.");
+    }
+  });
+
   it("returns undefined for 204 responses", async () => {
     const fetchMock = vi
       .fn<(typeof fetch)>()

@@ -19,7 +19,7 @@ import {
   type UnifiedMovement,
 } from "../../lib/api";
 
-import { cn, getErrorMessage } from "../../lib/utils";
+import { cn } from "../../lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ type HistoryPageProps = {
   cards: CardSummary[];
   month: string;
   refreshKey?: number;
-  onError?: (message: string) => void;
+  onError?: (error: unknown) => void;
   className?: string;
 };
 
@@ -143,7 +143,7 @@ export function HistoryPage({
       setSummary(s);
     } catch (err) {
       setSummary(EMPTY_SUMMARY);
-      onError?.(getErrorMessage(err));
+      onError?.(err);
     } finally {
       setSummaryLoading(false);
     }

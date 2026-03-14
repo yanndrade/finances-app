@@ -510,6 +510,42 @@ def test_security_lan_accepts_http_origin_when_server_is_running_http(
     assert http_origin_response.status_code == 200
 
 
+def test_security_lan_accepts_finance_origin_header_when_origin_is_missing(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    client.post("/api/security/lan", json={"enabled": True})
+    pair_token = client.post("/api/security/lan/pair-token").json()["pair_token"]
+
+    pair_response = client.post(
+        "/api/security/pair",
+        json={"pair_token": pair_token, "device_name": "Safari fallback"},
+        headers=_build_remote_lan_headers(origin=None),
+    )
+    assert pair_response.status_code == 200
+    device_token = pair_response.json()["device_token"]
+
+    response = client.get(
+        "/api/security/state",
+        headers={
+            **_build_remote_lan_headers(origin=None),
+            "X-Finance-Origin": f"http://{LAN_PUBLIC_HOST}",
+            "X-Finance-Token": device_token,
+        },
+    )
+
+    assert response.status_code == 200
+
+
 def test_security_lan_allows_frontend_routes_without_origin_or_token(
     tmp_path,
     monkeypatch,
