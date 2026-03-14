@@ -30,6 +30,37 @@ function Resolve-SignToolPath {
     return $fromSdk.FullName
 }
 
+function Resolve-TauriBinaryName {
+    param(
+        [string]$CargoTomlPath
+    )
+
+    if (-not (Test-Path $CargoTomlPath)) {
+        throw "Tauri Cargo.toml not found at $CargoTomlPath"
+    }
+
+    $cargoTomlContent = Get-Content -Path $CargoTomlPath -Raw
+    $packageBlockMatch = [regex]::Match(
+        $cargoTomlContent,
+        '(?ms)^\[package\]\s*(?<body>.*?)(?:^\[|\z)'
+    )
+
+    if (-not $packageBlockMatch.Success) {
+        throw "Unable to locate [package] section in $CargoTomlPath"
+    }
+
+    $nameMatch = [regex]::Match(
+        $packageBlockMatch.Groups["body"].Value,
+        '(?m)^\s*name\s*=\s*"(?<name>[^"]+)"'
+    )
+
+    if (-not $nameMatch.Success) {
+        throw "Unable to resolve package.name from $CargoTomlPath"
+    }
+
+    return $nameMatch.Groups["name"].Value
+}
+
 function Invoke-CodeSign {
     param(
         [string]$SignToolPath,
@@ -79,9 +110,11 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $frontendPath = Join-Path $repoRoot "packages\frontend"
 $backendPath = Join-Path $repoRoot "packages\backend"
 $desktopPath = Join-Path $repoRoot "packages\desktop"
+$desktopCargoTomlPath = Join-Path $repoRoot "packages\desktop\src-tauri\Cargo.toml"
 $buildSidecarScript = Join-Path $PSScriptRoot "build-backend-sidecar.ps1"
 $desktopSidecarPath = Join-Path $repoRoot "packages\desktop\src-tauri\bin\backend.exe"
-$desktopReleaseExePath = Join-Path $repoRoot "packages\desktop\src-tauri\target\release\finances-desktop.exe"
+$desktopBinaryName = Resolve-TauriBinaryName -CargoTomlPath $desktopCargoTomlPath
+$desktopReleaseExePath = Join-Path $repoRoot "packages\desktop\src-tauri\target\release\$desktopBinaryName.exe"
 $msiOutputDirectory = Join-Path $repoRoot "packages\desktop\src-tauri\target\release\bundle\msi"
 
 if (-not (Test-Path $frontendPath)) {
