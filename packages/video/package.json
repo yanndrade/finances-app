@@ -1,0 +1,23 @@
+{
+  "name": "@finances/video",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "remotion studio src/index.ts",
+    "bundle": "remotion bundle src/index.ts",
+    "render": "remotion render src/index.ts TutorialVideo out/meu-cofri-tutorial.mp4"
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "remotion": "4.0.435",
+    "@remotion/transitions": "4.0.435"
+  },
+  "devDependencies": {
+    "@remotion/cli": "4.0.435",
+    "@types/node": "^24.11.0",
+    "@types/react": "^19.1.10",
+    "typescript": "^5.9.2"
+  }
+}
