@@ -16,6 +16,7 @@ import {
   type CategoryOption,
 } from "./lib/categories";
 import {
+  ApiError,
   confirmPendingExpense,
   createAccount,
   createCard,
@@ -242,6 +243,9 @@ export function App() {
   const [lockPassword, setLockPassword] = useState("");
   const [desktopAutostartEnabled, setDesktopAutostartEnabled] = useState(false);
   const [desktopAutostartLoading, setDesktopAutostartLoading] = useState(true);
+  const [isMobileLanWarningVisible, setIsMobileLanWarningVisible] = useState(false);
+  const [isRetryingMobileLanConnection, setIsRetryingMobileLanConnection] =
+    useState(false);
 
   const {
     dashboard,
@@ -268,6 +272,12 @@ export function App() {
     initialInvestmentToDate: monthLastDay(currentMonth()),
     onError: (error) => {
       showToast("error", getErrorMessage(error));
+      if (surface === "mobile" && isLikelyLanConnectionError(error)) {
+        setIsMobileLanWarningVisible(true);
+      }
+    },
+    onRefreshSuccess: () => {
+      setIsMobileLanWarningVisible(false);
     },
   });
 
@@ -946,6 +956,24 @@ export function App() {
     );
   }
 
+  async function handleRetryMobileLanConnection(): Promise<void> {
+    setIsRetryingMobileLanConnection(true);
+    setToast(null);
+    await refreshData({ month: selectedMonth });
+    setIsRetryingMobileLanConnection(false);
+  }
+
+  if (surface === "mobile" && isMobileLanWarningVisible) {
+    return (
+      <MobileLanWarningScreen
+        isRetrying={isRetryingMobileLanConnection || isDataLoading}
+        onRetry={() => {
+          void handleRetryMobileLanConnection();
+        }}
+      />
+    );
+  }
+
   const activeMeta = VIEW_META[activeView];
   return (
     <AppShell
@@ -1170,6 +1198,86 @@ export function App() {
   );
 }
 
+function isLikelyLanConnectionError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return false;
+  }
+
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const normalized = error.message.trim().toLowerCase();
+  return (
+    normalized.includes("failed to fetch") ||
+    normalized.includes("network request failed") ||
+    normalized.includes("networkerror") ||
+    normalized.includes("load failed")
+  );
+}
+
+function MobileLanWarningScreen({
+  isRetrying,
+  onRetry,
+}: {
+  isRetrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <section className="relative min-h-screen overflow-hidden bg-background px-5 py-8 text-foreground">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          background:
+            "radial-gradient(circle at 12% 16%, hsl(var(--warning) / 0.2), transparent 42%), radial-gradient(circle at 92% 4%, hsl(var(--primary) / 0.18), transparent 38%)",
+        }}
+      />
+
+      <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md flex-col justify-center">
+        <div className="rounded-[2rem] border border-warning/40 bg-surface/95 p-7 shadow-xl backdrop-blur">
+          <span className="inline-flex items-center rounded-full border border-warning/60 bg-warning/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-warning">
+            Conexao local
+          </span>
+
+          <h1 className="mt-4 text-2xl font-black leading-tight text-foreground">
+            Celular fora da rede do desktop
+          </h1>
+
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            Nao conseguimos acessar os dados desta sessao. Conecte o celular na
+            mesma rede Wi-Fi do computador para continuar.
+          </p>
+
+          <div className="mt-5 rounded-2xl border border-border bg-accent/35 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+              Checklist rapido
+            </p>
+            <ul className="mt-2 space-y-2 text-sm text-foreground">
+              <li>1. Confirmar que desktop e celular estao na mesma rede.</li>
+              <li>2. Desativar VPN ou rede movel temporariamente.</li>
+              <li>3. Atualizar esta tela apos reconectar.</li>
+            </ul>
+          </div>
+
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={isRetrying}
+            className="mt-6 h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isRetrying ? "Tentando reconectar..." : "Tentar novamente"}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function LockOverlay({
   password,
   onPasswordChange,
@@ -1276,4 +1384,3 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
     </div>
   );
 }
-

@@ -148,12 +148,13 @@ def create_app(
             return await call_next(request)
 
         origin = request.headers.get("origin")
+        effective_public_host = _read_effective_public_host(request)
         allow_http_origin = (
             getattr(request.app.state, "public_scheme", "http") != "https"
         )
         if not _is_origin_allowed(
             origin=origin,
-            local_ip=network.local_ip,
+            expected_host=effective_public_host,
             allow_http=allow_http_origin,
         ):
             return _forbidden("Invalid request origin.")
@@ -224,8 +225,22 @@ def _is_ip_in_subnet(host: str, subnet_cidr: str) -> bool:
         return False
 
 
-def _is_origin_allowed(*, origin: str | None, local_ip: str, allow_http: bool) -> bool:
-    if not origin:
+def _read_effective_public_host(request: Request) -> str | None:
+    host_header = request.headers.get("host")
+    if host_header:
+        parsed_host = urlparse(f"//{host_header}")
+        if parsed_host.hostname:
+            return parsed_host.hostname
+    return request.url.hostname
+
+
+def _is_origin_allowed(
+    *,
+    origin: str | None,
+    expected_host: str | None,
+    allow_http: bool,
+) -> bool:
+    if not origin or not expected_host:
         return False
 
     parsed = urlparse(origin)
@@ -234,10 +249,7 @@ def _is_origin_allowed(*, origin: str | None, local_ip: str, allow_http: bool) -
     if parsed.hostname is None:
         return False
 
-    if parsed.hostname in {"localhost", "127.0.0.1"}:
-        return True
-
-    if parsed.hostname != local_ip:
+    if parsed.hostname.lower() != expected_host.lower():
         return False
 
     if parsed.scheme == "https":
