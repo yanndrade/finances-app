@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { AccountSummary, CategorySpending } from "../../lib/api";
 import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
 import { formatCurrency, formatCategoryName } from "../../lib/format";
+import { prefersReducedMotion } from "../../lib/motion";
 
 const CHART_COLORS = [
   CHART_THEME.primary,
@@ -62,7 +63,7 @@ export function DashboardControl({
               <div className="donut-container">
                 <ResponsiveContainer height={200} width={200}>
                   <PieChart>
-                    <Pie
+                     <Pie
                       cx="50%"
                       cy="50%"
                       data={chartData}
@@ -72,6 +73,7 @@ export function DashboardControl({
                       outerRadius={90}
                       paddingAngle={2}
                       strokeWidth={0}
+                      isAnimationActive={!prefersReducedMotion()}
                     >
                       {chartData.map((_entry, index) => (
                         <Cell
@@ -117,11 +119,11 @@ export function DashboardControl({
             <div className="dashboard-list">
               {accounts.slice(0, 5).map((account) => (
                 <div className="dashboard-list__item" key={account.account_id}>
-                  <div>
-                    <strong>{account.name}</strong>
+                  <div className="min-w-0 flex-1">
+                    <strong className="block truncate">{account.name}</strong>
                     <p>{account.type}</p>
                   </div>
-                  <strong className="money-value">{formatCurrency(account.current_balance)}</strong>
+                  <strong className="money-value shrink-0">{formatCurrency(account.current_balance)}</strong>
                 </div>
               ))}
             </div>

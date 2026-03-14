@@ -226,7 +226,7 @@ export function InvestmentHero({
           </p>
           <p
             className={cn(
-              "font-black tabular-nums tracking-tight text-slate-900",
+              "font-black tabular-nums tracking-tight text-slate-900 truncate",
               uiDensity === "dense" ? "text-3xl" : "text-4xl",
             )}
           >

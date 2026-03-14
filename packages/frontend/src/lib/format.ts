@@ -7,8 +7,18 @@ export function formatCurrency(valueInCents: number): string {
   }).format(valueInCents / 100);
 }
 
+export function formatCurrencyCompact(valueInCents: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(valueInCents / 100);
+}
+
 export function formatDateTime(isoValue: string): string {
   const date = new Date(isoValue);
+  if (isNaN(date.getTime())) return isoValue;
 
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
@@ -24,6 +34,7 @@ export function formatDate(isoOrDateValue: string): string {
     ? isoOrDateValue
     : `${isoOrDateValue}T12:00:00Z`;
   const date = new Date(normalizedValue);
+  if (isNaN(date.getTime())) return isoOrDateValue;
 
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
@@ -34,6 +45,7 @@ export function formatDate(isoOrDateValue: string): string {
 
 export function toDateTimeInputValue(isoValue: string): string {
   const date = new Date(isoValue);
+  if (isNaN(date.getTime())) return "";
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -44,7 +56,9 @@ export function toDateTimeInputValue(isoValue: string): string {
 }
 
 export function toIsoDateTime(localValue: string): string {
-  return new Date(localValue).toISOString().replace(".000", "");
+  const date = new Date(localValue);
+  if (isNaN(date.getTime())) return localValue;
+  return date.toISOString().replace(".000", "");
 }
 
 export function formatAccountType(accountType: string): string {
@@ -183,20 +197,24 @@ export function formatPaymentMethodExpanded(method: string): string {
 
 export function formatCompetenceMonth(month: string): string {
   const normalized = month.includes("T") ? month : `${month}-01T12:00:00Z`;
+  const date = new Date(normalized);
+  if (isNaN(date.getTime())) return month;
   return new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
-  }).format(new Date(normalized));
+  }).format(date);
 }
 
 export function formatShortDate(isoOrDateValue: string): string {
   const normalized = isoOrDateValue.includes("T")
     ? isoOrDateValue
     : `${isoOrDateValue}T12:00:00Z`;
+  const date = new Date(normalized);
+  if (isNaN(date.getTime())) return isoOrDateValue;
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
-  }).format(new Date(normalized));
+  }).format(date);
 }
 
 export function humanizeLedgerId(
