@@ -22,7 +22,17 @@ function renderSettingsView(overrides?: Partial<ComponentProps<typeof SettingsVi
       }}
       desktopAutostartEnabled={false}
       desktopAutostartLoading={false}
+      desktopUpdateSupported={true}
+      desktopUpdateChecking={false}
+      desktopUpdateVersion="0.1.0"
+      desktopUpdateAvailableVersion={null}
+      desktopUpdatePublishedAt={null}
+      desktopUpdateNotes={null}
+      desktopUpdateInstallState="idle"
+      desktopUpdateProgressPercent={null}
       onSetDesktopAutostart={vi.fn(() => Promise.resolve())}
+      onCheckDesktopUpdate={vi.fn(() => Promise.resolve())}
+      onInstallDesktopUpdate={vi.fn(() => Promise.resolve())}
       onSetSecurityPassword={vi.fn(() => Promise.resolve())}
       onUnlock={vi.fn(() => Promise.resolve())}
       onLock={vi.fn(() => Promise.resolve())}

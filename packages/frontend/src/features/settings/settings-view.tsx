@@ -8,6 +8,7 @@ import {
   Keyboard,
   Laptop,
   QrCode,
+  RefreshCw,
   ShieldCheck,
   Smartphone,
   Wifi,
@@ -39,7 +40,17 @@ type SettingsViewProps = {
   securityState: SecurityState | null;
   desktopAutostartEnabled: boolean;
   desktopAutostartLoading: boolean;
+  desktopUpdateSupported: boolean;
+  desktopUpdateChecking: boolean;
+  desktopUpdateVersion: string | null;
+  desktopUpdateAvailableVersion: string | null;
+  desktopUpdatePublishedAt: string | null;
+  desktopUpdateNotes: string | null;
+  desktopUpdateInstallState: "idle" | "downloading" | "installing";
+  desktopUpdateProgressPercent: number | null;
   onSetDesktopAutostart: (enabled: boolean) => Promise<void>;
+  onCheckDesktopUpdate: () => Promise<void>;
+  onInstallDesktopUpdate: () => Promise<void>;
   onSetSecurityPassword: (password: string) => Promise<void>;
   onUnlock: (password: string) => Promise<void>;
   onLock: () => Promise<void>;
@@ -68,7 +79,17 @@ export function SettingsView({
   securityState,
   desktopAutostartEnabled,
   desktopAutostartLoading,
+  desktopUpdateSupported,
+  desktopUpdateChecking,
+  desktopUpdateVersion,
+  desktopUpdateAvailableVersion,
+  desktopUpdatePublishedAt,
+  desktopUpdateNotes,
+  desktopUpdateInstallState,
+  desktopUpdateProgressPercent,
   onSetDesktopAutostart,
+  onCheckDesktopUpdate,
+  onInstallDesktopUpdate,
   onSetSecurityPassword,
   onUnlock,
   onLock,
@@ -86,11 +107,31 @@ export function SettingsView({
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isLocking, setIsLocking] = useState(false);
   const [isUpdatingAutostart, setIsUpdatingAutostart] = useState(false);
+  const [isTriggeringUpdateCheck, setIsTriggeringUpdateCheck] = useState(false);
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
   const [isUpdatingLan, setIsUpdatingLan] = useState(false);
   const [isGeneratingPairToken, setIsGeneratingPairToken] = useState(false);
   const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
   const [pairingQrDataUrl, setPairingQrDataUrl] = useState<string | null>(null);
   const normalizedThemeColor = normalizeThemeColor(themeColor);
+  const isDesktopUpdateBusy =
+    desktopUpdateChecking ||
+    isTriggeringUpdateCheck ||
+    isInstallingUpdate ||
+    desktopUpdateInstallState !== "idle";
+  const desktopUpdateSummary = !desktopUpdateSupported
+    ? "Disponivel apenas no app desktop instalado."
+    : desktopUpdateInstallState === "downloading"
+      ? desktopUpdateProgressPercent === null
+        ? "Baixando atualizacao..."
+        : `Baixando atualizacao... ${desktopUpdateProgressPercent}%`
+      : desktopUpdateInstallState === "installing"
+        ? "Instalando atualizacao..."
+        : desktopUpdateAvailableVersion
+          ? `Versao ${desktopUpdateAvailableVersion} disponivel. Atual: ${desktopUpdateVersion ?? "-"}`
+          : desktopUpdateVersion
+            ? `Versao atual: ${desktopUpdateVersion}`
+            : "Verifique se existe uma nova versao disponivel.";
 
   useEffect(() => {
     let active = true;
@@ -140,6 +181,24 @@ export function SettingsView({
       await onSetDesktopAutostart(!desktopAutostartEnabled);
     } finally {
       setIsUpdatingAutostart(false);
+    }
+  }
+
+  async function handleCheckDesktopUpdate() {
+    setIsTriggeringUpdateCheck(true);
+    try {
+      await onCheckDesktopUpdate();
+    } finally {
+      setIsTriggeringUpdateCheck(false);
+    }
+  }
+
+  async function handleInstallDesktopUpdate() {
+    setIsInstallingUpdate(true);
+    try {
+      await onInstallDesktopUpdate();
+    } finally {
+      setIsInstallingUpdate(false);
     }
   }
 
@@ -385,10 +444,10 @@ export function SettingsView({
               </h3>
             </div>
             <p className="settings-section__description">
-              Controle de inicializacao automatica no Windows.
+              Controle de inicializacao automatica e atualizacoes do app.
             </p>
           </header>
-          <div className="settings-section__body">
+          <div className="settings-section__body space-y-3">
             <div className="settings-action-item">
               <div>
                 <p className="settings-action-item__label">Iniciar com o Windows</p>
@@ -409,6 +468,66 @@ export function SettingsView({
                 {desktopAutostartEnabled ? "Desativar" : "Ativar"}
               </Button>
             </div>
+
+            <div className="settings-action-item">
+              <div>
+                <p className="settings-action-item__label">Atualizacoes do aplicativo</p>
+                <p className="settings-action-item__hint">{desktopUpdateSummary}</p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void handleCheckDesktopUpdate();
+                  }}
+                  disabled={!desktopUpdateSupported || isDesktopUpdateBusy}
+                >
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  Verificar
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    void handleInstallDesktopUpdate();
+                  }}
+                  disabled={
+                    !desktopUpdateSupported ||
+                    !desktopUpdateAvailableVersion ||
+                    isDesktopUpdateBusy
+                  }
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  {desktopUpdateInstallState === "idle"
+                    ? "Baixar e instalar"
+                    : "Instalando"}
+                </Button>
+              </div>
+            </div>
+
+            {desktopUpdateAvailableVersion ? (
+              <div className="rounded-xl border border-border/60 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Atualizacao pronta
+                </p>
+                <p className="mt-1 text-sm text-foreground">
+                  Nova versao: {desktopUpdateAvailableVersion}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {desktopUpdatePublishedAt
+                    ? `Publicada em ${new Date(desktopUpdatePublishedAt).toLocaleString()}`
+                    : "Data de publicacao indisponivel"}
+                </p>
+                {desktopUpdateNotes ? (
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    {desktopUpdateNotes}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </section>
 

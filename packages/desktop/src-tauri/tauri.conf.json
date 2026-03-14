@@ -23,6 +23,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "msi",
     "homepage": "https://github.com/yanndrade/finances-app",
     "icon": [
@@ -46,6 +47,14 @@
           "CleanupAppData"
         ]
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/yanndrade/finances-app/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkxNEExNEVENjgwM0M0NzkKUldSNXhBTm83UlJLa1dyQ0RJYzZiS3pVdndqVTlqZGpCM1VDbkxKZDN3ZG1HOCtZQk1TZDh5NkUK"
     }
   }
 }

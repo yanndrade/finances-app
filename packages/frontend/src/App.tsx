@@ -88,10 +88,13 @@ import {
   readStoredDarkMode,
 } from "./lib/theme";
 import {
+  checkForAppUpdate,
   getAutostartEnabled,
+  installAppUpdate,
   isTauriEnvironment,
   listenDesktopEvent,
   setAutostartEnabled,
+  type DesktopUpdateInfo,
 } from "./lib/desktop";
 import { useMediaQuery } from "./lib/use-media-query";
 import { getErrorMessage } from "./lib/utils";
@@ -245,6 +248,16 @@ export function App() {
   const [lockPassword, setLockPassword] = useState("");
   const [desktopAutostartEnabled, setDesktopAutostartEnabled] = useState(false);
   const [desktopAutostartLoading, setDesktopAutostartLoading] = useState(true);
+  const [desktopUpdateInfo, setDesktopUpdateInfo] =
+    useState<DesktopUpdateInfo | null>(null);
+  const [desktopUpdateSupported, setDesktopUpdateSupported] =
+    useState(isTauriEnvironment());
+  const [desktopUpdateChecking, setDesktopUpdateChecking] = useState(false);
+  const [desktopUpdateInstallState, setDesktopUpdateInstallState] = useState<
+    "idle" | "downloading" | "installing"
+  >("idle");
+  const [desktopUpdateProgressPercent, setDesktopUpdateProgressPercent] =
+    useState<number | null>(null);
   const [isMobileLanWarningVisible, setIsMobileLanWarningVisible] = useState(false);
   const [isRetryingMobileLanConnection, setIsRetryingMobileLanConnection] =
     useState(false);
@@ -387,10 +400,43 @@ export function App() {
     }
   }
 
+  async function refreshDesktopUpdateState(options?: {
+    showUpToDateToast?: boolean;
+    showAvailableToast?: boolean;
+  }): Promise<void> {
+    if (!isTauriEnvironment()) {
+      setDesktopUpdateSupported(false);
+      setDesktopUpdateInfo(null);
+      return;
+    }
+
+    setDesktopUpdateChecking(true);
+    try {
+      const result = await checkForAppUpdate();
+      setDesktopUpdateSupported(result.supported);
+      setDesktopUpdateInfo(result.update);
+
+      if (result.isAvailable && options?.showAvailableToast) {
+        showToast(
+          "success",
+          `Atualizacao ${result.update.availableVersion ?? ""} disponivel.`,
+        );
+      } else if (!result.isAvailable && options?.showUpToDateToast) {
+        showToast("success", "Voce ja esta na versao mais recente.");
+      }
+    } catch (error) {
+      showErrorToast(error);
+      throw error;
+    } finally {
+      setDesktopUpdateChecking(false);
+    }
+  }
+
   useEffect(() => {
     void refreshSecurityState();
     void refreshLanSecurityState();
     void refreshDesktopAutostartState();
+    void refreshDesktopUpdateState();
   }, []);
 
   useEffect(() => {
@@ -858,6 +904,49 @@ export function App() {
     }
   }
 
+  async function handleCheckDesktopUpdate(): Promise<void> {
+    await refreshDesktopUpdateState({
+      showUpToDateToast: true,
+      showAvailableToast: true,
+    });
+  }
+
+  async function handleInstallDesktopUpdate(): Promise<void> {
+    if (!isTauriEnvironment()) {
+      return;
+    }
+
+    if (!desktopUpdateInfo?.availableVersion) {
+      await refreshDesktopUpdateState({
+        showUpToDateToast: true,
+        showAvailableToast: true,
+      });
+      return;
+    }
+
+    setDesktopUpdateInstallState("downloading");
+    setDesktopUpdateProgressPercent(0);
+
+    try {
+      await installAppUpdate((progress) => {
+        setDesktopUpdateInstallState(
+          progress.stage === "installing" ? "installing" : "downloading",
+        );
+        setDesktopUpdateProgressPercent(progress.percent);
+      });
+      showToast(
+        "success",
+        "Atualizacao instalada. O app pode fechar para concluir a instalacao.",
+      );
+    } catch (error) {
+      showErrorToast(error);
+      throw error;
+    } finally {
+      setDesktopUpdateInstallState("idle");
+      setDesktopUpdateProgressPercent(null);
+    }
+  }
+
   async function handleSetLanEnabled(enabled: boolean): Promise<void> {
     setIsSubmitting(true);
     setToast(null);
@@ -1140,7 +1229,19 @@ export function App() {
             securityState={securityState}
             desktopAutostartEnabled={desktopAutostartEnabled}
             desktopAutostartLoading={desktopAutostartLoading}
+            desktopUpdateSupported={desktopUpdateSupported}
+            desktopUpdateChecking={desktopUpdateChecking}
+            desktopUpdateVersion={desktopUpdateInfo?.currentVersion ?? null}
+            desktopUpdateAvailableVersion={
+              desktopUpdateInfo?.availableVersion ?? null
+            }
+            desktopUpdatePublishedAt={desktopUpdateInfo?.publishedAt ?? null}
+            desktopUpdateNotes={desktopUpdateInfo?.notes ?? null}
+            desktopUpdateInstallState={desktopUpdateInstallState}
+            desktopUpdateProgressPercent={desktopUpdateProgressPercent}
             onSetDesktopAutostart={handleSetDesktopAutostart}
+            onCheckDesktopUpdate={handleCheckDesktopUpdate}
+            onInstallDesktopUpdate={handleInstallDesktopUpdate}
             onSetSecurityPassword={handleSetSecurityPassword}
             onUnlock={handleUnlock}
             onLock={handleLockFromDesktop}

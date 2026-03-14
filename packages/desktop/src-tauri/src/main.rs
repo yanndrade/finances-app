@@ -121,6 +121,7 @@ fn main() {
                 .app_name(AUTOSTART_ENTRY_NAME)
                 .build(),
         )
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             get_autostart_enabled,
             set_autostart_enabled

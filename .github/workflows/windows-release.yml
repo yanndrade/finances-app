@@ -26,6 +26,8 @@ jobs:
       WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
       WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
       WINDOWS_SIGN_TIMESTAMP_URL: ${{ secrets.WINDOWS_SIGN_TIMESTAMP_URL }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -62,8 +64,13 @@ jobs:
         run: |
           $cert = $env:WINDOWS_CERT_PFX_BASE64
           $password = $env:WINDOWS_CERT_PASSWORD
+          $updaterKey = $env:TAURI_SIGNING_PRIVATE_KEY
+          $updaterPassword = $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD
           if ([string]::IsNullOrWhiteSpace($cert) -or [string]::IsNullOrWhiteSpace($password)) {
-            throw "Missing signing secrets. Configure WINDOWS_CERT_PFX_BASE64 and WINDOWS_CERT_PASSWORD."
+            throw "Missing Windows signing secrets. Configure WINDOWS_CERT_PFX_BASE64 and WINDOWS_CERT_PASSWORD."
+          }
+          if ([string]::IsNullOrWhiteSpace($updaterKey) -or [string]::IsNullOrWhiteSpace($updaterPassword)) {
+            throw "Missing updater signing secrets. Configure TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD."
           }
 
       - name: Prepare signing certificate
@@ -84,15 +91,6 @@ jobs:
           WINDOWS_SIGN_TIMESTAMP_URL: ${{ env.WINDOWS_SIGN_TIMESTAMP_URL }}
         run: ./scripts/build-release-windows.ps1
 
-      - name: Upload installer artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-installer
-          path: |
-            packages/desktop/src-tauri/target/release/bundle/msi/*.msi
-            packages/desktop/src-tauri/target/release/bundle/msi/*.zip
-          if-no-files-found: error
-
       - name: Resolve release metadata
         id: release_meta
         shell: pwsh
@@ -102,6 +100,24 @@ jobs:
             $releaseName = "Windows Release $env:RELEASE_TAG"
           }
           "release_name=$releaseName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Prepare updater artifacts
+        shell: pwsh
+        run: |
+          ./scripts/prepare-updater-release.ps1 `
+            -ReleaseVersion $env:RELEASE_VERSION `
+            -ReleaseTag $env:RELEASE_TAG `
+            -Repository "${{ github.repository }}"
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            packages/desktop/src-tauri/target/release/bundle/msi/*.msi
+            packages/desktop/src-tauri/target/release/bundle/msi/*.sig
+            packages/desktop/src-tauri/target/release/bundle/msi/latest.json
+          if-no-files-found: error
 
       - name: Create release tag
         shell: pwsh
@@ -132,4 +148,5 @@ jobs:
           generate_release_notes: true
           files: |
             packages/desktop/src-tauri/target/release/bundle/msi/*.msi
-            packages/desktop/src-tauri/target/release/bundle/msi/*.zip
+            packages/desktop/src-tauri/target/release/bundle/msi/*.sig
+            packages/desktop/src-tauri/target/release/bundle/msi/latest.json
