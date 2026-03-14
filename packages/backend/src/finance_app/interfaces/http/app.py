@@ -208,7 +208,7 @@ def create_app(
             allow_http=allow_http_origin,
         )
         if not origin_allowed:
-            parsed_origin = urlparse(origin) if origin else None
+            origin_diagnostics = _extract_origin_diagnostics(origin)
             _log_lan_security_event(
                 request,
                 reason="invalid_request_origin",
@@ -218,9 +218,7 @@ def create_app(
                 extra={
                     "origin_reason": origin_reason,
                     "origin_source": origin_source,
-                    "origin_scheme": parsed_origin.scheme if parsed_origin else None,
-                    "origin_host": parsed_origin.hostname if parsed_origin else None,
-                    "origin_port": parsed_origin.port if parsed_origin else None,
+                    **origin_diagnostics,
                     "expected_host": effective_public_host,
                     "allow_http_origin": allow_http_origin,
                     "public_scheme": str(getattr(request.app.state, "public_scheme", "http")),
@@ -345,6 +343,32 @@ def _read_request_origin_context(request: Request) -> tuple[str | None, str]:
         return referer, "referer"
 
     return None, "missing"
+
+
+def _extract_origin_diagnostics(origin: str | None) -> dict[str, str | int | None]:
+    if not origin:
+        return {
+            "origin_scheme": None,
+            "origin_host": None,
+            "origin_port": None,
+        }
+
+    parsed_origin = urlparse(origin)
+    try:
+        origin_host = parsed_origin.hostname
+    except ValueError:
+        origin_host = None
+
+    try:
+        origin_port = parsed_origin.port
+    except ValueError:
+        origin_port = None
+
+    return {
+        "origin_scheme": parsed_origin.scheme or None,
+        "origin_host": origin_host,
+        "origin_port": origin_port,
+    }
 
 
 def _is_origin_allowed(

@@ -443,6 +443,35 @@ def test_security_lan_rejects_remote_requests_without_valid_context(
     }
 
 
+def test_security_lan_rejects_malformed_origin_ports_without_server_error(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "finance_app.infrastructure.security._resolve_lan_network",
+        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
+    )
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    client.post("/api/security/lan", json={"enabled": True})
+
+    for malformed_origin in ("https://192.168.50.3:abc", "https://192.168.50.3:99999"):
+        response = client.get(
+            "/api/dashboard",
+            params={"month": "2026-03"},
+            headers={
+                **_build_remote_lan_headers(),
+                "Origin": malformed_origin,
+            },
+        )
+
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Invalid request origin."}
+
+
 def test_security_lan_rejects_requests_outside_authorized_subnet(
     tmp_path,
     monkeypatch,
