@@ -229,7 +229,6 @@ export function AccountsView({
             <input
               placeholder="Buscar conta..."
               type="text"
-              aria-label="Buscar conta"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
@@ -291,7 +290,7 @@ export function AccountsView({
                       <div className="flex items-center gap-3">
                         <AccountTypeMonogram type={account.type} />
                         <div className="space-y-0.5">
-                          <strong className="block truncate text-slate-900 leading-tight">
+                          <strong className="block text-slate-900 leading-tight">
                             {account.name}
                           </strong>
                           <span className="flex items-center gap-1.5 text-[12px] text-slate-400">

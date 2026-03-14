@@ -10,9 +10,6 @@ from finance_app.domain.security import LanNetworkInfo
 import finance_app.interfaces.http.app as http_app
 from finance_app.interfaces.http.app import create_app
 
-LAN_PUBLIC_HOST = "192.168.50.2:8000"
-LAN_REMOTE_IP = "192.168.50.20"
-
 
 def test_create_app_returns_fastapi_instance() -> None:
     app = create_app()
@@ -292,7 +289,10 @@ def test_security_lan_pairing_authenticates_remote_devices(
         "http://192.168.50.2:8000/api/security/pair?pair_token="
     )
 
-    remote_headers = _build_remote_lan_headers()
+    remote_headers = {
+        "X-Finance-Client-IP": "192.168.50.20",
+        "Origin": "https://192.168.50.2:8000",
+    }
     pair_response = client.post(
         "/api/security/pair",
         json={"pair_token": pair_token, "device_name": "Pixel 9"},
@@ -322,45 +322,6 @@ def test_security_lan_pairing_authenticates_remote_devices(
     assert devices_payload[0]["revoked_at"] is None
 
 
-def test_security_lan_origin_uses_request_host_even_when_detected_lan_ip_differs(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "finance_app.infrastructure.security._resolve_lan_network",
-        lambda: LanNetworkInfo(
-            local_ip="192.168.50.99",
-            subnet_cidr="192.168.50.0/24",
-        ),
-    )
-    app = create_app(
-        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
-        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
-    )
-    client = TestClient(app)
-    client.post("/api/security/lan", json={"enabled": True})
-    pair_token = client.post("/api/security/lan/pair-token").json()["pair_token"]
-
-    pair_response = client.post(
-        "/api/security/pair",
-        json={"pair_token": pair_token, "device_name": "Pixel mismatch-ip"},
-        headers=_build_remote_lan_headers(origin=None),
-    )
-    assert pair_response.status_code == 200
-    device_token = pair_response.json()["device_token"]
-
-    dashboard_response = client.get(
-        "/api/dashboard",
-        params={"month": "2026-03"},
-        headers={
-            **_build_remote_lan_headers(),
-            "X-Finance-Token": device_token,
-        },
-    )
-
-    assert dashboard_response.status_code == 200
-
-
 def test_security_lan_pairing_page_is_reachable_without_origin_header(
     tmp_path,
     monkeypatch,
@@ -380,7 +341,7 @@ def test_security_lan_pairing_page_is_reachable_without_origin_header(
     response = client.get(
         "/api/security/pair",
         params={"pair_token": pair_token},
-        headers=_build_remote_lan_headers(origin=None),
+        headers={"X-Finance-Client-IP": "192.168.50.20"},
     )
 
     assert response.status_code == 200
@@ -402,7 +363,10 @@ def test_security_lan_rejects_remote_requests_without_valid_context(
     )
     client = TestClient(app)
 
-    remote_headers = _build_remote_lan_headers()
+    remote_headers = {
+        "X-Finance-Client-IP": "192.168.50.20",
+        "Origin": "https://192.168.50.2:8000",
+    }
     blocked_lan_disabled = client.get(
         "/api/dashboard",
         params={"month": "2026-03"},
@@ -426,7 +390,7 @@ def test_security_lan_rejects_remote_requests_without_valid_context(
         params={"month": "2026-03"},
         headers={
             **remote_headers,
-            "Origin": "https://192.168.50.3:8000",
+            "Origin": "https://malicious.site",
         },
     )
     assert blocked_bad_origin.status_code == 403
@@ -441,35 +405,6 @@ def test_security_lan_rejects_remote_requests_without_valid_context(
     assert blocked_remote_config.json() == {
         "detail": "LAN configuration endpoints are desktop-only."
     }
-
-
-def test_security_lan_rejects_malformed_origin_ports_without_server_error(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "finance_app.infrastructure.security._resolve_lan_network",
-        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
-    )
-    app = create_app(
-        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
-        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
-    )
-    client = TestClient(app)
-    client.post("/api/security/lan", json={"enabled": True})
-
-    for malformed_origin in ("https://192.168.50.3:abc", "https://192.168.50.3:99999"):
-        response = client.get(
-            "/api/dashboard",
-            params={"month": "2026-03"},
-            headers={
-                **_build_remote_lan_headers(),
-                "Origin": malformed_origin,
-            },
-        )
-
-        assert response.status_code == 403
-        assert response.json() == {"detail": "Invalid request origin."}
 
 
 def test_security_lan_rejects_requests_outside_authorized_subnet(
@@ -493,8 +428,7 @@ def test_security_lan_rejects_requests_outside_authorized_subnet(
         params={"month": "2026-03"},
         headers={
             "X-Finance-Client-IP": out_of_subnet_ip,
-            "Host": LAN_PUBLIC_HOST,
-            "Origin": f"https://{LAN_PUBLIC_HOST}",
+            "Origin": "https://192.168.50.2:8000",
         },
     )
 
@@ -523,7 +457,7 @@ def test_security_lan_accepts_http_origin_when_server_is_running_http(
     pair_response = client.post(
         "/api/security/pair",
         json={"pair_token": pair_token, "device_name": "Pixel HTTP"},
-        headers=_build_remote_lan_headers(origin=None),
+        headers={"X-Finance-Client-IP": "192.168.50.20"},
     )
     assert pair_response.status_code == 200
     device_token = pair_response.json()["device_token"]
@@ -532,47 +466,12 @@ def test_security_lan_accepts_http_origin_when_server_is_running_http(
         "/api/dashboard",
         params={"month": "2026-03"},
         headers={
-            **_build_remote_lan_headers(origin=f"http://{LAN_PUBLIC_HOST}"),
+            "X-Finance-Client-IP": "192.168.50.20",
+            "Origin": "http://192.168.50.2:8000",
             "X-Finance-Token": device_token,
         },
     )
     assert http_origin_response.status_code == 200
-
-
-def test_security_lan_accepts_finance_origin_header_when_origin_is_missing(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "finance_app.infrastructure.security._resolve_lan_network",
-        lambda: LanNetworkInfo(local_ip="192.168.50.2", subnet_cidr="192.168.50.0/24"),
-    )
-    app = create_app(
-        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
-        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
-    )
-    client = TestClient(app)
-    client.post("/api/security/lan", json={"enabled": True})
-    pair_token = client.post("/api/security/lan/pair-token").json()["pair_token"]
-
-    pair_response = client.post(
-        "/api/security/pair",
-        json={"pair_token": pair_token, "device_name": "Safari fallback"},
-        headers=_build_remote_lan_headers(origin=None),
-    )
-    assert pair_response.status_code == 200
-    device_token = pair_response.json()["device_token"]
-
-    response = client.get(
-        "/api/security/state",
-        headers={
-            **_build_remote_lan_headers(origin=None),
-            "X-Finance-Origin": f"http://{LAN_PUBLIC_HOST}",
-            "X-Finance-Token": device_token,
-        },
-    )
-
-    assert response.status_code == 200
 
 
 def test_security_lan_allows_frontend_routes_without_origin_or_token(
@@ -593,7 +492,7 @@ def test_security_lan_allows_frontend_routes_without_origin_or_token(
     client = TestClient(app)
     client.post("/api/security/lan", json={"enabled": True})
 
-    lan_headers = _build_remote_lan_headers(origin=None)
+    lan_headers = {"X-Finance-Client-IP": "192.168.50.20"}
 
     root_response = client.get("/", headers=lan_headers)
     assert root_response.status_code == 200
@@ -4093,20 +3992,6 @@ def _pick_out_of_subnet_ip(subnet_cidr: str) -> str:
         if ipaddress.ip_address(candidate) not in network:
             return candidate
     return "8.8.8.8"
-
-
-def _build_remote_lan_headers(
-    *,
-    origin: str | None = f"https://{LAN_PUBLIC_HOST}",
-    host: str = LAN_PUBLIC_HOST,
-) -> dict[str, str]:
-    headers = {
-        "X-Finance-Client-IP": LAN_REMOTE_IP,
-        "Host": host,
-    }
-    if origin is not None:
-        headers["Origin"] = origin
-    return headers
 
 
 def _create_account(

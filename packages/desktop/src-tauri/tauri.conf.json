@@ -24,7 +24,6 @@
   "bundle": {
     "active": true,
     "targets": "msi",
-    "homepage": "https://github.com/yanndrade/finances-app",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,12 +33,6 @@
     ],
     "resources": [
       "bin"
-    ],
-    "windows": {
-      "wix": {
-        "bannerPath": "installer-assets/wix-banner.bmp",
-        "dialogImagePath": "installer-assets/wix-dialog.bmp"
-      }
-    }
+    ]
   }
 }

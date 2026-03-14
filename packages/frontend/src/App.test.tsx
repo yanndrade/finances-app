@@ -223,24 +223,6 @@ function installDialogEnvironment() {
   });
 }
 
-function installViewportMatchMedia(matches: boolean) {
-  const addListener = vi.fn();
-  const removeListener = vi.fn();
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn().mockImplementation((query: string) => ({
-      matches,
-      media: query,
-      onchange: null,
-      addListener,
-      removeListener,
-      addEventListener: addListener,
-      removeEventListener: removeListener,
-      dispatchEvent: vi.fn(() => false),
-    })),
-  );
-}
-
 function installAppFetchMock(initialState?: {
   accounts?: AccountSummary[];
   cards?: CardSummary[];
@@ -554,27 +536,6 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /hist/i }));
     expect(await screen.findByRole("region", { name: /hist/i })).toBeInTheDocument();
-  });
-
-  it("shows a local network warning screen on mobile when API is unreachable", async () => {
-    const originalFetch = globalThis.fetch;
-    installViewportMatchMedia(true);
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      if (String(input).includes("/api/")) {
-        throw new TypeError("Failed to fetch");
-      }
-      return originalFetch(input, init);
-    });
-
-    render(<App />);
-
-    expect(
-      await screen.findByRole("heading", {
-        level: 1,
-        name: /celular fora da rede do desktop/i,
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /tentar novamente/i })).toBeInTheDocument();
   });
 
   it("keeps the desktop shell without a fixed contextual panel", async () => {

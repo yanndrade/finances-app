@@ -122,7 +122,7 @@ export function FixedExpensesView({
       <div className={cn("grid grid-cols-1 gap-6 items-start", !isMobileSurface && "lg:grid-cols-2")}>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Ocorrências do mês</h2>
+            <h2 className="text-xl font-bold text-slate-900">Ocorrencias do mes</h2>
           </div>
 
           <div

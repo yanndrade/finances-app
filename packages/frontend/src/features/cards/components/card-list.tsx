@@ -1,34 +1,24 @@
-import { ArrowRight, CreditCard, History } from "lucide-react";
+import { ArrowRight, History } from "lucide-react";
 
-import { EmptyState } from "../../../components/ui/empty-state";
 import { Progress } from "../../../components/ui/progress";
 import type { CardSummary, InvoiceSummary } from "../../../lib/api";
 import { formatCurrency } from "../../../lib/format";
-import { renderStatusBadge } from "./shared";
+import { EmptySurface, renderStatusBadge } from "./shared";
 
 type CardListProps = {
   activeCards: CardSummary[];
   invoicesByCard: Map<string, InvoiceSummary>;
   onSelectCard: (cardId: string) => void;
   onOpenHistory: (cardId: string, referenceMonth: string) => void;
-  onOpenManageCards?: () => void;
 };
 
-export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHistory, onOpenManageCards }: CardListProps) {
+export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHistory }: CardListProps) {
   if (activeCards.length === 0) {
-    return (
-      <EmptyState
-        className="py-16"
-        icon={CreditCard}
-        title="Nenhum cartão ativo"
-        description="Adicione um cartão para acompanhar faturas, limites e gastos parcelados."
-        action={onOpenManageCards ? { label: "Gerenciar cartões", onClick: onOpenManageCards } : undefined}
-      />
-    );
+    return <EmptySurface message="Nenhum cartão ativo encontrado." />;
   }
 
   return (
-    <div className="divide-y divide-border/60">
+    <div className="flex flex-col gap-2">
       {activeCards.map((card) => {
         const currentInvoice = invoicesByCard.get(card.card_id);
         const invoiceAmount = currentInvoice?.total_amount ?? 0;
@@ -42,23 +32,23 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
         return (
           <div
             key={card.card_id}
-            className="flex items-center gap-4 px-1 py-3.5 hover:bg-muted/30 transition-colors rounded-lg -mx-1"
+            className="flex items-center gap-4 rounded-xl border border-slate-100 bg-white px-5 py-3 shadow-sm transition-colors hover:border-slate-200"
           >
             {/* Nome + ciclo — fixo */}
             <div className="w-40 shrink-0">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-sm font-bold text-foreground">{card.name}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-slate-900">{card.name}</span>
                 {currentInvoice && renderStatusBadge(currentInvoice.status)}
               </div>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">
+              <p className="mt-0.5 text-[13px] text-slate-400">
                 Fecha {card.closing_day} · Vence {card.due_day}
               </p>
             </div>
 
             {/* Fatura — fixo */}
             <div className="w-28 shrink-0">
-              <p className="text-[12px] font-semibold uppercase tracking-widest text-muted-foreground">Fatura</p>
-              <p className="mt-0.5 text-base font-black tracking-tight text-foreground">
+              <p className="text-[12px] font-semibold uppercase tracking-widest text-slate-400">Fatura</p>
+              <p className="mt-0.5 text-base font-black tracking-tight text-slate-900">
                 {formatCurrency(invoiceAmount)}
               </p>
             </div>
@@ -66,13 +56,13 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
             {/* Barra de limite — cresce para preencher o espaço disponível */}
             <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <span className="text-[12px] font-semibold uppercase tracking-widest text-slate-400">
                   Limite
                 </span>
-                <span className="text-[13px] font-bold text-muted-foreground">{Math.round(limitUsage)}%</span>
+                <span className="text-[13px] font-bold text-slate-500">{Math.round(limitUsage)}%</span>
               </div>
-              <Progress value={limitUsage} className="h-1 rounded-full bg-border/60" />
-              <div className="flex justify-between text-[12px] text-muted-foreground/70">
+              <Progress value={limitUsage} className="h-1.5 rounded-full bg-slate-100" />
+              <div className="flex justify-between text-[12px] text-slate-400">
                 <span>Disp. {formatCurrency(availableLimit)}</span>
                 <span>{formatCurrency(card.limit)}</span>
               </div>
@@ -89,7 +79,7 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
                 }}
                 disabled={!currentInvoice}
                 aria-label="Histórico"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"
               >
                 <History className="h-4 w-4" />
               </button>

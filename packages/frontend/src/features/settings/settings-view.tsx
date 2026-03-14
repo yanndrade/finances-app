@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
-  Moon,
   Palette,
-  Sun,
   Download,
   Keyboard,
   Laptop,
@@ -31,11 +29,9 @@ import {
 type SettingsViewProps = {
   isSubmitting: boolean;
   themeColor: string;
-  darkMode: boolean;
   onExportBackup: () => void;
   onResetApplicationData: () => Promise<void>;
   onThemeColorChange: (color: string) => void;
-  onDarkModeChange: (isDark: boolean) => void;
   securityState: SecurityState | null;
   desktopAutostartEnabled: boolean;
   desktopAutostartLoading: boolean;
@@ -60,11 +56,9 @@ const PRODUCTIVITY_SHORTCUTS = [
 export function SettingsView({
   isSubmitting,
   themeColor,
-  darkMode,
   onExportBackup,
   onResetApplicationData,
   onThemeColorChange,
-  onDarkModeChange,
   securityState,
   desktopAutostartEnabled,
   desktopAutostartLoading,
@@ -174,7 +168,7 @@ export function SettingsView({
   }
 
   async function handleSetPassword() {
-    if (passwordInput.trim().length < 4) {
+    if (!passwordInput.trim()) {
       return;
     }
 
@@ -265,29 +259,6 @@ export function SettingsView({
             </p>
           </header>
           <div className="settings-section__body">
-            <div className="settings-action-item">
-              <div>
-                <p className="settings-action-item__label">Modo escuro</p>
-                <p className="settings-action-item__hint">
-                  Alterna entre tema claro e escuro.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant={darkMode ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => onDarkModeChange(!darkMode)}
-                aria-pressed={darkMode}
-              >
-                {darkMode ? (
-                  <Sun className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <Moon className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                )}
-                {darkMode ? "Claro" : "Escuro"}
-              </Button>
-            </div>
-
             <div className="settings-theme-presets" role="list" aria-label="Paleta de cores">
               {THEME_PRESET_OPTIONS.map((option) => {
                 const isActive = normalizedThemeColor === option.value;
@@ -341,7 +312,7 @@ export function SettingsView({
                   aria-label="Hex da cor principal"
                   value={normalizedThemeColor}
                   onChange={(event) => onThemeColorChange(event.target.value)}
-                  placeholder="#831bb0"
+                  placeholder="#0f5ea8"
                 />
               </div>
             </div>
@@ -599,8 +570,6 @@ export function SettingsView({
                 placeholder="Nova senha"
                 value={passwordInput}
                 onChange={(event) => setPasswordInput(event.target.value)}
-                minLength={4}
-                maxLength={128}
               />
               <Button
                 type="button"
@@ -608,7 +577,7 @@ export function SettingsView({
                 onClick={() => {
                   void handleSetPassword();
                 }}
-                disabled={isSettingPassword || passwordInput.trim().length < 4}
+                disabled={isSettingPassword || !passwordInput.trim()}
               >
                 Definir senha
               </Button>
@@ -622,7 +591,6 @@ export function SettingsView({
                   placeholder="Senha para desbloquear"
                   value={unlockInput}
                   onChange={(event) => setUnlockInput(event.target.value)}
-                  maxLength={128}
                 />
                 <Button
                   type="button"
@@ -643,7 +611,7 @@ export function SettingsView({
         <section className="settings-section settings-section--danger" aria-labelledby="settings-danger-heading">
           <header className="settings-section__header">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden="true" />
+              <AlertTriangle className="h-4 w-4 text-red-500" aria-hidden="true" />
               <h3 id="settings-danger-heading" className="settings-section__title settings-section__title--danger">
                 Zona de perigo
               </h3>

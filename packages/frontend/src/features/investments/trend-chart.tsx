@@ -12,10 +12,9 @@ import {
 
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
-import { formatCurrency, formatCurrencyCompact } from "../../lib/format";
+import { formatCurrency } from "../../lib/format";
 import type { UiDensity } from "../../lib/ui-density";
 import { cn } from "../../lib/utils";
-import { prefersReducedMotion } from "../../lib/motion";
 
 type TrendPoint = {
   bucket: string;
@@ -54,7 +53,7 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
     >
       <CardHeader className="space-y-3 pb-2">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-foreground">Aportes e dividendos</h3>
+          <h3 className="text-sm font-semibold text-slate-800">Aportes e dividendos</h3>
         </div>
         <div className="flex flex-wrap gap-3">
           <ToggleLegend
@@ -78,13 +77,13 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
           </div>
         ) : !hasEnoughData ? (
           <div className="flex h-36 flex-col items-center justify-center gap-2 text-center">
-            <div className="rounded-full bg-muted p-3">
-              <BarChart2 className="h-6 w-6 text-muted-foreground" />
+            <div className="rounded-full bg-slate-50 p-3">
+              <BarChart2 className="h-6 w-6 text-slate-300" />
             </div>
-            <p className="text-sm font-semibold text-foreground">
+            <p className="text-sm font-semibold text-slate-500">
               {data.length === 0 ? "Nenhum dado no período." : "Dados insuficientes para o gráfico."}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-slate-400">
               Com mais períodos, a tendência aparecerá aqui.
             </p>
           </div>
@@ -118,7 +117,7 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
                   tick={{ fontSize: 10, fill: "#94a3b8" }}
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(val: number) => formatCurrencyCompact(val * 100)}
+                  tickFormatter={(val) => `R$ ${val}`}
                   width={64}
                 />
                 <Tooltip
@@ -142,7 +141,6 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
                     fill={`url(#${GRADIENT_APORTE})`}
                     dot={false}
                     activeDot={{ r: 4, strokeWidth: 0 }}
-                    isAnimationActive={!prefersReducedMotion()}
                   />
                 )}
                 {showDividend && (
@@ -154,7 +152,6 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
                     fill={`url(#${GRADIENT_DIVIDENDOS})`}
                     dot={false}
                     activeDot={{ r: 4, strokeWidth: 0 }}
-                    isAnimationActive={!prefersReducedMotion()}
                   />
                 )}
               </AreaChart>
@@ -181,7 +178,7 @@ function ToggleLegend({
     <label
       className={cn(
         "inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all select-none",
-        active ? "bg-muted text-foreground" : "bg-muted/40 text-muted-foreground",
+        active ? "bg-slate-100 text-slate-700" : "bg-slate-50 text-slate-400",
       )}
     >
       <input

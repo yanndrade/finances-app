@@ -325,7 +325,6 @@ export function MovementsPanel({
             aria-label="Descrição"
             autoComplete="off"
             placeholder="Ex.: almoço, freela, saque"
-            maxLength={300}
             value={transactionForm.description}
             onChange={(event) =>
               setTransactionForm((current) => ({
@@ -343,7 +342,6 @@ export function MovementsPanel({
             autoComplete="off"
             list={categoryListId}
             placeholder="Digite para usar ou criar"
-            maxLength={60}
             value={transactionForm.categoryId}
             onChange={(event) =>
               setTransactionForm((current) => ({
@@ -427,7 +425,6 @@ export function MovementsPanel({
                   aria-label="Pessoa relacionada"
                   autoComplete="off"
                   placeholder="Opcional"
-                  maxLength={100}
                   value={transactionForm.personId}
                   onChange={(event) =>
                     setTransactionForm((current) => ({
@@ -600,7 +597,6 @@ export function MovementsPanel({
             aria-label="Descrição"
             autoComplete="off"
             placeholder="Opcional"
-            maxLength={300}
             value={transferForm.description}
             onChange={(event) =>
               setTransferForm((current) => ({

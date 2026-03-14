@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import ipaddress
 import os
@@ -9,7 +8,6 @@ import secrets
 import socket
 import subprocess
 import time
-import unicodedata
 from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
@@ -36,35 +34,6 @@ from finance_app.infrastructure.db import get_engine
 
 DEFAULT_PAIR_TOKEN_TTL_SECONDS = 300
 NETWORK_CACHE_TTL_SECONDS = 15.0
-WINDOWS_VIRTUAL_ADAPTER_HINTS = (
-    "vethernet",
-    "default switch",
-    "virtual",
-    "hyper-v",
-    "vmware",
-    "virtualbox",
-    "docker",
-    "wsl",
-    "loopback",
-    "tap",
-    "tun",
-)
-WINDOWS_PHYSICAL_ADAPTER_HINTS = (
-    "wi-fi",
-    "wifi",
-    "wlan",
-    "ethernet",
-)
-IPV4_PATTERN = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
-
-
-@dataclass(frozen=True)
-class WindowsNetworkAdapter:
-    name: str
-    ipv4: str | None
-    subnet_mask: str | None
-    default_gateway: str | None
-    is_disconnected: bool
 
 
 class SecurityBase(DeclarativeBase):
@@ -429,13 +398,6 @@ def _resolve_lan_network() -> LanNetworkInfo | None:
 
 
 def _discover_private_ipv4() -> str | None:
-    if os.name == "nt":
-        output = _run_windows_ipconfig()
-        if output:
-            windows_candidate = _discover_windows_private_ipv4_from_output(output)
-            if windows_candidate is not None:
-                return windows_candidate
-
     candidates: list[str] = []
 
     try:
@@ -459,7 +421,17 @@ def _discover_private_ipv4() -> str | None:
         if candidate in seen:
             continue
         seen.add(candidate)
-        if _is_private_ipv4_candidate(candidate):
+        try:
+            ip = ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if (
+            ip.version == 4
+            and ip.is_private
+            and not ip.is_loopback
+            and not ip.is_link_local
+            and not ip.is_multicast
+        ):
             return candidate
 
     return None
@@ -481,16 +453,31 @@ def _discover_windows_subnet(local_ip: str) -> str | None:
     if os.name != "nt":
         return None
 
-    output = _run_windows_ipconfig()
-    if not output:
+    try:
+        output = subprocess.run(
+            ["ipconfig"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=2,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
         return None
 
-    for adapter in _parse_windows_ipconfig(output):
-        if adapter.ipv4 != local_ip or adapter.subnet_mask is None:
+    sections = re.split(r"\r?\n\r?\n", output)
+    for section in sections:
+        if local_ip not in section:
+            continue
+        mask_match = re.search(
+            r"Subnet Mask[ .]*:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)",
+            section,
+            flags=re.IGNORECASE,
+        )
+        if mask_match is None:
             continue
         try:
             network = ipaddress.ip_interface(
-                f"{local_ip}/{adapter.subnet_mask}"
+                f"{local_ip}/{mask_match.group(1)}"
             ).network
         except ValueError:
             continue
@@ -525,149 +512,3 @@ def _discover_unix_subnet(local_ip: str) -> str | None:
         return None
 
     return str(network)
-
-
-def _run_windows_ipconfig() -> str | None:
-    try:
-        return subprocess.run(
-            ["ipconfig"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=2,
-        ).stdout
-    except (OSError, subprocess.SubprocessError):
-        return None
-
-
-def _discover_windows_private_ipv4_from_output(output: str) -> str | None:
-    scored: list[tuple[int, int, str]] = []
-    for index, adapter in enumerate(_parse_windows_ipconfig(output)):
-        if adapter.is_disconnected or adapter.ipv4 is None:
-            continue
-        if not _is_private_ipv4_candidate(adapter.ipv4):
-            continue
-        scored.append((_score_windows_adapter(adapter), -index, adapter.ipv4))
-
-    if not scored:
-        return None
-
-    scored.sort(reverse=True)
-    return scored[0][2]
-
-
-def _parse_windows_ipconfig(output: str) -> list[WindowsNetworkAdapter]:
-    adapters: list[WindowsNetworkAdapter] = []
-    for raw_section in re.split(r"\r?\n\r?\n", output):
-        lines = [line.strip() for line in raw_section.splitlines() if line.strip()]
-        if not lines:
-            continue
-
-        section_name = lines[0].rstrip(":")
-        normalized_name = _normalize_text(section_name)
-        if "adapter" not in normalized_name and "adaptador" not in normalized_name:
-            continue
-
-        ipv4: str | None = None
-        subnet_mask: str | None = None
-        default_gateway: str | None = None
-        is_disconnected = False
-        read_gateway_from_next_line = False
-
-        for raw_line in lines[1:]:
-            normalized_line = _normalize_text(raw_line)
-            if (
-                "media disconnected" in normalized_line
-                or "desconectada" in normalized_line
-            ):
-                is_disconnected = True
-
-            if ipv4 is None and "ipv4" in normalized_line:
-                ipv4 = _extract_ipv4(raw_line)
-
-            if subnet_mask is None and (
-                "subnet mask" in normalized_line
-                or "sub-rede" in normalized_line
-            ):
-                subnet_mask = _extract_ipv4(raw_line)
-
-            if _is_gateway_line(normalized_line):
-                default_gateway = _extract_ipv4(raw_line)
-                read_gateway_from_next_line = default_gateway is None
-                continue
-
-            if read_gateway_from_next_line and default_gateway is None:
-                default_gateway = _extract_ipv4(raw_line)
-                if default_gateway is not None:
-                    read_gateway_from_next_line = False
-
-        adapters.append(
-            WindowsNetworkAdapter(
-                name=section_name,
-                ipv4=ipv4,
-                subnet_mask=subnet_mask,
-                default_gateway=default_gateway,
-                is_disconnected=is_disconnected,
-            )
-        )
-
-    return adapters
-
-
-def _score_windows_adapter(adapter: WindowsNetworkAdapter) -> int:
-    score = 0
-    normalized_name = _normalize_text(adapter.name)
-
-    if adapter.default_gateway is not None:
-        score += 100
-
-    if any(hint in normalized_name for hint in WINDOWS_PHYSICAL_ADAPTER_HINTS):
-        score += 20
-
-    if any(hint in normalized_name for hint in WINDOWS_VIRTUAL_ADAPTER_HINTS):
-        score -= 40
-
-    return score
-
-
-def _normalize_text(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value)
-    without_marks = "".join(
-        char for char in normalized if not unicodedata.combining(char)
-    )
-    return without_marks.lower()
-
-
-def _extract_ipv4(value: str) -> str | None:
-    for matched in IPV4_PATTERN.findall(value):
-        if _is_ipv4(matched):
-            return matched
-    return None
-
-
-def _is_ipv4(value: str) -> bool:
-    try:
-        ip = ipaddress.ip_address(value)
-    except ValueError:
-        return False
-    return ip.version == 4
-
-
-def _is_private_ipv4_candidate(value: str) -> bool:
-    try:
-        ip = ipaddress.ip_address(value)
-    except ValueError:
-        return False
-    return (
-        ip.version == 4
-        and ip.is_private
-        and not ip.is_loopback
-        and not ip.is_link_local
-        and not ip.is_multicast
-    )
-
-
-def _is_gateway_line(normalized_line: str) -> bool:
-    return "default gateway" in normalized_line or (
-        "gateway" in normalized_line and "padr" in normalized_line
-    )

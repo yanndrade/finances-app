@@ -8,14 +8,13 @@ import {
 const invokeMock = vi.fn();
 const listenMock = vi.fn();
 const unlistenMock = vi.fn();
-const getCurrentWindowMock = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => getCurrentWindowMock(),
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (...args: unknown[]) => listenMock(...args),
 }));
 
 describe("desktop bridge", () => {
@@ -23,7 +22,6 @@ describe("desktop bridge", () => {
     invokeMock.mockReset();
     listenMock.mockReset();
     unlistenMock.mockReset();
-    getCurrentWindowMock.mockReset();
     delete (window as { __TAURI__?: unknown }).__TAURI__;
     delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
@@ -56,13 +54,9 @@ describe("desktop bridge", () => {
   it("registers and unregisters desktop events in tauri runtime", async () => {
     (window as { __TAURI__?: unknown }).__TAURI__ = {};
     listenMock.mockResolvedValue(unlistenMock);
-    getCurrentWindowMock.mockReturnValue({
-      listen: (...args: unknown[]) => listenMock(...args),
-    });
     const handler = vi.fn();
 
     const unsubscribe = await listenDesktopEvent("desktop://lock", handler);
-    expect(getCurrentWindowMock).toHaveBeenCalledTimes(1);
     expect(listenMock).toHaveBeenCalledTimes(1);
     expect(listenMock.mock.calls[0]?.[0]).toBe("desktop://lock");
 

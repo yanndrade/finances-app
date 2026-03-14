@@ -1,5 +1,3 @@
-import { createClientId } from "@/lib/uuid";
-
 export type CategorySpending = {
   category_id: string;
   total: number;
@@ -728,14 +726,12 @@ let runtimeDeviceToken = readPersistedDeviceToken();
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: string;
-  readonly diagnostic: string | null;
 
-  constructor(status: number, detail: string, diagnostic?: string | null) {
+  constructor(status: number, detail: string) {
     super(detail || "Request failed.");
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
-    this.diagnostic = diagnostic ?? null;
   }
 }
 
@@ -926,7 +922,7 @@ export async function createAccount(
   return requestJson<AccountSummary>("/api/accounts", {
     method: "POST",
     body: JSON.stringify({
-      id: createClientId(),
+      id: `acc-${Date.now()}`,
       name: payload.name,
       type: payload.type,
       initial_balance: payload.initialBalanceInCents,
@@ -953,7 +949,7 @@ export async function createCard(payload: CardPayload): Promise<CardSummary> {
   return requestJson<CardSummary>("/api/cards", {
     method: "POST",
     body: JSON.stringify({
-      id: createClientId(),
+      id: `card-${Date.now()}`,
       name: payload.name,
       limit: payload.limitInCents,
       closing_day: payload.closingDay,
@@ -969,7 +965,7 @@ export async function createRecurringRule(
   return requestJson<RecurringRuleSummary>("/api/recurring-rules", {
     method: "POST",
     body: JSON.stringify({
-      id: createClientId(),
+      id: `rec-${Date.now()}`,
       name: payload.name,
       amount: payload.amountInCents,
       due_day: payload.dueDay,
@@ -1045,7 +1041,7 @@ export async function createCardPurchase(
   return requestJson<CardPurchaseSummary>("/api/card-purchases", {
     method: "POST",
     body: JSON.stringify({
-      id: createClientId(),
+      id: `purchase-${Date.now()}`,
       purchase_date: normalizeTimestampForApi(payload.purchaseDate),
       amount: payload.amountInCents,
       installments_count: payload.installmentsCount,
@@ -1080,7 +1076,7 @@ export async function payInvoice(
     {
       method: "POST",
       body: JSON.stringify({
-        id: createClientId(),
+        id: `payment-${Date.now()}`,
         amount: payload.amountInCents,
         account_id: payload.accountId,
         paid_at: normalizeTimestampForApi(payload.paidAt),
@@ -1097,7 +1093,7 @@ export async function createCashTransaction(
   return requestJson<TransactionSummary>(endpoint, {
     method: "POST",
     body: JSON.stringify({
-      id: createClientId(),
+      id: `ui-${Date.now()}`,
       occurred_at:
         payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
       amount: payload.amountInCents,
@@ -1116,7 +1112,7 @@ export async function createTransfer(
   return requestJson<TransactionSummary[]>("/api/transfers", {
     method: "POST",
     body: JSON.stringify({
-      id: createClientId(),
+      id: `trf-${Date.now()}`,
       occurred_at:
         payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
       from_account_id: payload.fromAccountId,
@@ -1275,7 +1271,7 @@ export async function createInvestmentMovement(
   return requestJson<InvestmentMovementSummary>("/api/investments/movements", {
     method: "POST",
     body: JSON.stringify({
-      id: createClientId(),
+      id: `inv-${Date.now()}`,
       occurred_at: normalizeTimestampForApi(payload.occurredAt),
       type: payload.type,
       account_id: payload.accountId,
@@ -1443,8 +1439,6 @@ export async function requestJson<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const requestMethod = (init?.method || "GET").toUpperCase();
-  const requestUrl = `${API_BASE_URL}${path}`;
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -1452,12 +1446,8 @@ export async function requestJson<T>(
   if (runtimeDeviceToken && !headers.has("X-Finance-Token")) {
     headers.set("X-Finance-Token", runtimeDeviceToken);
   }
-  const requestOrigin = resolveRequestOriginHeaderValue();
-  if (requestOrigin && !headers.has("X-Finance-Origin")) {
-    headers.set("X-Finance-Origin", requestOrigin);
-  }
 
-  const response = await fetch(requestUrl, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers,
   });
@@ -1475,17 +1465,7 @@ export async function requestJson<T>(
         detail = detailText;
       }
     }
-    const diagnostic = buildApiErrorDiagnostic({
-      path,
-      requestUrl,
-      requestMethod,
-      headers,
-      responseStatus: response.status,
-      responseStatusText: response.statusText,
-      responseDetail: detail || "Request failed.",
-      responseBody: detailText,
-    });
-    throw new ApiError(response.status, detail || "Request failed.", diagnostic);
+    throw new ApiError(response.status, detail || "Request failed.");
   }
 
   if (response.status === 204) {
@@ -1514,75 +1494,6 @@ function readPersistedDeviceToken(): string | null {
   }
   const trimmed = stored.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function buildApiErrorDiagnostic(params: {
-  path: string;
-  requestUrl: string;
-  requestMethod: string;
-  headers: Headers;
-  responseStatus: number;
-  responseStatusText: string;
-  responseDetail: string;
-  responseBody: string;
-}): string {
-  const location = globalThis.location;
-  const navigator = globalThis.navigator;
-  const payload = {
-    diagnostic_type: "api_error",
-    captured_at: new Date().toISOString(),
-    request: {
-      method: params.requestMethod,
-      path: params.path,
-      url: params.requestUrl,
-      api_base_url: API_BASE_URL,
-      has_device_token: params.headers.has("X-Finance-Token"),
-      x_finance_origin: params.headers.get("X-Finance-Origin"),
-      content_type: params.headers.get("Content-Type"),
-    },
-    response: {
-      status: params.responseStatus,
-      status_text: params.responseStatusText || null,
-      detail: truncateDiagnosticText(params.responseDetail, 1500),
-      raw_body: truncateDiagnosticText(params.responseBody, 3000),
-    },
-    runtime: {
-      page_href: location?.href ?? null,
-      page_origin: location?.origin ?? null,
-      page_protocol: location?.protocol ?? null,
-      user_agent: navigator?.userAgent ?? null,
-      language: navigator?.language ?? null,
-    },
-  };
-  return JSON.stringify(payload, null, 2);
-}
-
-function resolveRequestOriginHeaderValue(): string | null {
-  const location = globalThis.location;
-  if (
-    !location ||
-    (location.protocol !== "http:" && location.protocol !== "https:")
-  ) {
-    return null;
-  }
-
-  try {
-    const apiOrigin = new URL(API_BASE_URL).origin;
-    if (location.origin !== apiOrigin) {
-      return null;
-    }
-    return location.origin;
-  } catch {
-    return null;
-  }
-}
-
-function truncateDiagnosticText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  const hiddenCount = value.length - maxLength;
-  return `${value.slice(0, maxLength)}...[truncated:${hiddenCount}]`;
 }
 
 export function normalizeTimestampForApi(

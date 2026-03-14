@@ -909,8 +909,8 @@ export function TransactionsView({
         <form className="panel-card panel-card--nested" onSubmit={handleCardPurchaseEditSubmit}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Edição</p>
-              <h3 className="section-title">Trocar cartão da compra</h3>
+              <p className="eyebrow">EdiÃ§Ã£o</p>
+              <h3 className="section-title">Trocar cartÃ£o da compra</h3>
             </div>
           </div>
           <div className="form-grid">
@@ -919,7 +919,7 @@ export function TransactionsView({
               <input disabled value={cardPurchaseEditForm.description} />
             </label>
             <label>
-              Novo cartão
+              Novo cartÃ£o
               <select
                 aria-label="Cartao da compra"
                 onChange={(event) =>
@@ -944,11 +944,11 @@ export function TransactionsView({
             </label>
           </div>
           <p className="field-hint">
-            A compra será movida para o novo cartão sem duplicar parcelas nem alterar o total.
+            A compra serÃ¡ movida para o novo cartÃ£o sem duplicar parcelas nem alterar o total.
           </p>
           <div className="inline-actions">
             <button className="primary-button" disabled={isSubmitting} type="submit">
-              Salvar alteração
+              Salvar alteraÃ§Ã£o
             </button>
             <button
               className="ghost-button"
@@ -1096,21 +1096,21 @@ export function TransactionsView({
                     className="data-table__row--interactive"
                     onClick={() => setSelectedTransactionId(transaction.transaction_id)}
                   >
-                     <td>{formatDateTime(transaction.occurred_at)}</td>
-                     <td className="max-w-[180px] truncate" title={transaction.description ?? transaction.category_id}>{transaction.description ?? transaction.category_id}</td>
-                     <td className="max-w-[120px] truncate">{categoryPresentation.label}</td>
-                     {uiDensity === "comfort" && (
-                       <>
-                         <td className="max-w-[120px] truncate">{resolveAccountName(transaction.account_id, accounts)}</td>
-                         <td className="max-w-[120px] truncate">{sourceLabel}</td>
-                         <td className="max-w-[120px] truncate">{destinationLabel}</td>
-                       </>
-                     )}
-                     {uiDensity !== "dense" && (
-                       <td>{formatPaymentMethod(transaction.payment_method)}</td>
-                     )}
-                     <td className="max-w-[100px] truncate">{transaction.person_id ? formatPersonLabel(transaction.person_id) : "--"}</td>
-                     <td>{formatTransactionType(transaction.type)}</td>
+                    <td>{formatDateTime(transaction.occurred_at)}</td>
+                    <td>{transaction.description ?? transaction.category_id}</td>
+                    <td>{categoryPresentation.label}</td>
+                    {uiDensity === "comfort" && (
+                      <>
+                        <td>{resolveAccountName(transaction.account_id, accounts)}</td>
+                        <td>{sourceLabel}</td>
+                        <td>{destinationLabel}</td>
+                      </>
+                    )}
+                    {uiDensity !== "dense" && (
+                      <td>{formatPaymentMethod(transaction.payment_method)}</td>
+                    )}
+                    <td>{transaction.person_id?.trim() || "--"}</td>
+                    <td>{formatTransactionType(transaction.type)}</td>
                     <td>
                       <span className={`status-badge status-badge--${transaction.status}`}>
                         {formatTransactionStatus(transaction.status)}
@@ -1141,7 +1141,6 @@ export function TransactionsView({
                           {canVoid ? (
                             <button
                               className="ghost-button ghost-button--danger"
-                              disabled={isSubmitting}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 void onVoidTransaction(transaction.transaction_id);
@@ -1169,7 +1168,6 @@ export function TransactionsView({
         accounts={accounts}
         cards={cards} // I need to make sure cards is available or fetched
         isOpen={selectedTransaction !== null}
-        isSubmitting={isSubmitting}
         onClose={() => setSelectedTransactionId(null)}
         onEdit={(t: TransactionSummary) => {
           openEditForm(t);
@@ -1420,9 +1418,7 @@ function formatLedgerEntity(value: string, accounts: AccountSummary[]): string {
 }
 
 function toCents(rawValue: string): number {
-  const parsed = Number(rawValue.replace(",", "."));
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.round(parsed * 100);
+  return Math.round(Number(rawValue.replace(",", ".")) * 100);
 }
 
 function defaultSortDirection(column: LedgerSortColumn): LedgerSortDirection {
@@ -1608,11 +1604,4 @@ function DetailItem({ label, value }: { label: string; value: string }) {
       <p className="text-sm font-semibold text-slate-800">{value}</p>
     </div>
   );
-}
-
-function formatPersonLabel(personId: string): string {
-  const trimmed = personId.trim();
-  if (!trimmed) return "--";
-  const colonIdx = trimmed.indexOf(":");
-  return colonIdx >= 0 ? trimmed.slice(colonIdx + 1).trim() || trimmed : trimmed;
 }

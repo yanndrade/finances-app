@@ -2,12 +2,6 @@ import * as api from "./api";
 
 
 describe("api timestamp normalization", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-  });
-
   it("converts local purchase datetimes into the correct UTC instant", () => {
     expect(
       api.normalizeTimestampForApi("2026-03-11T00:30", {
@@ -86,70 +80,6 @@ describe("api timestamp normalization", () => {
     });
   });
 
-  it("creates cash transactions when crypto.randomUUID is unavailable", async () => {
-    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          transaction_id: "txn-1",
-          type: "income",
-          occurred_at: "2026-03-11T03:30:00Z",
-          amount: 50_00,
-          account_id: "acc-1",
-          payment_method: "CASH",
-          category_id: "salary",
-          description: "Freela",
-          person_id: null,
-          is_void: false,
-          reimbursement_status: "none",
-        }),
-        { status: 201 },
-      ),
-    );
-    const getRandomValues = vi.fn((buffer: Uint8Array) => {
-      buffer.set([
-        0x10,
-        0x32,
-        0x54,
-        0x76,
-        0x98,
-        0xba,
-        0xdc,
-        0xfe,
-        0x11,
-        0x22,
-        0x33,
-        0x44,
-        0x55,
-        0x66,
-        0x77,
-        0x88,
-      ]);
-      return buffer;
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("crypto", {
-      getRandomValues,
-    });
-
-    await api.createCashTransaction({
-      type: "income",
-      amountInCents: 50_00,
-      accountId: "acc-1",
-      paymentMethod: "CASH",
-      categoryId: "salary",
-      description: "Freela",
-      occurredAt: "2026-03-11T03:30:00Z",
-    });
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
-      id: "10325476-98ba-4cfe-9122-334455667788",
-      amount: 50_00,
-      account_id: "acc-1",
-    });
-  });
-
   it("converts payment datetime-local values and sends invoice payment payload", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(
@@ -184,13 +114,14 @@ describe("api timestamp normalization", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/invoices/card-1%3A2026-04/payments");
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
+      id: "payment-1772539200000",
       amount: 30_00,
       account_id: "acc-2",
       paid_at: "2026-03-20T12:00:00Z",
     });
 
     timezoneSpy.mockRestore();
+    vi.useRealTimers();
   });
 
   it("requests invoice items for a specific invoice id", async () => {
@@ -541,82 +472,6 @@ describe("api timestamp normalization", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({
       password: "secret-123",
     });
-  });
-
-  it("sends X-Finance-Origin on same-origin requests", async () => {
-    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          password_configured: true,
-          is_locked: false,
-          requires_lock_on_startup: false,
-          inactivity_lock_seconds: null,
-        }),
-        { status: 200 },
-      ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const originalLocation = globalThis.location;
-    vi.stubGlobal(
-      "location",
-      new URL(`${api.API_BASE_URL}/dashboard`) as unknown as Location,
-    );
-
-    try {
-      await api.fetchSecurityState();
-
-      const requestHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
-      expect(requestHeaders.get("X-Finance-Origin")).toBe(api.API_BASE_URL);
-    } finally {
-      vi.stubGlobal("location", originalLocation);
-    }
-  });
-
-  it("captures structured diagnostic payload on API errors", async () => {
-    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          detail: "Invalid request origin.",
-        }),
-        {
-          status: 403,
-          statusText: "Forbidden",
-        },
-      ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    try {
-      await api.requestJson("/api/dashboard?month=2026-03");
-      throw new Error("Expected requestJson to throw ApiError.");
-    } catch (error) {
-      expect(error).toBeInstanceOf(api.ApiError);
-      const apiError = error as api.ApiError;
-      expect(apiError.status).toBe(403);
-      expect(apiError.detail).toBe("Invalid request origin.");
-      expect(apiError.diagnostic).toEqual(expect.any(String));
-
-      const diagnostic = JSON.parse(apiError.diagnostic ?? "{}") as {
-        request?: {
-          path?: string;
-          method?: string;
-          has_device_token?: boolean;
-          x_finance_origin?: string | null;
-        };
-        response?: { status?: number; detail?: string };
-      };
-      const expectedFinanceOrigin =
-        globalThis.location.origin === api.API_BASE_URL ? api.API_BASE_URL : null;
-      expect(diagnostic.request?.path).toBe("/api/dashboard?month=2026-03");
-      expect(diagnostic.request?.method).toBe("GET");
-      expect(diagnostic.request?.has_device_token).toBe(false);
-      expect(diagnostic.request?.x_finance_origin ?? null).toBe(
-        expectedFinanceOrigin,
-      );
-      expect(diagnostic.response?.status).toBe(403);
-      expect(diagnostic.response?.detail).toBe("Invalid request origin.");
-    }
   });
 
   it("returns undefined for 204 responses", async () => {
