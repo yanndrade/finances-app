@@ -39,6 +39,7 @@ type TransactionDetailDrawerProps = {
   accounts: AccountSummary[];
   cards: CardSummary[];
   isOpen: boolean;
+  isSubmitting?: boolean;
   onClose: () => void;
   onEdit?: (transaction: TransactionSummary) => void;
   onVoid?: (transactionId: string) => void;
@@ -50,6 +51,7 @@ export function TransactionDetailDrawer({
   accounts,
   cards,
   isOpen,
+  isSubmitting = false,
   onClose,
   onEdit,
   onVoid,
@@ -211,6 +213,7 @@ export function TransactionDetailDrawer({
           {canEdit ? (
             <>
               <Button
+                disabled={isSubmitting}
                 onClick={() => onEdit?.(transaction)}
                 className="flex-1 bg-primary text-white rounded-xl h-11 font-bold shadow-md hover:bg-primary/90"
               >
@@ -219,6 +222,7 @@ export function TransactionDetailDrawer({
               {!isEditableCardPurchase ? (
                 <Button
                   variant="ghost"
+                  disabled={isSubmitting}
                   onClick={() => onVoid?.(transaction.transaction_id)}
                   className="text-rose-600 hover:bg-rose-50 rounded-xl h-11 px-6 border border-rose-100"
                 >

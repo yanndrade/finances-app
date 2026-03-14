@@ -135,8 +135,8 @@ export function DashboardAction({
                   className="dashboard-list__item"
                   key={transaction.transaction_id}
                 >
-                  <div>
-                    <strong>
+                  <div className="min-w-0 flex-1">
+                    <strong className="block truncate">
                       {transaction.description ?? transaction.category_id}
                     </strong>
                     <p>
@@ -190,11 +190,16 @@ function ReviewItem({
 }) {
   const [description, setDescription] = useState(transaction.description ?? "");
   const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  function handleSave() {
-    if (description.trim()) {
-      onUpdate(transaction.transaction_id, { description: description.trim() });
+  async function handleSave() {
+    if (!description.trim() || isSaving) return;
+    setIsSaving(true);
+    try {
+      await Promise.resolve(onUpdate(transaction.transaction_id, { description: description.trim() }));
       setIsDirty(false);
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -224,7 +229,7 @@ function ReviewItem({
             setIsDirty(true);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") handleSave();
+            if (e.key === "Enter") void handleSave();
           }}
           placeholder="Adicionar descrição..."
           type="text"
@@ -233,10 +238,11 @@ function ReviewItem({
         {isDirty ? (
           <button
             className="secondary-button review-item__save"
-            onClick={handleSave}
+            disabled={isSaving}
+            onClick={() => void handleSave()}
             type="button"
           >
-            Salvar
+            {isSaving ? "Salvando..." : "Salvar"}
           </button>
         ) : null}
       </div>

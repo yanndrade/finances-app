@@ -11,9 +11,10 @@ import {
 
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
-import { formatCurrency } from "../../lib/format";
+import { formatCurrency, formatCurrencyCompact } from "../../lib/format";
 import type { UiDensity } from "../../lib/ui-density";
 import { cn } from "../../lib/utils";
+import { prefersReducedMotion } from "../../lib/motion";
 
 type WealthPoint = {
   bucket: string;
@@ -47,7 +48,7 @@ export function WealthChart({ data, loading, uiDensity }: WealthChartProps) {
       )}
     >
       <CardHeader className="pb-2">
-        <h3 className="text-sm font-semibold text-slate-800">Evolução do patrimônio</h3>
+        <h3 className="text-sm font-semibold text-foreground">Evolução do patrimônio</h3>
       </CardHeader>
       <CardContent className="min-w-0">
         {loading ? (
@@ -56,15 +57,15 @@ export function WealthChart({ data, loading, uiDensity }: WealthChartProps) {
           </div>
         ) : !hasEnoughData ? (
           <div className="flex h-36 flex-col items-center justify-center gap-2 text-center">
-            <div className="rounded-full bg-slate-50 p-3">
-              <TrendingUp className="h-6 w-6 text-slate-300" />
+            <div className="rounded-full bg-muted p-3">
+              <TrendingUp className="h-6 w-6 text-muted-foreground" />
             </div>
-            <p className="text-sm font-semibold text-slate-500">
+            <p className="text-sm font-semibold text-foreground">
               {data.length === 0
                 ? "Nenhum dado no período."
                 : "Dados insuficientes para o gráfico."}
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               Com mais períodos, a evolução aparecerá aqui.
             </p>
           </div>
@@ -94,7 +95,7 @@ export function WealthChart({ data, loading, uiDensity }: WealthChartProps) {
                   tick={{ fontSize: 10, fill: "#94a3b8" }}
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(val) => formatCurrency(val * 100).replace("R$\u00a0", "R$ ")}
+                  tickFormatter={(val: number) => formatCurrencyCompact(val * 100)}
                   width={72}
                 />
                 <Tooltip
@@ -117,6 +118,7 @@ export function WealthChart({ data, loading, uiDensity }: WealthChartProps) {
                   fill={`url(#${GRADIENT_ID})`}
                   dot={false}
                   activeDot={{ r: 4, strokeWidth: 0 }}
+                  isAnimationActive={!prefersReducedMotion()}
                 />
               </AreaChart>
             </ResponsiveContainer>

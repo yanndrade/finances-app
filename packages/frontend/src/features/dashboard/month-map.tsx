@@ -1,6 +1,5 @@
 import React from "react";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { Card, CardContent } from "../../components/ui/card";
 import { MoneyValue } from "../../components/ui/money-value";
 import type { DashboardSummary } from "../../lib/api";
 import type { UiDensity } from "../../lib/ui-density";
@@ -34,145 +33,142 @@ export function MonthMap({ dashboard, uiDensity }: MonthMapProps) {
   const variablePct = Math.max(0, 100 - fixedPct - installPct);
 
   return (
-    <Card className="finance-card overflow-hidden rounded-xl border border-slate-100/40 shadow-[0_1px_2px_rgba(0,0,0,0.03)] bg-surface-elevated">
-      <CardContent
-        className={cn(
-          "flex flex-col",
-          uiDensity === "dense"
-            ? "p-4 gap-4"
-            : uiDensity === "compact"
-              ? "p-5 gap-5"
-              : "p-6 gap-6",
-        )}
-      >
-        {/* Top: 3 Main Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div
+      className={cn(
+        "flex flex-col",
+        uiDensity === "dense"
+          ? "gap-4 pb-4 border-b border-border/40"
+          : uiDensity === "compact"
+            ? "gap-4 pb-5 border-b border-border/40"
+            : "gap-5 pb-6 border-b border-border/40",
+      )}
+    >
+      {/* Primary row: Resultado leads, Entradas/Saídas support */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-8">
+        {/* Resultado — dominant number */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+            Resultado
+            {isPositive ? (
+              <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600" />
+            ) : (
+              <ArrowDownRight className="h-3.5 w-3.5 text-rose-600" />
+            )}
+          </span>
+          <MoneyValue
+            value={net_flow}
+            className={cn(
+              "tabular-nums leading-none font-black",
+              uiDensity === "dense" ? "text-4xl" : "text-5xl",
+              isPositive ? "text-emerald-600" : "text-rose-600",
+            )}
+          />
+        </div>
+
+        {/* Supporting: Entradas + Saídas */}
+        <div className="flex gap-6 sm:gap-8">
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               Entradas
             </span>
             <MoneyValue
               value={total_income}
-              className="text-2xl font-bold text-emerald-600 tabular-nums"
+              className="text-xl font-bold text-emerald-600 tabular-nums"
             />
           </div>
-
-          <div className="flex flex-col gap-1 md:border-l border-slate-100 md:pl-6">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-              Gasto do mês{" "}
-              <span className="text-[12px] text-slate-400 normal-case ml-1 font-normal">
-                (realizado + previsto)
-              </span>
+          <div className="flex flex-col gap-1 pl-6 sm:pl-8 border-l border-border/40">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Gastos
             </span>
             <MoneyValue
               value={total_expense}
-              className="text-2xl font-bold text-rose-600 tabular-nums"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1 md:border-l border-slate-100 md:pl-6">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-              Resultado
-              {isPositive ? (
-                <ArrowUpRight className="h-3 w-3 text-emerald-600 ml-1" />
-              ) : (
-                <ArrowDownRight className="h-3 w-3 text-rose-600 ml-1" />
-              )}
-            </span>
-            <MoneyValue
-              value={net_flow}
-              className={cn(
-                "text-4xl font-black tabular-nums",
-                isPositive ? "text-emerald-600" : "text-rose-600",
-              )}
+              className="text-xl font-bold text-rose-600 tabular-nums"
             />
           </div>
         </div>
+      </div>
 
-        {/* Bottom: Expense Breakdown Bar */}
-        <div className="pt-2">
-          {total_expense > 0 ? (
-            <div className="flex flex-col gap-3">
-              <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-100">
-                {fixed_expenses_total > 0 && (
-                  <div
-                    style={{ width: `${fixedPct}%` }}
-                    className="bg-slate-500 hover:opacity-90 transition-opacity"
-                    title={`Fixos: ${fixedPct.toFixed(1)}%`}
-                  />
-                )}
-                {installment_total > 0 && (
-                  <div
-                    style={{ width: `${installPct}%` }}
-                    className="bg-indigo-500 hover:opacity-90 transition-opacity"
-                    title={`Parceladas: ${installPct.toFixed(1)}%`}
-                  />
-                )}
-                {variable_expenses_total > 0 && (
-                  <div
-                    style={{ width: `${variablePct}%` }}
-                    className="bg-amber-500 hover:opacity-90 transition-opacity"
-                    title={`Variáveis: ${variablePct.toFixed(1)}%`}
-                  />
-                )}
-              </div>
-              <div className="flex flex-wrap gap-x-6 gap-y-2">
-                {fixed_expenses_total > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
-                    <span className="text-[13px] font-medium text-slate-600 uppercase tracking-wider">
-                      Fixos
-                    </span>
-                    <MoneyValue
-                      value={fixed_expenses_total}
-                      className="text-[13px] font-bold text-slate-800 tabular-nums"
-                    />
-                    <span className="text-[12px] text-slate-400 tabular-nums">
-                      {fixedPct.toFixed(0)}%
-                    </span>
-                  </div>
-                )}
-                {installment_total > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
-                    <span className="text-[13px] font-medium text-slate-600 uppercase tracking-wider">
-                      Parceladas
-                    </span>
-                    <MoneyValue
-                      value={installment_total}
-                      className="text-[13px] font-bold text-slate-800 tabular-nums"
-                    />
-                    <span className="text-[12px] text-slate-400 tabular-nums">
-                      {installPct.toFixed(0)}%
-                    </span>
-                  </div>
-                )}
-                {variable_expenses_total > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
-                    <span className="text-[13px] font-medium text-slate-600 uppercase tracking-wider">
-                      Variáveis
-                    </span>
-                    <MoneyValue
-                      value={variable_expenses_total}
-                      className="text-[13px] font-bold text-slate-800 tabular-nums"
-                    />
-                    <span className="text-[12px] text-slate-400 tabular-nums">
-                      {variablePct.toFixed(0)}%
-                    </span>
-                  </div>
-                )}
-              </div>
+      {/* Expense Breakdown Bar */}
+      <div>
+        {total_expense > 0 ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-border/40">
+              {fixed_expenses_total > 0 && (
+                <div
+                  style={{ width: `${fixedPct}%` }}
+                  className="bg-slate-400 hover:opacity-90 transition-opacity"
+                  title={`Fixos: ${fixedPct.toFixed(1)}%`}
+                />
+              )}
+              {installment_total > 0 && (
+                <div
+                  style={{ width: `${installPct}%` }}
+                  className="bg-indigo-400 hover:opacity-90 transition-opacity"
+                  title={`Parceladas: ${installPct.toFixed(1)}%`}
+                />
+              )}
+              {variable_expenses_total > 0 && (
+                <div
+                  style={{ width: `${variablePct}%` }}
+                  className="bg-amber-400 hover:opacity-90 transition-opacity"
+                  title={`Variáveis: ${variablePct.toFixed(1)}%`}
+                />
+              )}
             </div>
-          ) : (
-            <div className="bg-slate-50 rounded-lg p-3 text-center">
-              <p className="text-xs text-slate-500">
-                Nenhum gasto registrado neste mês.
-              </p>
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+              {fixed_expenses_total > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400 shrink-0" />
+                  <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Fixos
+                  </span>
+                  <MoneyValue
+                    value={fixed_expenses_total}
+                    className="text-[12px] font-semibold text-foreground tabular-nums"
+                  />
+                  <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+                    {fixedPct.toFixed(0)}%
+                  </span>
+                </div>
+              )}
+              {installment_total > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0" />
+                  <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Parceladas
+                  </span>
+                  <MoneyValue
+                    value={installment_total}
+                    className="text-[12px] font-semibold text-foreground tabular-nums"
+                  />
+                  <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+                    {installPct.toFixed(0)}%
+                  </span>
+                </div>
+              )}
+              {variable_expenses_total > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                  <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Variáveis
+                  </span>
+                  <MoneyValue
+                    value={variable_expenses_total}
+                    className="text-[12px] font-semibold text-foreground tabular-nums"
+                  />
+                  <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+                    {variablePct.toFixed(0)}%
+                  </span>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Nenhum gasto registrado neste mês.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

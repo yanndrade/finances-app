@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 
 import { fetchInvoiceItems, type InvoiceItemSummary } from "../../lib/api";
 
-const DEFAULT_INVOICE_ITEMS_ERROR = "Nao foi possivel carregar os itens da fatura.";
+const DEFAULT_INVOICE_ITEMS_ERROR = "Não foi possível carregar os itens da fatura.";
 
 export type UseInvoiceItemsState = {
   invoiceItems: InvoiceItemSummary[];

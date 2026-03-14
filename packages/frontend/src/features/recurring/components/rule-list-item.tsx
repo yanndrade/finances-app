@@ -25,8 +25,8 @@ export function RuleListItem({ rule, accountNameById, cardNameById, onClick }: R
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
           <span className="text-sm font-bold">{rule.due_day}</span>
         </div>
-        <div className="space-y-0.5">
-          <h3 className="text-sm font-semibold text-slate-900 group-hover:text-primary transition-colors">
+        <div className="min-w-0 space-y-0.5">
+          <h3 className="truncate text-sm font-semibold text-slate-900 group-hover:text-primary transition-colors">
             {rule.name}
             {!rule.is_active && (
               <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-slate-500">
@@ -39,7 +39,7 @@ export function RuleListItem({ rule, accountNameById, cardNameById, onClick }: R
           </p>
         </div>
       </div>
-      <div className="text-right">
+      <div className="text-right shrink-0">
         <span className="text-sm font-bold text-slate-900 tabular-nums">
           {formatCurrency(rule.amount)}
         </span>

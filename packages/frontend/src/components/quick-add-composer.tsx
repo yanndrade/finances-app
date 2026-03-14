@@ -646,29 +646,34 @@ export function QuickAddComposer({
   // ─── Tab bar ────────────────────────────────────────────────────────────────
 
   const tabBar = (
-    <div className="flex items-center gap-1.5 overflow-x-auto px-6 pb-3 pt-1 scrollbar-none">
-      {TAB_CONFIG.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = tab.type === entryType;
-        return (
-          <button
-            key={tab.type}
-            type="button"
-            onClick={() =>
-              dispatchQuickAdd({ type: "entryTypeChanged", entryType: tab.type })
-            }
-            className={[
-              "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all",
-              isActive
-                ? `${tab.activePill} shadow`
-                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-            ].join(" ")}
-          >
-            <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
-            {tab.label}
-          </button>
-        );
-      })}
+    <div className="relative">
+      {/* fade masks so chips don't hard-clip at the edges on mobile */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-10" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-10" />
+      <div className="flex items-center gap-2 overflow-x-auto px-6 pb-3 pt-1 scrollbar-none" style={{ WebkitOverflowScrolling: "touch" }}>
+        {TAB_CONFIG.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = tab.type === entryType;
+          return (
+            <button
+              key={tab.type}
+              type="button"
+              onClick={() =>
+                dispatchQuickAdd({ type: "entryTypeChanged", entryType: tab.type })
+              }
+              className={[
+                "flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium transition-all",
+                isActive
+                  ? `${tab.activePill} shadow`
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+              ].join(" ")}
+            >
+              <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -692,7 +697,7 @@ export function QuickAddComposer({
         }}
       />
       {validationErrors.amount && (
-        <p className="mt-1 text-xs font-medium text-rose-600">{validationErrors.amount}</p>
+        <p className="mt-1 text-xs font-medium text-danger">{validationErrors.amount}</p>
       )}
     </div>
   );
@@ -728,14 +733,54 @@ export function QuickAddComposer({
     </div>
   );
 
+  // ─── Form footer (CTA + keep-open) ──────────────────────────────────────────
+
+  const formFooter = () => (
+    <div className="flex items-center justify-between pt-1">
+      {(entryType === "expense" || entryType === "income") &&
+      expensePaymentMode !== "CARD" &&
+      isAdvancedMode ? (
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="keepOpen"
+            checked={keepOpen}
+            onCheckedChange={(checked: boolean | "indeterminate") =>
+              dispatchQuickAdd({
+                type: "keepOpenChanged",
+                keepOpen: checked === true,
+              })
+            }
+          />
+          <label
+            htmlFor="keepOpen"
+            className="text-sm font-medium leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Salvar e adicionar outra
+          </label>
+        </div>
+      ) : (
+        <div />
+      )}
+
+      <Button
+        disabled={isSubmitting || parseAmount(amount) <= 0}
+        type="submit"
+        size="lg"
+        className={`rounded-xl px-8 shadow-lg ${activeTab.submitClass}`}
+      >
+        Lançar
+      </Button>
+    </div>
+  );
+
   // ─── Form fields ─────────────────────────────────────────────────────────────
 
-  const formContent = (
-    <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="flex flex-col gap-4 px-6 pb-6 pt-2">
-      {modeBanner}
+  const formContent = (showFooter: boolean) => (
+    <form id="quick-add-form" onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="flex flex-col gap-4 px-6 pb-6 pt-2">
+      {!isMobile && modeBanner}
 
       {/* Common fields: date + description */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
         <div className="space-y-2">
           <Label htmlFor="quick-add-date">Data</Label>
           <Input
@@ -767,6 +812,7 @@ export function QuickAddComposer({
                       ? "Opcional"
                       : "Nome do gasto fixo"
             }
+            maxLength={300}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
@@ -775,7 +821,7 @@ export function QuickAddComposer({
 
       {/* ── Expense fields ── */}
       {entryType === "expense" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
           <div className="space-y-2">
             <Label htmlFor="quick-add-payment-mode">Pagamento</Label>
             <select
@@ -866,7 +912,7 @@ export function QuickAddComposer({
             </>
           ) : (
             <>
-              <div className="col-span-1 sm:col-span-2 space-y-2">
+              <div className="col-span-1 md:col-span-2 space-y-2">
                 <Label htmlFor="quick-add-account">Conta</Label>
                 <select
                   id="quick-add-account"
@@ -893,6 +939,7 @@ export function QuickAddComposer({
                     id="quick-add-person"
                     className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
                     placeholder="Opcional — para rastrear reembolsos"
+                    maxLength={100}
                     value={personId}
                     onChange={(event) => setPersonId(event.target.value)}
                   />
@@ -905,7 +952,7 @@ export function QuickAddComposer({
 
       {/* ── Income fields ── */}
       {entryType === "income" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="quick-add-category-income">Categoria</Label>
@@ -961,6 +1008,7 @@ export function QuickAddComposer({
                 id="quick-add-person-income"
                 className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
                 placeholder="Opcional"
+                maxLength={100}
                 value={personId}
                 onChange={(event) => setPersonId(event.target.value)}
               />
@@ -971,8 +1019,8 @@ export function QuickAddComposer({
 
       {/* ── Transfer fields ── */}
       {entryType === "transfer" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-          <div className="col-span-1 sm:col-span-2 space-y-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
+          <div className="col-span-1 md:col-span-2 space-y-2">
             <Label htmlFor="quick-add-transfer-mode">Tipo de transferência</Label>
             <select
               id="quick-add-transfer-mode"
@@ -1039,7 +1087,7 @@ export function QuickAddComposer({
             </>
           ) : (
             <>
-              <div className="col-span-1 sm:col-span-2 space-y-2">
+              <div className="col-span-1 md:col-span-2 space-y-2">
                 <Label htmlFor="quick-add-account-payer">Conta para pagamento</Label>
                 <select
                   id="quick-add-account-payer"
@@ -1059,10 +1107,10 @@ export function QuickAddComposer({
                 </select>
                 <FieldError message={validationErrors.accountId} />
               </div>
-              <div className="col-span-1 sm:col-span-2 rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+              <div className="col-span-1 md:col-span-2 rounded-xl bg-accent px-4 py-3 text-sm font-medium text-accent-foreground">
                 Quitar saldo do cartão usando uma conta existente.
               </div>
-              <div className="col-span-1 sm:col-span-2 space-y-2">
+              <div className="col-span-1 md:col-span-2 space-y-2">
                 <Label htmlFor="quick-add-invoice">Fatura</Label>
                 <select
                   id="quick-add-invoice"
@@ -1094,7 +1142,7 @@ export function QuickAddComposer({
 
       {/* ── Investment fields ── */}
       {entryType === "investment" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
           <div className="space-y-2">
             <Label htmlFor="quick-add-investment-mode">Tipo do movimento</Label>
             <select
@@ -1177,7 +1225,7 @@ export function QuickAddComposer({
 
       {/* ── Recurring fields ── */}
       {entryType === "recurring" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
           <div className="space-y-2">
             <Label htmlFor="quick-add-recurring-mode">Pagamento</Label>
             <select
@@ -1216,7 +1264,7 @@ export function QuickAddComposer({
             <FieldError message={validationErrors.dueDay} />
           </div>
 
-          <div className="col-span-1 sm:col-span-2 space-y-2">
+          <div className="col-span-1 md:col-span-2 space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="quick-add-category-recurring">Categoria</Label>
               {onCreateCategory && onRemoveCategory ? (
@@ -1244,7 +1292,7 @@ export function QuickAddComposer({
           </div>
 
           {isCardRecurring ? (
-            <div className="col-span-1 sm:col-span-2 space-y-2">
+            <div className="col-span-1 md:col-span-2 space-y-2">
               <Label htmlFor="quick-add-card-recurring">Cartão</Label>
               <select
                 id="quick-add-card-recurring"
@@ -1265,7 +1313,7 @@ export function QuickAddComposer({
               <FieldError message={validationErrors.cardId} />
             </div>
           ) : (
-            <div className="col-span-1 sm:col-span-2 space-y-2">
+            <div className="col-span-1 md:col-span-2 space-y-2">
               <Label htmlFor="quick-add-account-recurring">Conta</Label>
               <select
                 id="quick-add-account-recurring"
@@ -1290,42 +1338,10 @@ export function QuickAddComposer({
       )}
 
       {/* ── Footer ── */}
-      <div className="flex items-center justify-between pt-1">
-        {(entryType === "expense" || entryType === "income") &&
-        expensePaymentMode !== "CARD" &&
-        isAdvancedMode ? (
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="keepOpen"
-              checked={keepOpen}
-              onCheckedChange={(checked: boolean | "indeterminate") =>
-                dispatchQuickAdd({
-                  type: "keepOpenChanged",
-                  keepOpen: checked === true,
-                })
-              }
-            />
-            <label
-              htmlFor="keepOpen"
-              className="text-sm font-medium leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Salvar e adicionar outra
-            </label>
-          </div>
-        ) : (
-          <div />
-        )}
-
-        <Button
-          disabled={isSubmitting || !amount}
-          type="submit"
-          size="lg"
-          className={`rounded-xl px-8 shadow-lg ${activeTab.submitClass}`}
-        >
-          Lançar
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">Enter salva. Tab navega pelos campos.</p>
+      {showFooter && formFooter()}
+      {showFooter && (
+        <p className="text-xs text-muted-foreground">Enter salva. Tab navega pelos campos.</p>
+      )}
     </form>
   );
 
@@ -1336,18 +1352,52 @@ export function QuickAddComposer({
       <Drawer open={isOpen} onOpenChange={(open) => !open && handleClose()}>
         <DrawerContent
           data-testid="quick-add-drawer"
-          className="max-h-[95vh] sm:max-h-[92vh] overflow-hidden rounded-t-[1.75rem] border bg-background"
+          className="flex flex-col max-h-[92svh] rounded-t-[1.75rem] border bg-background overflow-hidden"
         >
-          <div className="overflow-y-auto pb-4">
-            <DrawerHeader className="px-6 pb-1 pt-6">
-              <DrawerTitle className="text-xl font-semibold">Lançar</DrawerTitle>
-              <DrawerDescription>
-                Registre um lançamento sem sair da tela atual.
-              </DrawerDescription>
+          {/* ── Scrollable body ── */}
+          <div className="flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: "touch" }}>
+            <DrawerHeader className="px-6 pb-0 pt-5">
+              <DrawerTitle className="text-lg font-semibold">Lançar</DrawerTitle>
             </DrawerHeader>
             {tabBar}
             {amountBlock}
-            {formContent}
+            {formContent(false)}
+          </div>
+          {/* ── Fixed CTA footer ── */}
+          <div className={`shrink-0 border-t px-6 py-4 bg-background`}>
+            {(entryType === "expense" || entryType === "income") &&
+            expensePaymentMode !== "CARD" &&
+            isAdvancedMode ? (
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="keepOpenMobile"
+                    checked={keepOpen}
+                    onCheckedChange={(checked: boolean | "indeterminate") =>
+                      dispatchQuickAdd({
+                        type: "keepOpenChanged",
+                        keepOpen: checked === true,
+                      })
+                    }
+                  />
+                  <label
+                    htmlFor="keepOpenMobile"
+                    className="text-sm font-medium leading-none text-muted-foreground"
+                  >
+                    Salvar e adicionar outra
+                  </label>
+                </div>
+              </div>
+            ) : null}
+            <Button
+              form="quick-add-form"
+              disabled={isSubmitting || parseAmount(amount) <= 0}
+              type="submit"
+              size="lg"
+              className={`w-full rounded-xl shadow-lg ${activeTab.submitClass}`}
+            >
+              Lançar
+            </Button>
           </div>
         </DrawerContent>
       </Drawer>
@@ -1370,7 +1420,7 @@ export function QuickAddComposer({
         </div>
         {tabBar}
         {amountBlock}
-        {formContent}
+        {formContent(true)}
       </DialogContent>
     </Dialog>
   );
@@ -1383,7 +1433,7 @@ function FieldError({ message }: { message?: string }) {
     return null;
   }
 
-  return <p className="text-xs font-medium text-rose-600">{message}</p>;
+  return <p className="text-xs font-medium text-danger">{message}</p>;
 }
 
 function useMediaQuery(query: string): boolean {

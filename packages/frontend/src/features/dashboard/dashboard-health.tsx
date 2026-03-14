@@ -3,6 +3,7 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import type { DailyBalancePoint, DashboardSummary } from "../../lib/api";
 import { CHART_THEME, chartClassNames } from "../../lib/chart-theme";
 import { formatCurrency, formatDelta } from "../../lib/format";
+import { prefersReducedMotion } from "../../lib/motion";
 
 type DashboardHealthProps = {
   dashboard: DashboardSummary;
@@ -56,12 +57,13 @@ export function DashboardHealth({
                     content={<SparklineTooltip />}
                     cursor={false}
                   />
-                  <Area
+                   <Area
                     dataKey="balance"
                     fill="url(#sparkGradient)"
                     stroke={CHART_THEME.primary}
                     strokeWidth={2}
                     type="monotone"
+                    isAnimationActive={!prefersReducedMotion()}
                   />
                 </AreaChart>
               </ResponsiveContainer>

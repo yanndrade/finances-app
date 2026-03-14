@@ -188,6 +188,7 @@ export function RuleFormSheet({
                     setFormState((current) => ({ ...current, name: event.target.value }))
                   }
                   placeholder="Ex.: Aluguel, Internet, Plano de saúde"
+                  maxLength={100}
                   value={formState.name}
                 />
               </label>
@@ -324,6 +325,7 @@ export function RuleFormSheet({
                     setFormState((current) => ({ ...current, description: event.target.value }))
                   }
                   placeholder="Detalhes adicionais..."
+                  maxLength={300}
                   value={formState.description}
                 />
               </label>
