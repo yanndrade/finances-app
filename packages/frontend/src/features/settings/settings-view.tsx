@@ -341,7 +341,7 @@ export function SettingsView({
                   aria-label="Hex da cor principal"
                   value={normalizedThemeColor}
                   onChange={(event) => onThemeColorChange(event.target.value)}
-                  placeholder="#0f5ea8"
+                  placeholder="#831bb0"
                 />
               </div>
             </div>

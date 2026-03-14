@@ -50,9 +50,9 @@
         --card-foreground: var(--foreground);
         --popover: var(--surface);
         --popover-foreground: var(--foreground);
-        --primary: 212 100% 32%;
-        --primary-accent: 210 100% 45%;
-        --primary-soft: 210 86% 90%;
+        --primary: 282 81% 30%;
+        --primary-accent: 282 73% 40%;
+        --primary-soft: 282 55% 74%;
         --primary-foreground: 0 0% 100%;
         --secondary: 210 16% 92%;
         --secondary-foreground: 214 32% 18%;
@@ -84,15 +84,15 @@
         --chart-income: var(--finance-income);
         --chart-expense: var(--finance-expense);
         --chart-transfer: var(--finance-transfer);
-        --theme-primary-hex: #0f5ea8;
-        --theme-primary-rgb: 15, 94, 168;
+        --theme-primary-hex: #831bb0;
+        --theme-primary-rgb: 131, 27, 176;
         --radius: 0.75rem;
         /* Derived surface tokens */
         --panel-border: hsl(214 20% 88%);
         --panel-shadow: 0 1px 3px rgba(30, 41, 59, 0.06), 0 4px 12px rgba(30, 41, 59, 0.04);
-        --focus-ring: rgba(15, 94, 168, 0.5);
-        --focus-ring-shadow: 0 0 0 4px rgba(15, 94, 168, 0.12);
-        --input-focus-border: rgba(15, 94, 168, 0.4);
+        --focus-ring: rgba(131, 27, 176, 0.5);
+        --focus-ring-shadow: 0 0 0 4px rgba(131, 27, 176, 0.12);
+        --input-focus-border: rgba(131, 27, 176, 0.4);
         --text-positive: hsl(var(--finance-income));
         --text-negative: hsl(var(--finance-expense));
         color-scheme: light;
@@ -122,9 +122,9 @@
         --card-foreground: var(--foreground);
         --popover: var(--surface-elevated);
         --popover-foreground: var(--foreground);
-        --primary: 210 95% 70%;
-        --primary-accent: 210 90% 62%;
-        --primary-soft: 212 62% 28%;
+        --primary: 282 83% 70%;
+        --primary-accent: 282 78% 62%;
+        --primary-soft: 282 63% 32%;
         --primary-foreground: 216 24% 8%;
         --secondary: 218 14% 20%;
         --secondary-foreground: 210 20% 92%;
@@ -147,14 +147,14 @@
         --chart-income: var(--success);
         --chart-expense: var(--danger);
         --chart-transfer: var(--finance-transfer);
-        --theme-primary-hex: #76b2f7;
-        --theme-primary-rgb: 118, 178, 247;
+        --theme-primary-hex: #cc73f2;
+        --theme-primary-rgb: 204, 115, 242;
         /* Derived surface tokens */
         --panel-border: hsl(218 14% 28%);
         --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.2);
-        --focus-ring: rgba(118, 178, 247, 0.5);
-        --focus-ring-shadow: 0 0 0 4px rgba(118, 178, 247, 0.15);
-        --input-focus-border: rgba(118, 178, 247, 0.45);
+        --focus-ring: rgba(204, 115, 242, 0.5);
+        --focus-ring-shadow: 0 0 0 4px rgba(204, 115, 242, 0.15);
+        --input-focus-border: rgba(204, 115, 242, 0.45);
         --text-positive: hsl(var(--success));
         --text-negative: hsl(var(--danger));
         color-scheme: dark;

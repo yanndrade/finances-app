@@ -3,9 +3,14 @@ export const APP_DARK_MODE_STORAGE_KEY = "finance.app-dark-mode";
 
 export const THEME_PRESET_OPTIONS = [
   {
+    value: "#831bb0",
+    label: "Roxo",
+    description: "Novo padrão com visual forte e moderno.",
+  },
+  {
     value: "#0f5ea8",
     label: "Azul",
-    description: "Mantém a identidade atual com contraste forte.",
+    description: "Tom clássico com contraste forte.",
   },
   {
     value: "#0f766e",

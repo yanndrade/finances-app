@@ -2,6 +2,12 @@ import * as api from "./api";
 
 
 describe("api timestamp normalization", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
   it("converts local purchase datetimes into the correct UTC instant", () => {
     expect(
       api.normalizeTimestampForApi("2026-03-11T00:30", {
@@ -80,6 +86,70 @@ describe("api timestamp normalization", () => {
     });
   });
 
+  it("creates cash transactions when crypto.randomUUID is unavailable", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          transaction_id: "txn-1",
+          type: "income",
+          occurred_at: "2026-03-11T03:30:00Z",
+          amount: 50_00,
+          account_id: "acc-1",
+          payment_method: "CASH",
+          category_id: "salary",
+          description: "Freela",
+          person_id: null,
+          is_void: false,
+          reimbursement_status: "none",
+        }),
+        { status: 201 },
+      ),
+    );
+    const getRandomValues = vi.fn((buffer: Uint8Array) => {
+      buffer.set([
+        0x10,
+        0x32,
+        0x54,
+        0x76,
+        0x98,
+        0xba,
+        0xdc,
+        0xfe,
+        0x11,
+        0x22,
+        0x33,
+        0x44,
+        0x55,
+        0x66,
+        0x77,
+        0x88,
+      ]);
+      return buffer;
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", {
+      getRandomValues,
+    });
+
+    await api.createCashTransaction({
+      type: "income",
+      amountInCents: 50_00,
+      accountId: "acc-1",
+      paymentMethod: "CASH",
+      categoryId: "salary",
+      description: "Freela",
+      occurredAt: "2026-03-11T03:30:00Z",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      id: "10325476-98ba-4cfe-9122-334455667788",
+      amount: 50_00,
+      account_id: "acc-1",
+    });
+  });
+
   it("converts payment datetime-local values and sends invoice payment payload", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(
@@ -121,7 +191,6 @@ describe("api timestamp normalization", () => {
     });
 
     timezoneSpy.mockRestore();
-    vi.useRealTimers();
   });
 
   it("requests invoice items for a specific invoice id", async () => {

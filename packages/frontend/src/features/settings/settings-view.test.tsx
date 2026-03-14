@@ -8,7 +8,7 @@ function renderSettingsView(overrides?: Partial<ComponentProps<typeof SettingsVi
   return render(
     <SettingsView
       isSubmitting={false}
-      themeColor="#0f5ea8"
+      themeColor="#831bb0"
       darkMode={false}
       onExportBackup={vi.fn()}
       onResetApplicationData={vi.fn(() => Promise.resolve())}

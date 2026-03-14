@@ -1,3 +1,5 @@
+import { createClientId } from "@/lib/uuid";
+
 export type CategorySpending = {
   category_id: string;
   total: number;
@@ -924,7 +926,7 @@ export async function createAccount(
   return requestJson<AccountSummary>("/api/accounts", {
     method: "POST",
     body: JSON.stringify({
-      id: crypto.randomUUID(),
+      id: createClientId(),
       name: payload.name,
       type: payload.type,
       initial_balance: payload.initialBalanceInCents,
@@ -951,7 +953,7 @@ export async function createCard(payload: CardPayload): Promise<CardSummary> {
   return requestJson<CardSummary>("/api/cards", {
     method: "POST",
     body: JSON.stringify({
-      id: crypto.randomUUID(),
+      id: createClientId(),
       name: payload.name,
       limit: payload.limitInCents,
       closing_day: payload.closingDay,
@@ -967,7 +969,7 @@ export async function createRecurringRule(
   return requestJson<RecurringRuleSummary>("/api/recurring-rules", {
     method: "POST",
     body: JSON.stringify({
-      id: crypto.randomUUID(),
+      id: createClientId(),
       name: payload.name,
       amount: payload.amountInCents,
       due_day: payload.dueDay,
@@ -1043,7 +1045,7 @@ export async function createCardPurchase(
   return requestJson<CardPurchaseSummary>("/api/card-purchases", {
     method: "POST",
     body: JSON.stringify({
-      id: crypto.randomUUID(),
+      id: createClientId(),
       purchase_date: normalizeTimestampForApi(payload.purchaseDate),
       amount: payload.amountInCents,
       installments_count: payload.installmentsCount,
@@ -1078,7 +1080,7 @@ export async function payInvoice(
     {
       method: "POST",
       body: JSON.stringify({
-        id: crypto.randomUUID(),
+        id: createClientId(),
         amount: payload.amountInCents,
         account_id: payload.accountId,
         paid_at: normalizeTimestampForApi(payload.paidAt),
@@ -1095,7 +1097,7 @@ export async function createCashTransaction(
   return requestJson<TransactionSummary>(endpoint, {
     method: "POST",
     body: JSON.stringify({
-      id: crypto.randomUUID(),
+      id: createClientId(),
       occurred_at:
         payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
       amount: payload.amountInCents,
@@ -1114,7 +1116,7 @@ export async function createTransfer(
   return requestJson<TransactionSummary[]>("/api/transfers", {
     method: "POST",
     body: JSON.stringify({
-      id: crypto.randomUUID(),
+      id: createClientId(),
       occurred_at:
         payload.occurredAt ?? new Date().toISOString().replace(".000", ""),
       from_account_id: payload.fromAccountId,
@@ -1273,7 +1275,7 @@ export async function createInvestmentMovement(
   return requestJson<InvestmentMovementSummary>("/api/investments/movements", {
     method: "POST",
     body: JSON.stringify({
-      id: crypto.randomUUID(),
+      id: createClientId(),
       occurred_at: normalizeTimestampForApi(payload.occurredAt),
       type: payload.type,
       account_id: payload.accountId,
