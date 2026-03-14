@@ -29,7 +29,6 @@ type HistoryPageProps = {
   cards: CardSummary[];
   month: string;
   refreshKey?: number;
-  onError?: (error: unknown) => void;
   className?: string;
 };
 
@@ -76,7 +75,6 @@ export function HistoryPage({
   cards,
   month,
   refreshKey,
-  onError,
   className,
 }: HistoryPageProps) {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -91,7 +89,6 @@ export function HistoryPage({
   const [movementPage, setMovementPage] = useState<MovementPage>(EMPTY_PAGE);
   const [summary, setSummary] = useState<MovementSummary>(EMPTY_SUMMARY);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
   // ── Derived filters ────────────────────────────────────────────────────────
@@ -112,25 +109,15 @@ export function HistoryPage({
   // ── Data fetching ──────────────────────────────────────────────────────────
 
   const loadMovements = useCallback(
-    async (filters: MovementFilters, signal?: AbortSignal) => {
+    async (filters: MovementFilters) => {
       setIsLoading(true);
-      setLoadError(null);
       try {
         const page = await fetchMovements(filters);
-        if (!signal?.aborted) {
-          setMovementPage(page);
-        }
-      } catch (err) {
-        if (!signal?.aborted) {
-          setMovementPage(EMPTY_PAGE);
-          setLoadError(
-            err instanceof Error ? err.message : "Não foi possível carregar as movimentações.",
-          );
-        }
+        setMovementPage(page);
+      } catch {
+        setMovementPage(EMPTY_PAGE);
       } finally {
-        if (!signal?.aborted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     },
     [],
@@ -141,13 +128,12 @@ export function HistoryPage({
     try {
       const s = await fetchMovementsSummary(month);
       setSummary(s);
-    } catch (err) {
+    } catch {
       setSummary(EMPTY_SUMMARY);
-      onError?.(err);
     } finally {
       setSummaryLoading(false);
     }
-  }, [onError]);
+  }, []);
 
   // Load summary whenever the month changes
   useEffect(() => {
@@ -162,17 +148,13 @@ export function HistoryPage({
 
   // Load movements whenever any filter changes (debounced for text)
   useEffect(() => {
-    const controller = new AbortController();
     const handle = globalThis.setTimeout(
       () => {
-        void loadMovements(activeFilters, controller.signal);
+        void loadMovements(activeFilters);
       },
       searchText.trim() ? 300 : 0,
     );
-    return () => {
-      globalThis.clearTimeout(handle);
-      controller.abort();
-    };
+    return () => globalThis.clearTimeout(handle);
   }, [activeFilters, searchText, refreshKey, loadMovements]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -271,35 +253,13 @@ export function HistoryPage({
           </span>
         </div>
 
-        {isLoading && movementPage.items.length === 0 ? (
-          <div aria-hidden="true" className="flex flex-col divide-y divide-border/40">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <div className="h-4 w-10 rounded bg-muted animate-pulse shrink-0" />
-                <div className="h-4 flex-1 rounded bg-muted animate-pulse" />
-                <div className="h-4 w-24 rounded bg-muted animate-pulse shrink-0 hidden sm:block" />
-                <div className="h-4 w-28 rounded bg-muted animate-pulse shrink-0" />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <MovementLedger
-            movements={movementPage.items}
-            accounts={accounts}
-            cards={cards}
-            selectedMovementId={selectedMovement?.movement_id ?? null}
-            onSelectMovement={handleSelectMovement}
-          />
-        )}
-
-        {loadError && !isLoading ? (
-          <div
-            role="alert"
-            className="flex items-center gap-2 px-4 py-3 text-sm text-destructive border-t border-border/50"
-          >
-            <span>{loadError}</span>
-          </div>
-        ) : null}
+        <MovementLedger
+          movements={movementPage.items}
+          accounts={accounts}
+          cards={cards}
+          selectedMovementId={selectedMovement?.movement_id ?? null}
+          onSelectMovement={handleSelectMovement}
+        />
 
         {/* Pagination hint */}
         {movementPage.total > movementPage.page_size && (

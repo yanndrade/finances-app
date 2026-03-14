@@ -1,21 +1,15 @@
 export const APP_THEME_STORAGE_KEY = "finance.app-theme";
-export const APP_DARK_MODE_STORAGE_KEY = "finance.app-dark-mode";
 
 export const THEME_PRESET_OPTIONS = [
   {
-    value: "#831bb0",
-    label: "Roxo",
-    description: "Novo padrão com visual forte e moderno.",
-  },
-  {
     value: "#0f5ea8",
     label: "Azul",
-    description: "Tom clássico com contraste forte.",
+    description: "Mantem a identidade atual com contraste forte.",
   },
   {
     value: "#0f766e",
-    label: "Verde petróleo",
-    description: "Mais sóbrio e financeiro.",
+    label: "Verde petroleo",
+    description: "Mais sobrio e financeiro.",
   },
   {
     value: "#b45309",
@@ -25,7 +19,7 @@ export const THEME_PRESET_OPTIONS = [
   {
     value: "#c2410c",
     label: "Laranja queimado",
-    description: "Tom enérgico para ações e destaques.",
+    description: "Tom energico para acoes e destaques.",
   },
   {
     value: "#be123c",
@@ -100,30 +94,6 @@ export function readStoredThemeColor(): string {
   return normalizeThemeColor(window.localStorage.getItem(APP_THEME_STORAGE_KEY));
 }
 
-export function readStoredDarkMode(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  const stored = window.localStorage.getItem(APP_DARK_MODE_STORAGE_KEY);
-  return stored === "true";
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  const sNorm = s / 100;
-  const lNorm = l / 100;
-  const a = sNorm * Math.min(lNorm, 1 - lNorm);
-  const f = (n: number): string => {
-    const k = (n + h / 30) % 12;
-    const color = lNorm - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-    return Math.round(255 * color)
-      .toString(16)
-      .padStart(2, "0");
-  };
-
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
 export function applyThemeColor(themeColor: string): void {
   if (typeof document === "undefined") {
     return;
@@ -132,61 +102,15 @@ export function applyThemeColor(themeColor: string): void {
   const normalized = normalizeThemeColor(themeColor);
   const { h, s, l } = hexToHsl(normalized);
   const root = document.documentElement;
-  const isDark = root.classList.contains("dark");
+  const red = parseInt(normalized.slice(1, 3), 16);
+  const green = parseInt(normalized.slice(3, 5), 16);
+  const blue = parseInt(normalized.slice(5, 7), 16);
 
-  if (isDark) {
-    // Dark mode: use high-lightness primaries so they read on dark backgrounds
-    const primaryL = Math.max(62, Math.min(76, l + 30));
-    const accentL = Math.max(55, Math.min(70, l + 22));
-    const softL = Math.max(22, Math.min(32, l - 8));
-    const hex = hslToHex(h, Math.min(100, s + 10), primaryL);
-    const red = parseInt(hex.slice(1, 3), 16);
-    const green = parseInt(hex.slice(3, 5), 16);
-    const blue = parseInt(hex.slice(5, 7), 16);
-
-    root.style.setProperty("--primary", `${h} ${Math.min(100, s + 10)}% ${primaryL}%`);
-    root.style.setProperty("--primary-accent", `${h} ${Math.min(100, s + 5)}% ${accentL}%`);
-    root.style.setProperty("--primary-soft", `${h} ${Math.max(50, s - 10)}% ${softL}%`);
-    root.style.setProperty("--ring", `${h} ${Math.min(100, s + 5)}% ${accentL}%`);
-    root.style.setProperty("--chart-primary", `${h} ${Math.min(100, s + 5)}% ${accentL}%`);
-    root.style.setProperty("--theme-primary-hex", hex);
-    root.style.setProperty("--theme-primary-rgb", `${red}, ${green}, ${blue}`);
-    root.style.setProperty("--focus-ring", `rgba(${red}, ${green}, ${blue}, 0.5)`);
-    root.style.setProperty("--focus-ring-shadow", `0 0 0 4px rgba(${red}, ${green}, ${blue}, 0.15)`);
-    root.style.setProperty("--input-focus-border", `rgba(${red}, ${green}, ${blue}, 0.45)`);
-  } else {
-    // Light mode: keep the existing low-lightness logic
-    const red = parseInt(normalized.slice(1, 3), 16);
-    const green = parseInt(normalized.slice(3, 5), 16);
-    const blue = parseInt(normalized.slice(5, 7), 16);
-
-    root.style.setProperty("--primary", `${h} ${Math.min(100, s + 8)}% ${Math.max(22, l - 10)}%`);
-    root.style.setProperty("--primary-accent", `${h} ${Math.min(100, s)}% ${Math.max(32, l)}%`);
-    root.style.setProperty("--primary-soft", `${h} ${Math.max(50, s - 18)}% ${Math.min(94, l + 34)}%`);
-    root.style.setProperty("--ring", `${h} ${Math.min(100, s)}% ${Math.max(32, l)}%`);
-    root.style.setProperty("--chart-primary", `${h} ${Math.min(100, s)}% ${Math.max(32, l)}%`);
-    root.style.setProperty("--theme-primary-hex", normalized);
-    root.style.setProperty("--theme-primary-rgb", `${red}, ${green}, ${blue}`);
-    root.style.setProperty("--focus-ring", `rgba(${red}, ${green}, ${blue}, 0.5)`);
-    root.style.setProperty("--focus-ring-shadow", `0 0 0 4px rgba(${red}, ${green}, ${blue}, 0.12)`);
-    root.style.setProperty("--input-focus-border", `rgba(${red}, ${green}, ${blue}, 0.4)`);
-  }
-}
-
-export function applyDarkMode(isDark: boolean, themeColor?: string): void {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  const root = document.documentElement;
-
-  if (isDark) {
-    root.classList.add("dark");
-    root.style.colorScheme = "dark";
-  } else {
-    root.classList.remove("dark");
-    root.style.colorScheme = "light";
-  }
-
-  applyThemeColor(themeColor ?? DEFAULT_THEME_COLOR);
+  root.style.setProperty("--primary", `${h} ${Math.min(100, s + 8)}% ${Math.max(22, l - 10)}%`);
+  root.style.setProperty("--primary-accent", `${h} ${Math.min(100, s)}% ${Math.max(32, l)}%`);
+  root.style.setProperty("--primary-soft", `${h} ${Math.max(50, s - 18)}% ${Math.min(94, l + 34)}%`);
+  root.style.setProperty("--ring", `${h} ${Math.min(100, s)}% ${Math.max(32, l)}%`);
+  root.style.setProperty("--chart-primary", `${h} ${Math.min(100, s)}% ${Math.max(32, l)}%`);
+  root.style.setProperty("--theme-primary-hex", normalized);
+  root.style.setProperty("--theme-primary-rgb", `${red}, ${green}, ${blue}`);
 }

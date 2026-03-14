@@ -192,7 +192,7 @@ export function Sidebar({
                 return (
                   <li key={item.id}>
                     <button
-                      aria-current={isActive ? "page" : undefined}
+                      aria-pressed={isActive}
                       className={`nav-item${isActive ? " is-active" : ""}`}
                       onClick={() => onNavigate(item.id)}
                       title={isCollapsed ? item.label : undefined}
@@ -221,7 +221,7 @@ export function Sidebar({
       {/* Footer: settings */}
       <div className="sidebar-footer">
         <button
-          aria-current={activeView === "settings" ? "page" : undefined}
+          aria-pressed={activeView === "settings"}
           className={`nav-item nav-item--footer${activeView === "settings" ? " is-active" : ""}`}
           onClick={() => onNavigate("settings")}
           title={isCollapsed ? "Configurações" : undefined}

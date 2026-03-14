@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   cancelReimbursement,
@@ -21,8 +21,6 @@ type ReimbursementsViewProps = {
   accounts: AccountSummary[];
   month: string;
   refreshKey?: number;
-  onError?: (error: unknown) => void;
-  onOpenQuickAdd?: () => void;
 };
 
 const EMPTY_SUMMARY: ReimbursementSummary = {
@@ -39,8 +37,6 @@ export function ReimbursementsView({
   accounts,
   month,
   refreshKey,
-  onError,
-  onOpenQuickAdd,
 }: ReimbursementsViewProps) {
   const isMobileSurface = surface === "mobile";
   const [reimbursements, setReimbursements] = useState<PendingReimbursementSummary[]>([]);
@@ -54,42 +50,41 @@ export function ReimbursementsView({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
 
+  const loadList = useCallback(async () => {
+    setIsListLoading(true);
+    try {
+      const data = await listReimbursements({ month });
+      setReimbursements(data);
+    } catch {
+      setReimbursements([]);
+    } finally {
+      setIsListLoading(false);
+    }
+  }, [month]);
+
+  const loadSummary = useCallback(async (targetMonth: string) => {
+    setIsSummaryLoading(true);
+    try {
+      const data = await getReimbursementsSummary({ month: targetMonth });
+      setSummary(data);
+    } catch {
+      setSummary(EMPTY_SUMMARY);
+    } finally {
+      setIsSummaryLoading(false);
+    }
+  }, []);
+
   async function reload() {
-    await Promise.all([
-      listReimbursements({ month }).then(setReimbursements).catch(() => setReimbursements([])),
-      getReimbursementsSummary({ month }).then(setSummary).catch(() => setSummary(EMPTY_SUMMARY)),
-    ]);
+    await Promise.all([loadList(), loadSummary(month)]);
   }
 
   useEffect(() => {
-    let cancelled = false;
-    setIsListLoading(true);
-    listReimbursements({ month }).then(
-      (data) => { if (!cancelled) setReimbursements(data); },
-      (err) => {
-        if (!cancelled) {
-          setReimbursements([]);
-          onError?.(err);
-        }
-      },
-    ).finally(() => { if (!cancelled) setIsListLoading(false); });
-    return () => { cancelled = true; };
-  }, [month, refreshKey, onError]);
+    void loadList();
+  }, [loadList, refreshKey]);
 
   useEffect(() => {
-    let cancelled = false;
-    setIsSummaryLoading(true);
-    getReimbursementsSummary({ month }).then(
-      (data) => { if (!cancelled) setSummary(data); },
-      (err) => {
-        if (!cancelled) {
-          setSummary(EMPTY_SUMMARY);
-          onError?.(err);
-        }
-      },
-    ).finally(() => { if (!cancelled) setIsSummaryLoading(false); });
-    return () => { cancelled = true; };
-  }, [month, refreshKey, onError]);
+    void loadSummary(month);
+  }, [month, refreshKey, loadSummary]);
 
   function handleSelectReimbursement(reimbursement: PendingReimbursementSummary) {
     setSelectedReimbursement(reimbursement);
@@ -112,8 +107,6 @@ export function ReimbursementsView({
         previous.map((item) => (item.transaction_id === id ? updated : item)),
       );
       setSelectedReimbursement(updated);
-    } catch (error) {
-      onError?.(error);
     } finally {
       setIsSubmitting(false);
     }
@@ -124,8 +117,6 @@ export function ReimbursementsView({
     try {
       await cancelReimbursement(id);
       await reload();
-    } catch (error) {
-      onError?.(error);
     } finally {
       setIsSubmitting(false);
     }
@@ -146,8 +137,6 @@ export function ReimbursementsView({
       });
       await reload();
       setIsDrawerOpen(false);
-    } catch (error) {
-      onError?.(error);
     } finally {
       setIsSubmitting(false);
     }
@@ -157,12 +146,13 @@ export function ReimbursementsView({
     <div className="space-y-6">
       <SummaryStrip summary={summary} loading={isSummaryLoading} />
 
-      <ReimbursementList
-        reimbursements={reimbursements}
-        loading={isListLoading}
-        onSelectReimbursement={handleSelectReimbursement}
-        onOpenQuickAdd={onOpenQuickAdd}
-      />
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <ReimbursementList
+          reimbursements={reimbursements}
+          loading={isListLoading}
+          onSelectReimbursement={handleSelectReimbursement}
+        />
+      </div>
 
       <ReimbursementDrawer
         reimbursement={selectedReimbursement}

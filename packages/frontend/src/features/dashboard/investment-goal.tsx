@@ -14,7 +14,6 @@ import type { DashboardSummary, InvestmentOverview } from "../../lib/api";
 import type { UiDensity } from "../../lib/ui-density";
 import type { QuickAddPreset } from "../../components/quick-add-composer";
 import { cn } from "../../lib/utils";
-import { prefersReducedMotion } from "../../lib/motion";
 
 type InvestmentGoalProps = {
   dashboard: DashboardSummary;
@@ -97,18 +96,20 @@ export function InvestmentGoal({
   return (
     <Card
       className={cn(
-        "finance-card overflow-hidden flex flex-col h-full rounded-xl border border-border/50 shadow-none bg-surface",
+        "finance-card overflow-hidden flex flex-col h-full rounded-xl border-slate-100/40 shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
         className,
       )}
     >
-      <CardHeader className={cn("shrink-0 pb-3 border-b border-border/40")}>
+      <CardHeader className={cn("shrink-0 pb-3", theme.bg)}>
         <div className="flex items-center gap-2">
-          <Target className={cn("h-4 w-4", theme.icon)} />
+          <div className={cn("rounded-lg p-2", theme.iconBg)}>
+            <Target className={cn("h-4 w-4", theme.icon)} />
+          </div>
           <div>
-            <CardTitle className="text-sm font-semibold text-foreground">
+            <CardTitle className={cn("text-sm font-semibold", theme.text)}>
               Compromisso com o Futuro
             </CardTitle>
-            <p className="text-[12px] text-muted-foreground">
+            <p className={cn("text-[12px] opacity-80", theme.text)}>
               {theme.statusMsg}
             </p>
           </div>
@@ -117,7 +118,7 @@ export function InvestmentGoal({
 
       <CardContent
         className={cn(
-          "flex-1 flex flex-col items-center justify-center py-6",
+          "flex-1 flex flex-col items-center justify-center py-6 bg-white",
           uiDensity === "dense" && "py-4",
         )}
       >
@@ -141,7 +142,6 @@ export function InvestmentGoal({
               dataKey="value"
               startAngle={90}
               endAngle={-270}
-              isAnimationActive={!prefersReducedMotion()}
             >
               <Cell fill={theme.ring} stroke="none" />
               <Cell fill="hsl(var(--slate-100) / 0.8)" stroke="none" />
@@ -151,39 +151,42 @@ export function InvestmentGoal({
             <span
               className={cn(
                 "text-3xl font-black tabular-nums tracking-tight",
-                statusCard === "healthy" ? "text-emerald-600" : statusCard === "warning" ? "text-amber-600" : "text-rose-600",
+                theme.text,
               )}
             >
               {metaProgress.toFixed(0)}%
             </span>
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               Aportado
             </span>
           </div>
         </div>
 
         <div className="w-full flex justify-between items-center px-4 mb-6 text-sm">
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs text-muted-foreground font-medium">
+          <div className="flex flex-col">
+            <span className="text-xs text-slate-500 font-medium">
               Meta do mês
             </span>
             <MoneyValue
               value={investmentMeta}
-              className="font-bold text-foreground"
+              className="font-bold text-slate-800"
             />
           </div>
-          <div className="flex flex-col text-right min-w-0">
-            <span className="text-xs text-muted-foreground font-medium">Falta</span>
+          <div className="flex flex-col text-right">
+            <span className="text-xs text-slate-500 font-medium">Falta</span>
             <MoneyValue
               value={remaining}
-              className="font-bold text-foreground"
+              className="font-bold text-slate-800"
             />
           </div>
         </div>
 
         <Button
           onClick={() => onOpenQuickAdd("investment_contribution")}
-          className="h-auto w-full rounded-xl py-3 font-semibold transition-colors"
+          className={cn(
+            "h-auto w-full rounded-xl py-4 font-semibold shadow-sm transition-colors",
+            theme.btnColor,
+          )}
         >
           Registrar aporte
         </Button>

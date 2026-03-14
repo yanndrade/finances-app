@@ -149,7 +149,7 @@ export function MovementsPanel({
                         {movement.type === "contribution" ? "Aporte" : "Resgate"}
                       </span>
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate font-medium text-slate-700" title={movement.description ?? "Sem descrição"}>
+                    <TableCell className="font-medium text-slate-700">
                       {movement.description ?? "Sem descrição"}
                     </TableCell>
                     <TableCell className="text-right">

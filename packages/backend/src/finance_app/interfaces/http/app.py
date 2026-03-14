@@ -1,6 +1,4 @@
 import ipaddress
-import json
-import logging
 import os
 from pathlib import Path
 from urllib.parse import urlparse
@@ -30,9 +28,6 @@ LAN_PUBLIC_PATHS = {"/health", "/openapi.json", "/docs", "/redoc"}
 LAN_PUBLIC_PREFIXES = ("/docs", "/redoc")
 LAN_LOCAL_ONLY_PREFIXES = ("/api/security/lan", "/api/security/devices")
 LAN_PAIR_ENDPOINT = "/api/security/pair"
-LAN_SECURITY_TRACE_ENV = "FINANCE_APP_SECURITY_TRACE"
-
-logger = logging.getLogger("finance_app.security.lan")
 
 
 def build_router(services: AppServices) -> APIRouter:
@@ -91,7 +86,6 @@ def create_app(
     app = FastAPI(title="finance-app backend")
     app.state.public_scheme = "http"
     app.state.public_port = 8000
-    app.state.security_trace_enabled = _read_bool_env(LAN_SECURITY_TRACE_ENV)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -120,13 +114,6 @@ def create_app(
         if _is_public_path(path):
             if request_ip is None or _is_local_client(request_ip):
                 return await call_next(request)
-            _log_lan_security_event(
-                request,
-                reason="public_path_localhost_only",
-                detail="This endpoint is only available on localhost.",
-                request_ip=request_ip,
-                warning=True,
-            )
             return _forbidden("This endpoint is only available on localhost.")
 
         if request_ip is None or _is_local_client(request_ip):
@@ -134,58 +121,21 @@ def create_app(
 
         lan_state = services.security_store.read_lan_security_state()
         if not lan_state.enabled:
-            _log_lan_security_event(
-                request,
-                reason="lan_mode_disabled",
-                detail="LAN mode is disabled.",
-                request_ip=request_ip,
-                warning=True,
-            )
             return _forbidden("LAN mode is disabled.")
 
         network = services.security_store.resolve_lan_network()
         if network is None:
-            _log_lan_security_event(
-                request,
-                reason="lan_network_not_detected",
-                detail="No private LAN network detected.",
-                request_ip=request_ip,
-                warning=True,
-            )
             return JSONResponse(
                 status_code=503,
                 content={"detail": "No private LAN network detected."},
             )
 
         if not _is_private_ip(request_ip):
-            _log_lan_security_event(
-                request,
-                reason="remote_ip_not_private",
-                detail="Only private network addresses are allowed.",
-                request_ip=request_ip,
-                warning=True,
-                extra={"subnet_cidr": network.subnet_cidr},
-            )
             return _forbidden("Only private network addresses are allowed.")
         if not _is_ip_in_subnet(request_ip, network.subnet_cidr):
-            _log_lan_security_event(
-                request,
-                reason="remote_ip_outside_subnet",
-                detail="Request origin is outside the authorized subnet.",
-                request_ip=request_ip,
-                warning=True,
-                extra={"subnet_cidr": network.subnet_cidr},
-            )
             return _forbidden("Request origin is outside the authorized subnet.")
 
         if path.startswith(LAN_LOCAL_ONLY_PREFIXES):
-            _log_lan_security_event(
-                request,
-                reason="lan_configuration_desktop_only",
-                detail="LAN configuration endpoints are desktop-only.",
-                request_ip=request_ip,
-                warning=True,
-            )
             return _forbidden("LAN configuration endpoints are desktop-only.")
 
         if not path.startswith("/api/"):
@@ -197,73 +147,27 @@ def create_app(
         if path == LAN_PAIR_ENDPOINT and request.method.upper() in {"GET", "POST"}:
             return await call_next(request)
 
-        origin, origin_source = _read_request_origin_context(request)
-        effective_public_host = _read_effective_public_host(request)
+        origin = request.headers.get("origin")
         allow_http_origin = (
             getattr(request.app.state, "public_scheme", "http") != "https"
         )
-        origin_allowed, origin_reason = _evaluate_origin(
+        if not _is_origin_allowed(
             origin=origin,
-            expected_host=effective_public_host,
+            local_ip=network.local_ip,
             allow_http=allow_http_origin,
-        )
-        if not origin_allowed:
-            origin_diagnostics = _extract_origin_diagnostics(origin)
-            _log_lan_security_event(
-                request,
-                reason="invalid_request_origin",
-                detail="Invalid request origin.",
-                request_ip=request_ip,
-                warning=True,
-                extra={
-                    "origin_reason": origin_reason,
-                    "origin_source": origin_source,
-                    **origin_diagnostics,
-                    "expected_host": effective_public_host,
-                    "allow_http_origin": allow_http_origin,
-                    "public_scheme": str(getattr(request.app.state, "public_scheme", "http")),
-                    "public_port": int(getattr(request.app.state, "public_port", 8000)),
-                    "subnet_cidr": network.subnet_cidr,
-                },
-            )
+        ):
             return _forbidden("Invalid request origin.")
 
         device_token = request.headers.get("X-Finance-Token")
         if not device_token:
-            _log_lan_security_event(
-                request,
-                reason="missing_device_token",
-                detail="Missing X-Finance-Token header.",
-                request_ip=request_ip,
-                warning=True,
-            )
             return _forbidden("Missing X-Finance-Token header.")
 
         if not services.security_store.verify_device_token(
             device_token,
             request_ip=request_ip,
         ):
-            _log_lan_security_event(
-                request,
-                reason="invalid_or_revoked_device_token",
-                detail="Invalid or revoked device token.",
-                request_ip=request_ip,
-                warning=True,
-            )
             return _forbidden("Invalid or revoked device token.")
 
-        _log_lan_security_event(
-            request,
-            reason="lan_request_allowed",
-            detail="LAN request allowed.",
-            request_ip=request_ip,
-            warning=False,
-            extra={
-                "expected_host": effective_public_host,
-                "origin_reason": origin_reason,
-                "origin_source": origin_source,
-            },
-        )
         return await call_next(request)
 
     app.include_router(build_router(services))
@@ -320,147 +224,26 @@ def _is_ip_in_subnet(host: str, subnet_cidr: str) -> bool:
         return False
 
 
-def _read_effective_public_host(request: Request) -> str | None:
-    host_header = request.headers.get("host")
-    if host_header:
-        parsed_host = urlparse(f"//{host_header}")
-        if parsed_host.hostname:
-            return parsed_host.hostname
-    return request.url.hostname
-
-
-def _read_request_origin_context(request: Request) -> tuple[str | None, str]:
-    origin = request.headers.get("origin")
-    if origin:
-        return origin, "origin"
-
-    finance_origin = request.headers.get("x-finance-origin")
-    if finance_origin:
-        return finance_origin, "x_finance_origin"
-
-    referer = request.headers.get("referer")
-    if referer:
-        return referer, "referer"
-
-    return None, "missing"
-
-
-def _extract_origin_diagnostics(origin: str | None) -> dict[str, str | int | None]:
+def _is_origin_allowed(*, origin: str | None, local_ip: str, allow_http: bool) -> bool:
     if not origin:
-        return {
-            "origin_scheme": None,
-            "origin_host": None,
-            "origin_port": None,
-        }
-
-    parsed_origin = urlparse(origin)
-    try:
-        origin_host = parsed_origin.hostname
-    except ValueError:
-        origin_host = None
-
-    try:
-        origin_port = parsed_origin.port
-    except ValueError:
-        origin_port = None
-
-    return {
-        "origin_scheme": parsed_origin.scheme or None,
-        "origin_host": origin_host,
-        "origin_port": origin_port,
-    }
-
-
-def _is_origin_allowed(
-    *,
-    origin: str | None,
-    expected_host: str | None,
-    allow_http: bool,
-) -> bool:
-    allowed, _ = _evaluate_origin(
-        origin=origin,
-        expected_host=expected_host,
-        allow_http=allow_http,
-    )
-    return allowed
-
-
-def _evaluate_origin(
-    *,
-    origin: str | None,
-    expected_host: str | None,
-    allow_http: bool,
-) -> tuple[bool, str]:
-    if not origin or not expected_host:
-        if not origin:
-            return False, "missing_origin_header"
-        return False, "missing_expected_host"
+        return False
 
     parsed = urlparse(origin)
     if parsed.scheme not in {"http", "https"}:
-        return False, "unsupported_origin_scheme"
+        return False
     if parsed.hostname is None:
-        return False, "missing_origin_hostname"
+        return False
 
-    if parsed.hostname.lower() != expected_host.lower():
-        return False, "origin_host_mismatch"
+    if parsed.hostname in {"localhost", "127.0.0.1"}:
+        return True
+
+    if parsed.hostname != local_ip:
+        return False
 
     if parsed.scheme == "https":
-        return True, "https_origin_allowed"
+        return True
 
-    if allow_http:
-        return True, "http_origin_allowed"
-    return False, "http_origin_disallowed"
-
-
-def _read_bool_env(env_name: str) -> bool:
-    raw = os.getenv(env_name)
-    if raw is None:
-        return False
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _log_lan_security_event(
-    request: Request,
-    *,
-    reason: str,
-    detail: str,
-    request_ip: str | None,
-    warning: bool,
-    extra: dict[str, str | int | bool | None] | None = None,
-) -> None:
-    trace_enabled = bool(getattr(request.app.state, "security_trace_enabled", False))
-    if not warning and not trace_enabled:
-        return
-
-    payload: dict[str, str | int | bool | None] = {
-        "reason": reason,
-        "detail": detail,
-        "method": request.method.upper(),
-        "path": request.url.path,
-        "query": request.url.query or None,
-        "request_url_host": request.url.hostname,
-        "request_ip": request_ip,
-        "direct_client_host": request.client.host if request.client else None,
-        "host_header": request.headers.get("host"),
-        "origin": request.headers.get("origin"),
-        "referer": request.headers.get("referer"),
-        "x_finance_origin": request.headers.get("x-finance-origin"),
-        "x_forwarded_for": request.headers.get("x-forwarded-for"),
-        "x_forwarded_host": request.headers.get("x-forwarded-host"),
-        "x_forwarded_proto": request.headers.get("x-forwarded-proto"),
-        "x_finance_client_ip": request.headers.get("x-finance-client-ip"),
-        "has_device_token": request.headers.get("x-finance-token") is not None,
-        "user_agent": request.headers.get("user-agent"),
-    }
-    if extra:
-        payload.update(extra)
-
-    serialized_payload = json.dumps(payload, ensure_ascii=True, sort_keys=True)
-    if warning:
-        logger.warning("lan_security %s", serialized_payload)
-    else:
-        logger.info("lan_security %s", serialized_payload)
+    return allow_http
 
 
 def _register_frontend_routes(app: FastAPI) -> None:

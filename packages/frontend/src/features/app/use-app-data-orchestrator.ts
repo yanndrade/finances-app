@@ -41,7 +41,6 @@ type UseAppDataOrchestratorParams = {
   initialInvestmentFromDate: string;
   initialInvestmentToDate: string;
   onError: (error: unknown) => void;
-  onRefreshSuccess?: () => void;
 };
 
 export function useAppDataOrchestrator({
@@ -52,7 +51,6 @@ export function useAppDataOrchestrator({
   initialInvestmentFromDate,
   initialInvestmentToDate,
   onError,
-  onRefreshSuccess,
 }: UseAppDataOrchestratorParams) {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
@@ -131,7 +129,6 @@ export function useAppDataOrchestrator({
         setInvestmentView(activeInvestmentView);
         setInvestmentFromDate(activeFromDate);
         setInvestmentToDate(activeToDate);
-        onRefreshSuccess?.();
       } catch (error) {
         if (refreshId === latestRefreshIdRef.current) {
           onError(error);
@@ -148,7 +145,6 @@ export function useAppDataOrchestrator({
       investmentToDate,
       investmentView,
       onError,
-      onRefreshSuccess,
       selectedMonth,
       transactionFilters,
     ],

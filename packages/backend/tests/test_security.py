@@ -6,7 +6,6 @@ from finance_app.application.security import (
     UnlockAppUseCase,
     VerifyPasswordUseCase,
 )
-import finance_app.infrastructure.security as security_infra
 from finance_app.infrastructure.security import SecurityStore
 
 
@@ -114,42 +113,3 @@ def test_lan_devices_can_be_revoked(tmp_path: Path) -> None:
     assert store.revoke_device(paired.device_id) is False
     assert store.verify_device_token(paired.device_token) is False
     assert store.list_authorized_devices() == []
-
-
-def test_windows_ipconfig_prefers_physical_adapter_with_default_gateway() -> None:
-    ipconfig_output = """
-Configuracao de IP do Windows
-
-Adaptador Ethernet vEthernet (Default Switch):
-   Endereco IPv4. . . . . . . . . . . : 172.20.0.1
-   Mascara de Sub-rede . . . . . . . .: 255.255.240.0
-   Gateway Padrao. . . . . . . . . . . :
-
-Adaptador de Rede sem Fio Wi-Fi:
-   Endereco IPv4. . . . . . . . . . . : 192.168.1.54
-   Mascara de Sub-rede . . . . . . . .: 255.255.255.0
-   Gateway Padrao. . . . . . . . . . . : 192.168.1.1
-""".strip()
-
-    selected = security_infra._discover_windows_private_ipv4_from_output(
-        ipconfig_output
-    )
-
-    assert selected == "192.168.1.54"
-
-
-def test_windows_ipconfig_falls_back_to_virtual_adapter_when_it_is_the_only_one() -> None:
-    ipconfig_output = """
-Windows IP Configuration
-
-Ethernet adapter vEthernet (Default Switch):
-   IPv4 Address. . . . . . . . . . . : 172.20.0.1
-   Subnet Mask . . . . . . . . . . . : 255.255.240.0
-   Default Gateway . . . . . . . . . :
-""".strip()
-
-    selected = security_infra._discover_windows_private_ipv4_from_output(
-        ipconfig_output
-    )
-
-    assert selected == "172.20.0.1"

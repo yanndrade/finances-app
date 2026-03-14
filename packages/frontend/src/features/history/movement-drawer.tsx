@@ -46,7 +46,6 @@ type MovementDrawerProps = {
   onEdit?: (movement: UnifiedMovement) => void;
   onVoid?: (movementId: string) => void;
   onMarkPaid?: (movementId: string) => void;
-  isSubmitting?: boolean;
 };
 
 // ─── Colour helpers ───────────────────────────────────────────────────────────
@@ -151,7 +150,6 @@ export function MovementDrawer({
   onEdit,
   onVoid,
   onMarkPaid,
-  isSubmitting = false,
 }: MovementDrawerProps) {
   if (!movement) return null;
 
@@ -405,8 +403,7 @@ export function MovementDrawer({
             <div className="flex gap-2">
               <Button
                 onClick={() => onEdit?.(movement)}
-                disabled={isSubmitting}
-                className="flex-1 h-10 rounded-xl font-bold bg-accent-navy text-white hover:bg-accent-navy/90 disabled:opacity-50"
+                className="flex-1 h-10 rounded-xl font-bold bg-accent-navy text-white hover:bg-accent-navy/90"
               >
                 <Pencil className="h-3.5 w-3.5 mr-1.5" />
                 Editar
@@ -415,8 +412,7 @@ export function MovementDrawer({
                 <Button
                   variant="ghost"
                   onClick={() => onVoid?.(movement.movement_id)}
-                  disabled={isSubmitting}
-                  className="h-10 px-4 rounded-xl text-finance-expense border border-finance-expense/30 hover:bg-red-50 disabled:opacity-50"
+                  className="h-10 px-4 rounded-xl text-finance-expense border border-finance-expense/30 hover:bg-red-50"
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                   Estornar
@@ -429,8 +425,7 @@ export function MovementDrawer({
             <Button
               variant="outline"
               onClick={() => onMarkPaid?.(movement.movement_id)}
-              disabled={isSubmitting}
-              className="w-full h-10 rounded-xl font-semibold border-finance-income/40 text-finance-income hover:bg-emerald-50 disabled:opacity-50"
+              className="w-full h-10 rounded-xl font-semibold border-finance-income/40 text-finance-income hover:bg-emerald-50"
             >
               <Receipt className="h-3.5 w-3.5 mr-1.5" />
               Marcar como pago

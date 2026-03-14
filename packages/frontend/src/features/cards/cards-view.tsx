@@ -136,9 +136,8 @@ export function CardsView({
         if (!cancelled) {
           setFutureInstallments(installments.filter((i) => i.reference_month > referenceMonth));
         }
-      } catch (err) {
+      } catch {
         if (!cancelled) {
-          console.error("[cards-view] Failed to load installments:", err);
           setFutureInstallments([]);
           setInstallmentsLoadError("Não foi possível carregar as parcelas futuras.");
         }
@@ -211,7 +210,6 @@ export function CardsView({
             invoicesByCard={invoicesByCardId}
             onSelectCard={handleSelectCard}
             onOpenHistory={handleOpenHistory}
-            onOpenManageCards={!isMobileSurface ? () => setIsManageSheetOpen(true) : undefined}
           />
         </div>
       ) : (

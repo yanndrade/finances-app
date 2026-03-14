@@ -12,13 +12,13 @@ export function MoneyValue({ value, className, showSign = false, neutral = false
   const isPositive = value > 0;
   const isNegative = value < 0;
   
-  const colorClass = neutral
-    ? "text-foreground"
-    : isPositive
-      ? "text-finance-income"
-      : isNegative
-        ? "text-finance-expense"
-        : "text-foreground";
+  const colorClass = neutral 
+    ? "text-slate-900" 
+    : isPositive 
+      ? "text-emerald-600" 
+      : isNegative 
+        ? "text-rose-600" 
+        : "text-slate-900";
 
   const formattedValue = formatCurrency(Math.abs(value));
   const sign = showSign ? (isPositive ? "+ " : isNegative ? "- " : "") : (isNegative ? "- " : "");

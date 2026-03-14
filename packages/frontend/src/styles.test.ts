@@ -21,9 +21,9 @@ describe("styles", () => {
     expect(styles).toContain("--acrylic-surface:");
     expect(styles).toContain("--smoke-overlay:");
     expect(styles).toContain("--ledger-dense-background:");
-    expect(styles).toContain("--primary: 282 81% 30%");
-    expect(styles).toContain("--primary-accent: 282 73% 40%");
-    expect(styles).toContain("--primary-soft: 282 55% 74%");
+    expect(styles).toContain("--primary: 212 100% 32%");
+    expect(styles).toContain("--primary-accent: 210 100% 45%");
+    expect(styles).toContain("--primary-soft: 210 86% 90%");
     expect(styles).toContain("--success: 160 84% 39%");
     expect(styles).toContain("--warning: 38 92% 50%");
     expect(styles).toContain("--danger: 343 78% 50%");

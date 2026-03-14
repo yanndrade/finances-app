@@ -40,7 +40,7 @@ export function InsightGrid({
       )}
     >
       <CardHeader className="pb-2">
-        <h3 className="text-sm font-semibold text-foreground">Capital x rendimento</h3>
+        <h3 className="text-sm font-semibold text-slate-800">Capital x rendimento</h3>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Meta patrimonial */}
@@ -54,14 +54,14 @@ export function InsightGrid({
                 <MoneyValue
                   value={goalTarget}
                   neutral
-                  className="mt-0.5 text-base font-bold text-foreground"
+                  className="mt-0.5 text-base font-bold text-slate-900"
                 />
               </div>
               <div className="text-right">
-                <p className="text-[13px] font-black uppercase tracking-[0.15em] text-muted-foreground">
+                <p className="text-[13px] font-black uppercase tracking-[0.15em] text-slate-400">
                   Progresso
                 </p>
-                <p className="mt-0.5 text-base font-black tabular-nums text-foreground">
+                <p className="mt-0.5 text-base font-black tabular-nums text-slate-900">
                   {goalProgress.toFixed(0)}%
                 </p>
               </div>
@@ -70,7 +70,7 @@ export function InsightGrid({
               value={Math.min(goalProgress, 100)}
               className="h-1.5 w-full rounded-full bg-primary/10"
             />
-            <p className="mt-1.5 text-[12px] text-muted-foreground">
+            <p className="mt-1.5 text-[12px] text-slate-400">
               {formatCurrency(goalRealized)} realizado &middot; {formatCurrency(goalRemaining)}{" "}
               restante
             </p>
@@ -120,20 +120,20 @@ function InsightPanel({
 }) {
   const bgClass =
     tone === "positive"
-      ? "bg-success/5"
+      ? "bg-emerald-50/60"
       : tone === "warning"
-        ? "bg-warning/5"
-        : "bg-muted/60";
+        ? "bg-amber-50/60"
+        : "bg-slate-50/60";
 
   return (
     <div className={cn("rounded-xl px-3 py-2.5", bgClass)}>
-      <p className="text-[13px] font-black uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+      <p className="text-[13px] font-black uppercase tracking-[0.12em] text-slate-400">{label}</p>
       <MoneyValue
         value={value}
         neutral={tone === "default"}
         className="mt-1 text-base font-bold"
       />
-      <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">{supporting}</p>
+      <p className="mt-0.5 text-[12px] leading-snug text-slate-400">{supporting}</p>
     </div>
   );
 }

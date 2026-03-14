@@ -4,7 +4,6 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "./components/app-shell";
 import { CommandPalette } from "./components/command-palette";
-import { ErrorBoundary } from "./components/error-boundary";
 import type { QuickAddPreset } from "./components/quick-add-composer";
 import type { AppView } from "./components/sidebar";
 import { ToastViewport, type AppToast } from "./components/toast-viewport";
@@ -16,8 +15,6 @@ import {
   type CategoryOption,
 } from "./lib/categories";
 import {
-  API_BASE_URL,
-  ApiError,
   confirmPendingExpense,
   createAccount,
   createCard,
@@ -82,10 +79,8 @@ import {
 } from "./lib/ui-density";
 import {
   APP_THEME_STORAGE_KEY,
-  APP_DARK_MODE_STORAGE_KEY,
-  applyDarkMode,
+  applyThemeColor,
   readStoredThemeColor,
-  readStoredDarkMode,
 } from "./lib/theme";
 import {
   getAutostartEnabled,
@@ -94,7 +89,6 @@ import {
   setAutostartEnabled,
 } from "./lib/desktop";
 import { useMediaQuery } from "./lib/use-media-query";
-import { getErrorMessage } from "./lib/utils";
 
 const QuickAddComposer = lazy(async () => {
   const module = await import("./components/quick-add-composer");
@@ -206,7 +200,6 @@ const TOAST_DURATION_MS = {
   success: 3200,
   error: 5200,
 } as const;
-const DIAGNOSTIC_TOAST_DURATION_MS = 20_000;
 const MOBILE_QUERY = "(max-width: 900px)";
 
 export function App() {
@@ -232,7 +225,6 @@ export function App() {
     readStoredUiDensity(),
   );
   const [themeColor, setThemeColor] = useState(() => readStoredThemeColor());
-  const [darkMode, setDarkMode] = useState(() => readStoredDarkMode());
   const [securityState, setSecurityState] = useState<SecurityState | null>(null);
   const [lanSecurityState, setLanSecurityState] =
     useState<LanSecurityState | null>(null);
@@ -245,9 +237,6 @@ export function App() {
   const [lockPassword, setLockPassword] = useState("");
   const [desktopAutostartEnabled, setDesktopAutostartEnabled] = useState(false);
   const [desktopAutostartLoading, setDesktopAutostartLoading] = useState(true);
-  const [isMobileLanWarningVisible, setIsMobileLanWarningVisible] = useState(false);
-  const [isRetryingMobileLanConnection, setIsRetryingMobileLanConnection] =
-    useState(false);
 
   const {
     dashboard,
@@ -273,13 +262,7 @@ export function App() {
     initialInvestmentFromDate: monthFirstDay(currentMonth()),
     initialInvestmentToDate: monthLastDay(currentMonth()),
     onError: (error) => {
-      showErrorToast(error);
-      if (surface === "mobile" && isLikelyLanConnectionError(error)) {
-        setIsMobileLanWarningVisible(true);
-      }
-    },
-    onRefreshSuccess: () => {
-      setIsMobileLanWarningVisible(false);
+      showToast("error", getErrorMessage(error));
     },
   });
 
@@ -295,14 +278,13 @@ export function App() {
   }, [categoryOptions]);
 
   useEffect(() => {
-    applyDarkMode(darkMode, themeColor);
+    applyThemeColor(themeColor);
     try {
       window.localStorage.setItem(APP_THEME_STORAGE_KEY, themeColor);
-      window.localStorage.setItem(APP_DARK_MODE_STORAGE_KEY, String(darkMode));
     } catch {
       // ignore preference persistence failures
     }
-  }, [themeColor, darkMode]);
+  }, [themeColor]);
 
   useEffect(() => {
     if (toast === null) {
@@ -311,38 +293,18 @@ export function App() {
 
     const timeout = globalThis.setTimeout(() => {
       setToast((current) => (current?.id === toast.id ? null : current));
-    }, toast.durationMs ?? TOAST_DURATION_MS[toast.tone]);
+    }, TOAST_DURATION_MS[toast.tone]);
 
     return () => {
       globalThis.clearTimeout(timeout);
     };
   }, [toast]);
 
-  function showToast(
-    tone: "success" | "error",
-    message: string,
-    options?: {
-      diagnostic?: string | null;
-      durationMs?: number;
-    },
-  ) {
+  function showToast(tone: "success" | "error", message: string) {
     setToast({
       id: Date.now(),
       tone,
       message,
-      diagnostic: options?.diagnostic ?? undefined,
-      durationMs: options?.durationMs,
-    });
-  }
-
-  function showErrorToast(error: unknown) {
-    const diagnostic = buildErrorDiagnostic(error);
-    if (diagnostic) {
-      console.error("finance_frontend_diagnostic", diagnostic);
-    }
-    showToast("error", getErrorMessage(error), {
-      diagnostic,
-      durationMs: diagnostic ? DIAGNOSTIC_TOAST_DURATION_MS : undefined,
     });
   }
 
@@ -352,7 +314,7 @@ export function App() {
       setSecurityState(state);
       setIsLockOverlayVisible(state.is_locked);
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
     }
   }
 
@@ -368,7 +330,7 @@ export function App() {
       setLanSecurityState(state);
       setAuthorizedLanDevices(devices);
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
     }
   }
 
@@ -381,7 +343,7 @@ export function App() {
       const enabled = await getAutostartEnabled();
       setDesktopAutostartEnabled(enabled);
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
     } finally {
       setDesktopAutostartLoading(false);
     }
@@ -420,7 +382,7 @@ export function App() {
         if (cancelled) {
           return;
         }
-        showErrorToast(error);
+        showToast("error", getErrorMessage(error));
       }
     })();
 
@@ -515,7 +477,7 @@ export function App() {
       showToast("success", successMessage);
       return true;
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
       return false;
     } finally {
       setIsSubmitting(false);
@@ -853,7 +815,7 @@ export function App() {
           : "Inicialização automática desativada.",
       );
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
       throw error;
     }
   }
@@ -872,7 +834,7 @@ export function App() {
         enabled ? "Acesso LAN ativado." : "Acesso LAN desativado.",
       );
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -888,7 +850,7 @@ export function App() {
       await refreshLanSecurityState();
       showToast("success", "QR de pareamento gerado.");
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -903,7 +865,7 @@ export function App() {
       await refreshLanSecurityState();
       showToast("success", "Dispositivo revogado.");
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -919,7 +881,7 @@ export function App() {
       setIsLockOverlayVisible(true);
       showToast("success", "Senha definida com sucesso.");
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -932,7 +894,7 @@ export function App() {
       await refreshSecurityState();
       showToast("success", "Aplicação bloqueada.");
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
     }
   }
 
@@ -946,7 +908,7 @@ export function App() {
       setLockPassword("");
       showToast("success", "Aplicação desbloqueada.");
     } catch (error) {
-      showErrorToast(error);
+      showToast("error", getErrorMessage(error));
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -978,24 +940,6 @@ export function App() {
     );
   }
 
-  async function handleRetryMobileLanConnection(): Promise<void> {
-    setIsRetryingMobileLanConnection(true);
-    setToast(null);
-    await refreshData({ month: selectedMonth });
-    setIsRetryingMobileLanConnection(false);
-  }
-
-  if (surface === "mobile" && isMobileLanWarningVisible) {
-    return (
-      <MobileLanWarningScreen
-        isRetrying={isRetryingMobileLanConnection || isDataLoading}
-        onRetry={() => {
-          void handleRetryMobileLanConnection();
-        }}
-      />
-    );
-  }
-
   const activeMeta = VIEW_META[activeView];
   return (
     <AppShell
@@ -1010,9 +954,8 @@ export function App() {
       month={selectedMonth}
       onMonthChange={setSelectedMonth}
     >
-      <ErrorBoundary>
-        <Suspense fallback={<ViewFallback activeView={activeView} />}>
-          {activeView === "dashboard" ? (
+      <Suspense fallback={<ViewFallback activeView={activeView} />}>
+        {activeView === "dashboard" ? (
           <DashboardView
             surface={surface}
             accounts={accounts}
@@ -1028,7 +971,6 @@ export function App() {
             onNavigate={setActiveView}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={() => openQuickAdd()}
-            onRetry={() => void refreshData({ month: selectedMonth })}
             transactions={transactions}
             uiDensity={uiDensity}
           />
@@ -1063,7 +1005,6 @@ export function App() {
             cards={cards}
             month={selectedMonth}
             refreshKey={refreshKey}
-            onError={(error) => showErrorToast(error)}
           />
         ) : null}
 
@@ -1073,8 +1014,6 @@ export function App() {
             accounts={accounts}
             month={selectedMonth}
             refreshKey={refreshKey}
-            onError={(error) => showErrorToast(error)}
-            onOpenQuickAdd={() => openQuickAdd("expense")}
           />
         ) : null}
 
@@ -1130,13 +1069,11 @@ export function App() {
           <SettingsView
             isSubmitting={isSubmitting}
             themeColor={themeColor}
-            darkMode={darkMode}
             onExportBackup={() => {
               void handleExportBackup();
             }}
             onResetApplicationData={handleResetAllData}
             onThemeColorChange={setThemeColor}
-            onDarkModeChange={setDarkMode}
             securityState={securityState}
             desktopAutostartEnabled={desktopAutostartEnabled}
             desktopAutostartLoading={desktopAutostartLoading}
@@ -1152,8 +1089,7 @@ export function App() {
             onRevokeLanDevice={handleRevokeLanDevice}
           />
         ) : null}
-        </Suspense>
-      </ErrorBoundary>
+      </Suspense>
 
       <ToastViewport onDismiss={() => setToast(null)} toast={toast} />
 
@@ -1220,125 +1156,6 @@ export function App() {
   );
 }
 
-function buildErrorDiagnostic(error: unknown): string | null {
-  if (error instanceof ApiError && error.diagnostic) {
-    return error.diagnostic;
-  }
-
-  if (!(error instanceof Error)) {
-    return null;
-  }
-
-  const location = globalThis.location;
-  const navigator = globalThis.navigator;
-  const payload = {
-    diagnostic_type: "frontend_error",
-    captured_at: new Date().toISOString(),
-    error: {
-      name: error.name,
-      message: error.message,
-      stack: truncateDiagnosticValue(error.stack ?? "", 3000),
-    },
-    runtime: {
-      api_base_url: API_BASE_URL,
-      page_href: location?.href ?? null,
-      page_origin: location?.origin ?? null,
-      page_protocol: location?.protocol ?? null,
-      user_agent: navigator?.userAgent ?? null,
-      language: navigator?.language ?? null,
-    },
-  };
-  return JSON.stringify(payload, null, 2);
-}
-
-function truncateDiagnosticValue(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  const hiddenCount = value.length - maxLength;
-  return `${value.slice(0, maxLength)}...[truncated:${hiddenCount}]`;
-}
-
-function isLikelyLanConnectionError(error: unknown): boolean {
-  if (error instanceof ApiError) {
-    return false;
-  }
-
-  if (error instanceof TypeError) {
-    return true;
-  }
-
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const normalized = error.message.trim().toLowerCase();
-  return (
-    normalized.includes("failed to fetch") ||
-    normalized.includes("network request failed") ||
-    normalized.includes("networkerror") ||
-    normalized.includes("load failed")
-  );
-}
-
-function MobileLanWarningScreen({
-  isRetrying,
-  onRetry,
-}: {
-  isRetrying: boolean;
-  onRetry: () => void;
-}) {
-  return (
-    <section className="relative min-h-screen overflow-hidden bg-background px-5 py-8 text-foreground">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-70"
-        style={{
-          background:
-            "radial-gradient(circle at 12% 16%, hsl(var(--warning) / 0.2), transparent 42%), radial-gradient(circle at 92% 4%, hsl(var(--primary) / 0.18), transparent 38%)",
-        }}
-      />
-
-      <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md flex-col justify-center">
-        <div className="rounded-[2rem] border border-warning/40 bg-surface/95 p-7 shadow-xl backdrop-blur">
-          <span className="inline-flex items-center rounded-full border border-warning/60 bg-warning/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-warning">
-            Conexao local
-          </span>
-
-          <h1 className="mt-4 text-2xl font-black leading-tight text-foreground">
-            Celular fora da rede do desktop
-          </h1>
-
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Nao conseguimos acessar os dados desta sessao. Conecte o celular na
-            mesma rede Wi-Fi do computador para continuar.
-          </p>
-
-          <div className="mt-5 rounded-2xl border border-border bg-accent/35 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-              Checklist rapido
-            </p>
-            <ul className="mt-2 space-y-2 text-sm text-foreground">
-              <li>1. Confirmar que desktop e celular estao na mesma rede.</li>
-              <li>2. Desativar VPN ou rede movel temporariamente.</li>
-              <li>3. Atualizar esta tela apos reconectar.</li>
-            </ul>
-          </div>
-
-          <button
-            type="button"
-            onClick={onRetry}
-            disabled={isRetrying}
-            className="mt-6 h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isRetrying ? "Tentando reconectar..." : "Tentar novamente"}
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function LockOverlay({
   password,
   onPasswordChange,
@@ -1351,14 +1168,9 @@ function LockOverlay({
   isSubmitting: boolean;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="lock-overlay-title"
-    >
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <h2 id="lock-overlay-title" className="text-lg font-bold text-slate-900">Aplicação bloqueada</h2>
+        <h2 className="text-lg font-bold text-slate-900">Aplicação bloqueada</h2>
         <p className="mt-1 text-sm text-slate-600">
           Digite sua senha para continuar.
         </p>
@@ -1376,8 +1188,6 @@ function LockOverlay({
             onChange={(event) => onPasswordChange(event.target.value)}
             className="flex h-10 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
             placeholder="Senha"
-            // eslint-disable-next-line jsx-a11y/no-autofocus
-            autoFocus
           />
           <button
             type="submit"
@@ -1395,14 +1205,13 @@ function LockOverlay({
 function ViewFallback({ activeView }: { activeView: AppView }) {
   if (activeView === "dashboard") {
     return (
-      <div className="space-y-8">
-        <span role="status" aria-live="polite" className="sr-only">
-          Carregando informações...
-        </span>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3" aria-hidden="true">
-          <div className="h-32 rounded-[2rem] bg-muted animate-pulse" />
-          <div className="h-32 rounded-[2rem] bg-muted animate-pulse" />
-          <div className="h-32 rounded-[2rem] bg-muted animate-pulse" />
+      <div className="space-y-8" aria-hidden="true">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <p className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-300">
+            Carregando informações...
+          </p>
+          <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
+          <div className="h-32 rounded-[2rem] bg-slate-200 animate-pulse" />
         </div>
       </div>
     );
@@ -1411,11 +1220,8 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
   if (activeView === "accounts") {
     return (
       <section aria-label="Contas e saldos" className="panel-card">
-        <span role="status" aria-live="polite" className="sr-only">
-          Carregando...
-        </span>
         <div
-          className="h-5 w-48 rounded-full bg-muted animate-pulse"
+          className="h-5 w-48 rounded-full bg-slate-200 animate-pulse"
           aria-hidden="true"
         />
       </section>
@@ -1424,12 +1230,9 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
 
   if (activeView === "transactions") {
     return (
-      <section aria-label="Histórico e filtros" className="panel-card">
-        <span role="status" aria-live="polite" className="sr-only">
-          Carregando...
-        </span>
+      <section aria-label="Historico e filtros" className="panel-card">
         <div
-          className="h-5 w-56 rounded-full bg-muted animate-pulse"
+          className="h-5 w-56 rounded-full bg-slate-200 animate-pulse"
           aria-hidden="true"
         />
       </section>
@@ -1437,11 +1240,16 @@ function ViewFallback({ activeView }: { activeView: AppView }) {
   }
 
   return (
-    <div className="rounded-[2rem] bg-surface p-8 shadow-sm">
-      <span role="status" aria-live="polite" className="sr-only">
-        Carregando...
-      </span>
-      <div className="h-5 w-40 rounded-full bg-muted animate-pulse" aria-hidden="true" />
+    <div className="rounded-[2rem] bg-white p-8 shadow-sm" aria-hidden="true">
+      <div className="h-5 w-40 rounded-full bg-slate-200 animate-pulse" />
     </div>
   );
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Não foi possível concluir a operação.";
 }

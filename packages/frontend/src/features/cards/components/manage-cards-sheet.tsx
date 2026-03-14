@@ -71,7 +71,7 @@ export function ManageCardsSheet({
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-3">
-                        <strong className="truncate text-lg font-black tracking-tight text-slate-900">{card.name}</strong>
+                        <strong className="text-lg font-black tracking-tight text-slate-900">{card.name}</strong>
                         {renderStatusBadge(card.is_active ? "open" : "inactive")}
                       </div>
                       <p className="text-xs font-bold text-slate-500">

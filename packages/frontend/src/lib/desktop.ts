@@ -42,9 +42,8 @@ export async function listenDesktopEvent(
     return () => {};
   }
 
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  const currentWindow = getCurrentWindow();
-  const unlisten = await currentWindow.listen(eventName, () => {
+  const { listen } = await import("@tauri-apps/api/event");
+  const unlisten = await listen(eventName, () => {
     handler();
   });
   return () => {
