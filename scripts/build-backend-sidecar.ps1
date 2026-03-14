@@ -22,6 +22,7 @@ if (Test-Path $pyInstallerExecutable) {
         --noconfirm `
         --clean `
         --onefile `
+        --noconsole `
         --name backend `
         --specpath build `
         --paths src `
@@ -33,6 +34,7 @@ else {
         --noconfirm `
         --clean `
         --onefile `
+        --noconsole `
         --name backend `
         --specpath build `
         --paths src `

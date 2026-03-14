@@ -2,6 +2,8 @@
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,6 +23,9 @@ const BACKEND_PORT: u16 = 8000;
 const BACKEND_BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 const TRAY_EVENT_QUICK_ADD: &str = "desktop://quick-add";
 const TRAY_EVENT_LOCK: &str = "desktop://lock";
+const AUTOSTART_ENTRY_NAME: &str = "MeuCofri";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TrayAction {
@@ -108,10 +113,14 @@ fn set_autostart_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
 
 fn main() {
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec![]),
-        ))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let _ = show_main_window(&app);
+        }))
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name(AUTOSTART_ENTRY_NAME)
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             get_autostart_enabled,
             set_autostart_enabled
@@ -241,7 +250,8 @@ fn show_main_window(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) {
         let backend_dir = resolve_dev_backend_dir()?;
-        let child = Command::new("uv")
+        let mut command = Command::new("uv");
+        command
             .arg("run")
             .arg("backend")
             .arg("--host")
@@ -251,8 +261,9 @@ fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::E
             .current_dir(backend_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()?;
+            .stderr(Stdio::null());
+        apply_backend_spawn_options(&mut command);
+        let child = command.spawn()?;
         return Ok(child);
     }
 
@@ -267,7 +278,8 @@ fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::E
     let projection_database_path = backend_data_dir.join("app.db");
     let event_database_path = backend_data_dir.join("events.db");
 
-    let child = Command::new(&backend_path)
+    let mut command = Command::new(&backend_path);
+    command
         .arg("--host")
         .arg(BACKEND_BIND_HOST)
         .arg("--port")
@@ -284,9 +296,17 @@ fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::E
         .current_dir(working_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()?;
+        .stderr(Stdio::null());
+    apply_backend_spawn_options(&mut command);
+    let child = command.spawn()?;
     Ok(child)
+}
+
+fn apply_backend_spawn_options(command: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
 }
 
 fn resolve_dev_backend_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {

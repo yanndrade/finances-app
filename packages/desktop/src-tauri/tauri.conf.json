@@ -38,7 +38,13 @@
     "windows": {
       "wix": {
         "bannerPath": "installer-assets/wix-banner.bmp",
-        "dialogImagePath": "installer-assets/wix-dialog.bmp"
+        "dialogImagePath": "installer-assets/wix-dialog.bmp",
+        "fragmentPaths": [
+          "installer-assets/wix-cleanup.wxs"
+        ],
+        "componentRefs": [
+          "CleanupAppData"
+        ]
       }
     }
   }

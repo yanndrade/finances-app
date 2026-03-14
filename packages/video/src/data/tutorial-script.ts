@@ -6,7 +6,7 @@ export const TUTORIAL_SCENES = [
     kicker: "Primeiro uso",
     title: "Meu Cofri sem atrito",
     caption:
-      "Privacidade, velocidade e rastreabilidade para controlar caixa, cartao e compromissos do mes.",
+      "Privacidade, velocidade e rastreabilidade para controlar caixa, cartão e compromissos do mes.",
     durationInFrames: 180,
   },
   {
@@ -20,22 +20,22 @@ export const TUTORIAL_SCENES = [
   {
     id: "quick-entry",
     kicker: "Passo 2",
-    title: "Lancamento em segundos",
+    title: "Lançamento em segundos",
     caption:
-      "PIX, debito ou dinheiro entram rapido. O saldo muda na hora, sem fluxo pesado.",
+      "PIX, débito ou dinheiro entram rápido. O saldo muda na hora, sem fluxo pesado.",
     durationInFrames: 240,
   },
   {
     id: "cards",
     kicker: "Diferencial",
-    title: "Caixa e cartao nao se misturam",
+    title: "Caixa e cartão não se misturam",
     caption:
-      "Compras no credito abastecem a fatura futura, mas nao reduzem o saldo bancario ate o pagamento.",
+      "Compras no crédito abastecem a fatura futura, mas não reduzem o saldo bancário até o pagamento.",
     durationInFrames: 330,
   },
   {
     id: "recurring",
-    kicker: "Automacao",
+    kicker: "Automação",
     title: "Fixos viram pendencias",
     caption:
       "Assinaturas e contas mensais aparecem automaticamente para voce so confirmar quando pagar.",
@@ -43,7 +43,7 @@ export const TUTORIAL_SCENES = [
   },
   {
     id: "reimbursements",
-    kicker: "Cobrancas",
+    kicker: "Cobranças",
     title: "Reembolsos nao passam batido",
     caption:
       "Compras para terceiros ficam em A Receber e, quando o valor volta, o app registra a entrada no caixa.",
@@ -52,7 +52,7 @@ export const TUTORIAL_SCENES = [
   {
     id: "budgets",
     kicker: "Disciplina",
-    title: "Orcamentos por categoria",
+    title: "Orçamentos por categoria",
     caption:
       "O consumo do mes, inclusive do cartao, conversa com os limites e destaca excessos com clareza.",
     durationInFrames: 240,
@@ -70,7 +70,7 @@ export const TUTORIAL_SCENES = [
     kicker: "Resumo",
     title: "Seus dados, seu controle",
     caption:
-      "Dashboard, faturas, pendencias e patrimonio ficam alinhados em uma visao simples de operar.",
+      "Dashboard, faturas, pendências e patrimônio ficam alinhados em uma visão simples de operar.",
     durationInFrames: 180,
   },
 ] as const;

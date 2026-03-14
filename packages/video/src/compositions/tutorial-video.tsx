@@ -123,7 +123,7 @@ function IntroScene({ scene }: { scene: TutorialScene }) {
       >
         <Pill label="Privacidade" value="local-first" tone="neutral" />
         <Pill label="Tempo" value="< 10s" tone="success" />
-        <Pill label="Foco" value="caixa + cartao" tone="warning" />
+        <Pill label="Foco" value="caixa + cartão" tone="warning" />
       </div>
       <GlassCard x={118} y={522} width={330} height={212}>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
@@ -146,7 +146,7 @@ function IntroScene({ scene }: { scene: TutorialScene }) {
               Meu Cofri
             </div>
             <div style={{ fontSize: 22, color: "#68819b", marginTop: 6 }}>
-              Controle pessoal, sem ruido.
+              Controle pessoal, sem ruído.
             </div>
           </div>
         </div>
@@ -192,7 +192,7 @@ function AccountsScene({ scene }: { scene: TutorialScene }) {
             <NumberFlow from={0} to={1500} color="#0d7f5c" size={54} />
           </div>
           <div style={{ marginTop: 18, fontSize: 22, color: "#57718d" }}>
-            Caixa pronto para comecar o mes.
+            Caixa pronto para começar o mês.
           </div>
         </GlassCard>
         <GlassCard x={34} y={246} width={470} height={202}>
@@ -235,7 +235,7 @@ function QuickEntryScene({ scene }: { scene: TutorialScene }) {
         caption={scene.caption}
       />
       <WindowFrame
-        title="Lancamento rapido"
+        title="Lançamento rápido"
         subtitle="Sem perder o contexto"
         x={730}
         y={136}
@@ -244,11 +244,11 @@ function QuickEntryScene({ scene }: { scene: TutorialScene }) {
       >
         <GlassCard x={42} y={42} width={470} height={560}>
           <div style={{ fontSize: 28, fontWeight: 900, color: "#17324c" }}>
-            Nova transacao
+            Nova transação
           </div>
           <FieldRow label="Valor" value="R$ 50,00" />
-          <FieldRow label="Categoria" value="Alimentacao" />
-          <FieldRow label="Metodo" value="PIX" />
+          <FieldRow label="Categoria" value="Alimentação" />
+          <FieldRow label="Método" value="PIX" />
           <FieldRow label="Conta" value="Nubank" />
           <ActionButton color="#12965b" text="Registrar gasto" />
         </GlassCard>
@@ -260,7 +260,7 @@ function QuickEntryScene({ scene }: { scene: TutorialScene }) {
             <NumberFlow from={1500} to={1450} color="#17324c" size={58} />
           </div>
           <div style={{ marginTop: 18 }}>
-            <Pill label="Variacao" value="- R$ 50,00" tone="danger" />
+            <Pill label="Variação" value="- R$ 50,00" tone="danger" />
           </div>
         </GlassCard>
         <GlassCard x={560} y={330} width={456} height={184}>
@@ -315,19 +315,19 @@ function CardsScene({ scene }: { scene: TutorialScene }) {
             <div style={eyebrowStyle("#12965b")}>Caixa</div>
             <div style={bigValueStyle}>R$ 1.450,00</div>
             <div style={{ marginTop: 18 }}>
-              <Pill label="Compra no credito" value="nao reduz agora" tone="success" />
+              <Pill label="Compra no crédito" value="não reduz agora" tone="success" />
             </div>
             <div style={conceptCardStyle}>
               <div style={{ fontSize: 22, fontWeight: 800, color: "#17324c" }}>
-                Saldo preservado ate pagar a fatura
+                Saldo preservado até pagar a fatura
               </div>
               <div style={{ marginTop: 10, fontSize: 18, color: "#58708a" }}>
-                O app separa obrigacao futura de dinheiro disponivel hoje.
+                O app separa obrigação futura de dinheiro disponível hoje.
               </div>
             </div>
           </div>
           <div style={splitPanelStyle("rgba(15,94,168,0.1)")}>
-            <div style={eyebrowStyle("#0f5ea8")}>Cartao</div>
+            <div style={eyebrowStyle("#0f5ea8")}>Cartão</div>
             <div style={bigValueStyle}>Fatura R$ 120,00</div>
             <div style={{ marginTop: 20 }}>
               <Pill label="Compra" value="Celular 10x" tone="neutral" />
@@ -415,12 +415,12 @@ function RecurringScene({ scene }: { scene: TutorialScene }) {
             Cadastros fixos
           </div>
           <RecurringRuleRow name="Internet fibra" amount="R$ 100,00" meta="Todo dia 10 • PIX" />
-          <RecurringRuleRow name="Academia" amount="R$ 89,90" meta="Todo dia 12 • Cartao" />
-          <RecurringRuleRow name="Spotify" amount="R$ 21,90" meta="Todo dia 15 • Cartao" />
+          <RecurringRuleRow name="Academia" amount="R$ 89,90" meta="Todo dia 12 • Cartão" />
+          <RecurringRuleRow name="Spotify" amount="R$ 21,90" meta="Todo dia 15 • Cartão" />
         </GlassCard>
         <GlassCard x={516} y={42} width={542} height={610}>
           <div style={{ fontSize: 30, fontWeight: 900, color: "#17324c" }}>
-            Pendencias de marco
+            Pendências de março
           </div>
           <div
             style={{
@@ -451,7 +451,7 @@ function RecurringScene({ scene }: { scene: TutorialScene }) {
               {confirmed ? (
                 <Pill label="Caixa" value="- R$ 100,00" tone="danger" />
               ) : (
-                <Pill label="Acao" value="1 clique" tone="warning" />
+                <Pill label="Ação" value="1 clique" tone="warning" />
               )}
             </div>
           </div>
@@ -476,10 +476,10 @@ function ReimbursementsScene({ scene }: { scene: TutorialScene }) {
           Compra para terceiro
         </div>
         <div style={{ marginTop: 18, fontSize: 42, fontWeight: 900, color: "#17324c" }}>
-          Restaurante com Joao
+          Restaurante com João
         </div>
         <div style={{ marginTop: 12 }}>
-          <Pill label="Responsavel" value="Joao" tone="neutral" />
+          <Pill label="Responsável" value="João" tone="neutral" />
         </div>
         <div style={{ marginTop: 16 }}>
           <Pill label="Status" value="pendente" tone="warning" />
@@ -490,7 +490,7 @@ function ReimbursementsScene({ scene }: { scene: TutorialScene }) {
           Tela A Receber
         </div>
         <div style={{ marginTop: 16, fontSize: 34, fontWeight: 900, color: "#17324c" }}>
-          Joao
+          João
         </div>
         <div style={{ marginTop: 12, fontSize: 56, fontWeight: 900, color: "#17324c" }}>
           R$ 80,00
@@ -512,7 +512,7 @@ function ReimbursementsScene({ scene }: { scene: TutorialScene }) {
       <AnimatedCursor x={1568} y={516} clickFrame={82} />
       <GlassCard x={818} y={618} width={360} height={172}>
         <div style={{ fontSize: 20, fontWeight: 800, color: "#6b839d" }}>
-          Caixa apos receber
+          Caixa após receber
         </div>
         <div style={{ marginTop: 16 }}>
           <NumberFlow from={1450} to={1530} color="#12965b" size={52} />
@@ -541,7 +541,7 @@ function BudgetsScene({ scene }: { scene: TutorialScene }) {
       />
       <GlassCard x={792} y={174} width={962} height={618}>
         <div style={{ fontSize: 30, fontWeight: 900, color: "#17324c" }}>
-          Orcamentos do mes
+          Orçamentos do mês
         </div>
         <div style={{ marginTop: 34, display: "flex", flexDirection: "column", gap: 34 }}>
           <BudgetRow
@@ -566,7 +566,7 @@ function BudgetsScene({ scene }: { scene: TutorialScene }) {
           />
         </div>
         <div style={{ marginTop: 42, display: "flex", gap: 14 }}>
-          <Pill label="Cartao incluso" value="sim" tone="neutral" />
+          <Pill label="Cartão incluso" value="sim" tone="neutral" />
           <Pill
             label="Alerta visual"
             value={lazerProgress > 1 ? "estourou" : "no radar"}
@@ -602,7 +602,7 @@ function LanScene({ scene }: { scene: TutorialScene }) {
       >
         <GlassCard x={36} y={38} width={340} height={522}>
           <div style={{ fontSize: 28, fontWeight: 900, color: "#17324c" }}>
-            Configuracoes LAN
+            Configurações LAN
           </div>
           <div style={{ marginTop: 24 }}>
             <Pill label="Status" value="Ativado" tone="success" />
@@ -682,7 +682,7 @@ function OutroScene({ scene }: { scene: TutorialScene }) {
         }}
       >
         <Pill label="Caixa" value="claro" tone="success" />
-        <Pill label="Cartao" value="organizado" tone="neutral" />
+        <Pill label="Cartão" value="organizado" tone="neutral" />
         <Pill label="Rotina" value="mais leve" tone="warning" />
       </div>
       <BottomCaption text={scene.caption} />
