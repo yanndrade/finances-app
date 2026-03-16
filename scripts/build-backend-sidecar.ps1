@@ -8,6 +8,32 @@ $backendExecutable = Join-Path $backendDistPath "backend.exe"
 $targetSidecarPath = Join-Path $desktopBinPath "backend.exe"
 $pyInstallerExecutable = Join-Path $backendPath ".venv\Scripts\pyinstaller.exe"
 
+function Copy-ItemWithRetry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string]$Destination,
+        [int]$MaxAttempts = 8,
+        [int]$DelayMilliseconds = 750
+    )
+
+    $attempt = 1
+    while ($attempt -le $MaxAttempts) {
+        try {
+            Copy-Item -Path $Path -Destination $Destination -Force
+            return
+        }
+        catch {
+            if ($attempt -ge $MaxAttempts) {
+                throw
+            }
+            Start-Sleep -Milliseconds $DelayMilliseconds
+            $attempt++
+        }
+    }
+}
+
 if (-not (Test-Path $backendPath)) {
     throw "Backend package not found at $backendPath"
 }
@@ -22,7 +48,7 @@ if (Test-Path $pyInstallerExecutable) {
         --noconfirm `
         --clean `
         --onefile `
-        --noconsole `
+        --console `
         --name backend `
         --specpath build `
         --paths src `
@@ -34,7 +60,7 @@ else {
         --noconfirm `
         --clean `
         --onefile `
-        --noconsole `
+        --console `
         --name backend `
         --specpath build `
         --paths src `
@@ -49,5 +75,5 @@ if (-not (Test-Path $backendExecutable)) {
     throw "PyInstaller build did not produce $backendExecutable"
 }
 
-Copy-Item -Path $backendExecutable -Destination $targetSidecarPath -Force
+Copy-ItemWithRetry -Path $backendExecutable -Destination $targetSidecarPath
 Write-Host "Backend sidecar ready at $targetSidecarPath"

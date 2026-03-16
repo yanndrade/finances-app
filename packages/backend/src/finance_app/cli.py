@@ -85,3 +85,7 @@ def _resolve_cert_dir(explicit_cert_dir: str | None) -> Path:
         return Path(env_cert_dir)
 
     return Path("finances-data") / "certs"
+
+
+if __name__ == "__main__":
+    main()
