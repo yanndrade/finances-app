@@ -145,9 +145,11 @@ if ([string]::IsNullOrWhiteSpace($ReleaseVersion)) {
 
 if (-not [string]::IsNullOrWhiteSpace($ReleaseVersion)) {
     Write-Host "Applying desktop release version $ReleaseVersion..."
-    & $setDesktopVersionScript -Version $ReleaseVersion
-    if ($LASTEXITCODE -ne 0) {
-        throw "Desktop version sync failed (exit code $LASTEXITCODE)"
+    try {
+        & $setDesktopVersionScript -Version $ReleaseVersion
+    }
+    catch {
+        throw "Desktop version sync failed: $($_.Exception.Message)"
     }
 }
 
