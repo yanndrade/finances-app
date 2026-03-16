@@ -3,9 +3,9 @@ name: windows-release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Versao da release sem o prefixo v (ex: 0.1.1)"
-        required: true
+      version_override:
+        description: "Versao opcional para sobrescrever o incremento automatico (ex: 2.0.7)"
+        required: false
         type: string
       release_name:
         description: "Nome opcional da release"
@@ -21,8 +21,6 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: "1"
-      RELEASE_VERSION: ${{ inputs.version }}
-      RELEASE_TAG: v${{ inputs.version }}
       WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
       WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
       WINDOWS_SIGN_TIMESTAMP_URL: ${{ secrets.WINDOWS_SIGN_TIMESTAMP_URL }}
@@ -32,6 +30,36 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        shell: pwsh
+        run: |
+          $versionOverride = "${{ inputs.version_override }}"
+
+          if (-not [string]::IsNullOrWhiteSpace($versionOverride)) {
+            if ($versionOverride -notmatch '^\d+\.\d+\.\d+$') {
+              throw "version_override must use semantic version format major.minor.patch."
+            }
+            $releaseVersion = $versionOverride
+          } else {
+            $existingPatches = git tag --list "v2.0.*" `
+              | Where-Object { $_ -match '^v2\.0\.(\d+)$' } `
+              | ForEach-Object { [int]$Matches[1] }
+
+            if ($existingPatches.Count -eq 0) {
+              $nextPatch = 0
+            } else {
+              $nextPatch = (($existingPatches | Measure-Object -Maximum).Maximum + 1)
+            }
+
+            $releaseVersion = "2.0.$nextPatch"
+          }
+
+          $releaseTag = "v$releaseVersion"
+          "RELEASE_VERSION=$releaseVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_TAG=$releaseTag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -89,7 +117,7 @@ jobs:
           WINDOWS_SIGN_CERT_PATH: ${{ steps.signing.outputs.cert_path }}
           WINDOWS_SIGN_CERT_PASSWORD: ${{ env.WINDOWS_CERT_PASSWORD }}
           WINDOWS_SIGN_TIMESTAMP_URL: ${{ env.WINDOWS_SIGN_TIMESTAMP_URL }}
-        run: ./scripts/build-release-windows.ps1
+        run: ./scripts/build-release-windows.ps1 -ReleaseVersion $env:RELEASE_VERSION
 
       - name: Resolve release metadata
         id: release_meta

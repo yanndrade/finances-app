@@ -135,7 +135,6 @@ fn main() {
             }
             app.manage(RuntimeState::new(backend_child));
             configure_tray(app)?;
-            show_main_window(&app.handle())?;
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -155,6 +154,10 @@ fn main() {
         .expect("failed to build finances desktop shell");
 
     app.run(|app_handle, event| {
+        if matches!(event, tauri::RunEvent::Ready) {
+            let _ = show_main_window(app_handle);
+        }
+
         if matches!(
             event,
             tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit

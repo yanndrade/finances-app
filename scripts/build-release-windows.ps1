@@ -1,5 +1,6 @@
 param(
     [switch]$SkipInstall,
+    [string]$ReleaseVersion = "",
     [string]$SignCertPath = "",
     [string]$SignCertPassword = "",
     [string]$SignTimestampUrl = ""
@@ -112,6 +113,7 @@ $backendPath = Join-Path $repoRoot "packages\backend"
 $desktopPath = Join-Path $repoRoot "packages\desktop"
 $desktopCargoTomlPath = Join-Path $repoRoot "packages\desktop\src-tauri\Cargo.toml"
 $buildSidecarScript = Join-Path $PSScriptRoot "build-backend-sidecar.ps1"
+$setDesktopVersionScript = Join-Path $PSScriptRoot "set-desktop-version.ps1"
 $desktopSidecarPath = Join-Path $repoRoot "packages\desktop\src-tauri\bin\backend.exe"
 $desktopBinaryName = Resolve-TauriBinaryName -CargoTomlPath $desktopCargoTomlPath
 $desktopReleaseExePath = Join-Path $repoRoot "packages\desktop\src-tauri\target\release\$desktopBinaryName.exe"
@@ -131,6 +133,22 @@ if (-not (Test-Path $desktopPath)) {
 
 if (-not (Test-Path $buildSidecarScript)) {
     throw "Sidecar build script not found at $buildSidecarScript"
+}
+
+if (-not (Test-Path $setDesktopVersionScript)) {
+    throw "Desktop version sync script not found at $setDesktopVersionScript"
+}
+
+if ([string]::IsNullOrWhiteSpace($ReleaseVersion)) {
+    $ReleaseVersion = $env:RELEASE_VERSION
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ReleaseVersion)) {
+    Write-Host "Applying desktop release version $ReleaseVersion..."
+    & $setDesktopVersionScript -Version $ReleaseVersion
+    if ($LASTEXITCODE -ne 0) {
+        throw "Desktop version sync failed (exit code $LASTEXITCODE)"
+    }
 }
 
 if ([string]::IsNullOrWhiteSpace($SignCertPath)) {
