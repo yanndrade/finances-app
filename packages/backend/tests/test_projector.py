@@ -1474,14 +1474,14 @@ def test_projector_classifies_single_card_purchase_as_variable_in_unified_histor
     projector.run()
 
     variable_page = projector.list_unified_movements(
-        competence_month="2026-04",
+        competence_month="2026-03",
         scope="variable",
     )
     installments_page = projector.list_unified_movements(
-        competence_month="2026-04",
+        competence_month="2026-03",
         scope="installments",
     )
-    summary = projector.get_movements_summary(competence_month="2026-04")
+    summary = projector.get_movements_summary(competence_month="2026-03")
 
     assert variable_page["items"] == [
         {
@@ -1491,15 +1491,15 @@ def test_projector_classifies_single_card_purchase_as_variable_in_unified_histor
             "title": "Sorvete",
             "description": "Sorvete",
             "amount": 100_00,
-            "posted_at": "2026-04-20T00:00:00Z",
-            "competence_month": "2026-04",
+            "posted_at": "2026-03-15T12:00:00Z",
+            "competence_month": "2026-03",
             "account_id": "acc-1",
             "card_id": "card-1",
             "payment_method": "CREDIT_CASH",
             "category_id": "food",
             "counterparty": None,
             "lifecycle_status": "pending",
-            "edit_policy": "locked",
+            "edit_policy": "editable",
             "parent_id": "purchase-1",
             "group_id": None,
             "transfer_direction": None,
@@ -1673,6 +1673,8 @@ def test_projector_repairs_stale_single_card_purchase_history_classification(
         assert movement is not None
         movement.origin_type = "installment"
         movement.payment_method = "CREDIT_CASH"
+        movement.posted_at = "2026-04-20T00:00:00Z"
+        movement.competence_month = "2026-04"
         movement.installment_number = 1
         movement.installment_total = 1
 
@@ -1682,15 +1684,18 @@ def test_projector_repairs_stale_single_card_purchase_history_classification(
     )
 
     variable_page = repaired_projector.list_unified_movements(
-        competence_month="2026-04",
+        competence_month="2026-03",
         scope="variable",
     )
     installments_page = repaired_projector.list_unified_movements(
-        competence_month="2026-04",
+        competence_month="2026-03",
         scope="installments",
     )
 
     assert [item["movement_id"] for item in variable_page["items"]] == ["purchase-1:1"]
+    assert variable_page["items"][0]["posted_at"] == "2026-03-15T12:00:00Z"
+    assert variable_page["items"][0]["competence_month"] == "2026-03"
+    assert variable_page["items"][0]["edit_policy"] == "editable"
     assert installments_page["items"] == []
 
 

@@ -301,7 +301,12 @@ class Projector:
         rows = (
             session.query(
                 UnifiedMovementRecord,
+                CardPurchaseProjectionRecord.purchase_date,
+                CardPurchaseProjectionRecord.reference_month,
+                CardPurchaseProjectionRecord.due_date,
                 CardPurchaseProjectionRecord.installments_count,
+                CardPurchaseInstallmentRecord.reference_month,
+                CardPurchaseInstallmentRecord.due_date,
                 CardPurchaseInstallmentRecord.installment_number,
                 CardPurchaseInstallmentRecord.installments_count,
             )
@@ -325,7 +330,12 @@ class Projector:
 
         for (
             movement,
+            purchase_date,
+            purchase_reference_month,
+            purchase_due_date,
             purchase_installments_count,
+            installment_reference_month,
+            installment_due_date,
             installment_number,
             installment_row_count,
         ) in rows:
@@ -348,8 +358,20 @@ class Projector:
             expected_installment_total = (
                 expected_installments_count if expected_installments_count > 1 else None
             )
+            expected_posted_at, expected_competence_month = (
+                self._resolve_card_purchase_unified_timing(
+                    purchase_date=str(purchase_date),
+                    installments_count=expected_installments_count,
+                    reference_month=str(
+                        installment_reference_month or purchase_reference_month
+                    ),
+                    due_date=str(installment_due_date or purchase_due_date),
+                )
+            )
 
             movement.origin_type = expected_origin_type
+            movement.posted_at = expected_posted_at
+            movement.competence_month = expected_competence_month
             movement.payment_method = expected_payment_method
             movement.edit_policy = "editable"
             movement.installment_number = expected_installment_number
@@ -2182,6 +2204,12 @@ class Projector:
         )
         _origin_type = "installment" if _installments_count > 1 else "card_purchase"
         for allocation in visible_allocations:
+            posted_at, competence_month = self._resolve_card_purchase_unified_timing(
+                purchase_date=str(payload["purchase_date"]),
+                installments_count=_installments_count,
+                reference_month=allocation.reference_month,
+                due_date=allocation.due_date,
+            )
             installment_id = f"{purchase_id}:{allocation.installment_number}"
             session.add(
                 CardPurchaseInstallmentRecord(
@@ -2212,8 +2240,8 @@ class Projector:
                 title=_purchase_description or _purchase_category_id,
                 description=_purchase_description,
                 amount=allocation.amount,
-                posted_at=allocation.due_date + "T00:00:00Z",
-                competence_month=allocation.reference_month,
+                posted_at=posted_at,
+                competence_month=competence_month,
                 account_id=card.payment_account_id,
                 card_id=card_id,
                 payment_method=_purchase_method,
@@ -2302,6 +2330,12 @@ class Projector:
             "installment" if existing.installments_count > 1 else "card_purchase"
         )
         for allocation in visible_allocations:
+            posted_at, competence_month = self._resolve_card_purchase_unified_timing(
+                purchase_date=existing.purchase_date,
+                installments_count=existing.installments_count,
+                reference_month=allocation.reference_month,
+                due_date=allocation.due_date,
+            )
             installment_id = f"{purchase_id}:{allocation.installment_number}"
             session.add(
                 CardPurchaseInstallmentRecord(
@@ -2332,8 +2366,8 @@ class Projector:
                 title=existing.description or existing.category_id,
                 description=existing.description,
                 amount=allocation.amount,
-                posted_at=allocation.due_date + "T00:00:00Z",
-                competence_month=allocation.reference_month,
+                posted_at=posted_at,
+                competence_month=competence_month,
                 account_id=card.payment_account_id,
                 card_id=new_card_id,
                 payment_method=_upd_method,
@@ -4274,6 +4308,19 @@ class Projector:
     # ------------------------------------------------------------------ #
     #  Unified Movement helpers                                            #
     # ------------------------------------------------------------------ #
+
+    def _resolve_card_purchase_unified_timing(
+        self,
+        *,
+        purchase_date: str,
+        installments_count: int,
+        reference_month: str,
+        due_date: str,
+    ) -> tuple[str, str]:
+        if installments_count <= 1:
+            return purchase_date, purchase_date[:7]
+
+        return f"{due_date}T00:00:00Z", reference_month
 
     def _upsert_unified_movement(
         self,
