@@ -1,0 +1,512 @@
+{
+  "seed_name": "meucofri-production-seed-2026-03",
+  "seed_month": "2026-03",
+  "accounts": [
+    {
+      "id": "account-itau",
+      "name": "Itaú",
+      "type": "checking",
+      "initial_balance": 0
+    },
+    {
+      "id": "account-bradesco",
+      "name": "Bradesco",
+      "type": "checking",
+      "initial_balance": 0
+    },
+    {
+      "id": "account-nubank",
+      "name": "Nubank",
+      "type": "checking",
+      "initial_balance": 0
+    },
+    {
+      "id": "account-inter",
+      "name": "Inter",
+      "type": "investment",
+      "initial_balance": 0
+    },
+    {
+      "id": "account-bee-vale",
+      "name": "Bee Vale",
+      "type": "wallet",
+      "initial_balance": 0
+    }
+  ],
+  "incomes": [
+    {
+      "id": "seed-income-itau-2026-03",
+      "occurred_at": "2026-03-01T12:00:00Z",
+      "amount": 5,
+      "account_id": "account-itau",
+      "payment_method": "OTHER",
+      "category_id": "other",
+      "description": "Entrada inicial importada - Itaú"
+    },
+    {
+      "id": "seed-income-bradesco-2026-03",
+      "occurred_at": "2026-03-01T12:00:00Z",
+      "amount": 707790,
+      "account_id": "account-bradesco",
+      "payment_method": "OTHER",
+      "category_id": "other",
+      "description": "Entrada inicial importada - Bradesco"
+    },
+    {
+      "id": "seed-income-inter-2026-03",
+      "occurred_at": "2026-03-01T12:00:00Z",
+      "amount": 2160,
+      "account_id": "account-inter",
+      "payment_method": "OTHER",
+      "category_id": "other",
+      "description": "Entrada inicial importada - Inter"
+    },
+    {
+      "id": "seed-income-bee-vale-2026-03",
+      "occurred_at": "2026-03-01T12:00:00Z",
+      "amount": 14880,
+      "account_id": "account-bee-vale",
+      "payment_method": "OTHER",
+      "category_id": "other",
+      "description": "Entrada inicial importada - Bee Vale"
+    }
+  ],
+  "cards": [
+    {
+      "id": "card-bradesco-visa-platinum",
+      "name": "Bradesco Visa Platinum",
+      "limit": 600000,
+      "closing_day": 24,
+      "due_day": 5,
+      "payment_account_id": null
+    },
+    {
+      "id": "card-bradesco-visa-platinum-duda",
+      "name": "Bradesco Visa Platinum - Duda",
+      "limit": 360000,
+      "closing_day": 24,
+      "due_day": 5,
+      "payment_account_id": null
+    },
+    {
+      "id": "card-caixa-visa-gold",
+      "name": "Caixa Visa Gold",
+      "limit": 225000,
+      "closing_day": 27,
+      "due_day": 8,
+      "payment_account_id": null
+    },
+    {
+      "id": "card-nubank",
+      "name": "Nubank",
+      "limit": 530000,
+      "closing_day": 28,
+      "due_day": 5,
+      "payment_account_id": null
+    },
+    {
+      "id": "card-c6-bank",
+      "name": "C6 Bank",
+      "limit": 20000,
+      "closing_day": 1,
+      "due_day": 10,
+      "payment_account_id": null
+    }
+  ],
+  "card_purchases": [
+    {
+      "id": "purchase-bradesco-001",
+      "purchase_date": "2026-03-15T12:00:00Z",
+      "amount": 1400,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "CONDOMINIO CIVIL DO SH"
+    },
+    {
+      "id": "purchase-bradesco-002",
+      "purchase_date": "2026-03-15T12:00:00Z",
+      "amount": 650,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "COOKIE MANIA"
+    },
+    {
+      "id": "purchase-bradesco-003",
+      "purchase_date": "2026-03-14T12:00:00Z",
+      "amount": 1400,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "ATIVE MARKET LTDA"
+    },
+    {
+      "id": "purchase-bradesco-004",
+      "purchase_date": "2026-03-14T12:00:00Z",
+      "amount": 8000,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "POSTO NO PRECO"
+    },
+    {
+      "id": "purchase-bradesco-005",
+      "purchase_date": "2026-03-14T12:00:00Z",
+      "amount": 1650,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "TON42"
+    },
+    {
+      "id": "purchase-bradesco-006",
+      "purchase_date": "2026-03-14T12:00:00Z",
+      "amount": 5450,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "PASTEL DA HORA"
+    },
+    {
+      "id": "purchase-bradesco-007",
+      "purchase_date": "2026-03-13T12:00:00Z",
+      "amount": 8286,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "SUPERMERCADO COMETA"
+    },
+    {
+      "id": "purchase-bradesco-008",
+      "purchase_date": "2026-03-12T12:00:00Z",
+      "amount": 734,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "ATIVE MARKET LTDA"
+    },
+    {
+      "id": "purchase-bradesco-009",
+      "purchase_date": "2026-03-12T12:00:00Z",
+      "amount": 1399,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "ATIVE MARKET LTDA"
+    },
+    {
+      "id": "purchase-bradesco-010",
+      "purchase_date": "2026-03-12T12:00:00Z",
+      "amount": 779,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "SUPERMERCADO COMETA"
+    },
+    {
+      "id": "purchase-bradesco-011",
+      "purchase_date": "2026-03-12T12:00:00Z",
+      "amount": 2597,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "IFD*BR"
+    },
+    {
+      "id": "purchase-bradesco-012",
+      "purchase_date": "2026-03-11T12:00:00Z",
+      "amount": 4984,
+      "installments_count": 2,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "AMAZONMKTPLC*JANGCOMER (total 2 parcelas)"
+    },
+    {
+      "id": "purchase-bradesco-013",
+      "purchase_date": "2026-03-10T12:00:00Z",
+      "amount": 5968,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "SUPERMERCADO COMETA"
+    },
+    {
+      "id": "purchase-bradesco-014",
+      "purchase_date": "2026-03-08T12:00:00Z",
+      "amount": 1650,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "PATRICIANY JOSINO"
+    },
+    {
+      "id": "purchase-bradesco-015",
+      "purchase_date": "2026-03-07T12:00:00Z",
+      "amount": 13000,
+      "installments_count": 2,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "FLORICULTURA ELIZ (total 2 parcelas)"
+    },
+    {
+      "id": "purchase-bradesco-016",
+      "purchase_date": "2026-03-07T12:00:00Z",
+      "amount": 1100,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "FORTALEZA NE ESTACIONA"
+    },
+    {
+      "id": "purchase-bradesco-017",
+      "purchase_date": "2026-03-07T12:00:00Z",
+      "amount": 500,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "LGM KIDS LTDA"
+    },
+    {
+      "id": "purchase-bradesco-018",
+      "purchase_date": "2026-03-04T12:00:00Z",
+      "amount": 8000,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "PostoPodium"
+    },
+    {
+      "id": "purchase-bradesco-019",
+      "purchase_date": "2026-03-03T12:00:00Z",
+      "amount": 21264,
+      "installments_count": 6,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "AMAZON BR (total 6 parcelas)"
+    },
+    {
+      "id": "purchase-bradesco-020",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 849,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "ATIVE MARKET LTDA"
+    },
+    {
+      "id": "purchase-bradesco-021",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 3197,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "IFD*BR"
+    },
+    {
+      "id": "purchase-bradesco-022",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 11100,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "QUIOSQUE.RIOMARKENEDY"
+    },
+    {
+      "id": "purchase-bradesco-023",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 5000,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "PostoPodium"
+    },
+    {
+      "id": "purchase-bradesco-024",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 4500,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "JIM.COM LARISSA ALVES DE"
+    },
+    {
+      "id": "purchase-bradesco-025",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 33596,
+      "installments_count": 4,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "adidas FO Caucai (total 5 parcelas)"
+    },
+    {
+      "id": "purchase-bradesco-026",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 53900,
+      "installments_count": 5,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "MADEIREIRA GEOVANE (total 10 parcelas)"
+    },
+    {
+      "id": "purchase-bradesco-027",
+      "purchase_date": "2026-03-03T12:00:00Z",
+      "amount": 20172,
+      "installments_count": 3,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum",
+      "description": "MP*DRACHARM (total 4 parcelas)"
+    },
+    {
+      "id": "purchase-duda-001",
+      "purchase_date": "2026-03-12T12:00:00Z",
+      "amount": 3685,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum-duda",
+      "description": "LOJA FISICA LJ 07 NSH"
+    },
+    {
+      "id": "purchase-duda-002",
+      "purchase_date": "2026-03-08T12:00:00Z",
+      "amount": 24990,
+      "installments_count": 6,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum-duda",
+      "description": "AMAZONMKTPLC*GARSERVIC (total 6 parcelas)",
+      "person_id": "Mãe"
+    },
+    {
+      "id": "purchase-duda-003",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 10068,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum-duda",
+      "description": "ASSAI ATACADISTA LJ23",
+      "person_id": "Mãe"
+    },
+    {
+      "id": "purchase-duda-004",
+      "purchase_date": "2026-03-14T12:00:00Z",
+      "amount": 11332,
+      "installments_count": 2,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum-duda",
+      "description": "MP *CASSIANADANTA (total 3 parcelas)"
+    },
+    {
+      "id": "purchase-duda-005",
+      "purchase_date": "2026-03-10T12:00:00Z",
+      "amount": 82800,
+      "installments_count": 9,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum-duda",
+      "description": "CICLECENTER (total 10 parcelas)",
+      "person_id": "Dorinha"
+    },
+    {
+      "id": "purchase-duda-006",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 10756,
+      "installments_count": 2,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum-duda",
+      "description": "SUPER SOUZA (total 3 parcelas)",
+      "person_id": "Dorinha"
+    },
+    {
+      "id": "purchase-duda-007",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 10000,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum-duda",
+      "description": "CASA PIO (total 3 parcelas)",
+      "person_id": "Dorinha"
+    },
+    {
+      "id": "purchase-duda-008",
+      "purchase_date": "2026-03-04T12:00:00Z",
+      "amount": 16527,
+      "installments_count": 3,
+      "category_id": "other",
+      "card_id": "card-bradesco-visa-platinum-duda",
+      "description": "AMAZONMKTPLC*EMERSONBA (total 10 parcelas)"
+    },
+    {
+      "id": "purchase-caixa-001",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 20000,
+      "installments_count": 2,
+      "category_id": "other",
+      "card_id": "card-caixa-visa-gold",
+      "description": "AUTO PECAS E SE (total 4 parcelas)"
+    },
+    {
+      "id": "purchase-caixa-002",
+      "purchase_date": "2026-03-06T12:00:00Z",
+      "amount": 990,
+      "installments_count": 1,
+      "category_id": "other",
+      "card_id": "card-caixa-visa-gold",
+      "description": "APPLECOMBILL"
+    },
+    {
+      "id": "purchase-nubank-001",
+      "purchase_date": "2026-03-14T12:00:00Z",
+      "amount": 58848,
+      "installments_count": 6,
+      "category_id": "other",
+      "card_id": "card-nubank",
+      "description": "AppleWatch (total 12 parcelas)"
+    },
+    {
+      "id": "purchase-c6-001",
+      "purchase_date": "2026-03-01T12:00:00Z",
+      "amount": 6930,
+      "installments_count": 7,
+      "category_id": "other",
+      "card_id": "card-c6-bank",
+      "description": "IG*SUNORESEARCH (total 12 parcelas)"
+    }
+  ],
+  "recurring_rules": [
+    {
+      "id": "rule-sua-academia",
+      "name": "SUA ACADEMIA",
+      "amount": 14990,
+      "due_day": 1,
+      "account_id": null,
+      "card_id": "card-bradesco-visa-platinum",
+      "payment_method": "CARD",
+      "category_id": "other",
+      "description": "SUA ACADEMIA",
+      "confirm_month": "2026-03"
+    },
+    {
+      "id": "rule-ifd-ifood",
+      "name": "IFD IFOOD",
+      "amount": 595,
+      "due_day": 10,
+      "account_id": null,
+      "card_id": "card-caixa-visa-gold",
+      "payment_method": "CARD",
+      "category_id": "other",
+      "description": "IFD IFOOD",
+      "confirm_month": "2026-03"
+    },
+    {
+      "id": "rule-openai-chatgpt-subscr",
+      "name": "OPENAI CHATGPT SUBSCR",
+      "amount": 12000,
+      "due_day": 15,
+      "account_id": null,
+      "card_id": "card-caixa-visa-gold",
+      "payment_method": "CARD",
+      "category_id": "other",
+      "description": "OPENAI CHATGPT SUBSCR",
+      "confirm_month": "2026-03"
+    }
+  ]
+}

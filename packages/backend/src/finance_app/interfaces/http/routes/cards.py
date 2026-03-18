@@ -194,6 +194,21 @@ def build_cards_router(
                 detail=str(exc),
             ) from exc
 
+    @router.post("/api/card-purchases/{purchase_id}/void", status_code=status.HTTP_204_NO_CONTENT)
+    def void_card_purchase(purchase_id: str) -> None:
+        try:
+            card_purchase_service.void_card_purchase(purchase_id)
+        except CardPurchaseNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except CardPurchaseServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
     @router.get("/api/card-purchases")
     def list_card_purchases(
         card_id: str | None = Query(default=None, alias="card"),

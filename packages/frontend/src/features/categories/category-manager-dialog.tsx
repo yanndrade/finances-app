@@ -31,6 +31,7 @@ export function CategoryManagerDialog({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    event.stopPropagation();
 
     const trimmed = newLabel.trim();
     if (!trimmed) return;
@@ -86,6 +87,11 @@ export function CategoryManagerDialog({
         {/* Add new category */}
         <form
           onSubmit={handleSubmit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.stopPropagation();
+            }
+          }}
           className="flex gap-2"
           aria-label="Adicionar categoria"
         >

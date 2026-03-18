@@ -2284,6 +2284,37 @@ def test_confirm_pending_creates_expense_using_due_date(tmp_path) -> None:
         }
     ]
 
+    void_response = client.post(
+        "/api/transactions/rule-rent:2026-03:expense/void",
+        json={"reason": "Payment entered by mistake"},
+    )
+    assert void_response.status_code == 200
+    assert void_response.json()["status"] == "voided"
+
+    reverted_pendings_response = client.get("/api/pendings", params={"month": "2026-03"})
+    assert reverted_pendings_response.status_code == 200
+    assert reverted_pendings_response.json() == [
+        {
+            "pending_id": "rule-rent:2026-03",
+            "rule_id": "rule-rent",
+            "month": "2026-03",
+            "name": "Rent",
+            "amount": 25_00,
+            "due_date": "2026-03-05",
+            "account_id": "acc-1",
+            "card_id": None,
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "description": "Apartment rent",
+            "status": "pending",
+            "transaction_id": None,
+        }
+    ]
+
+    accounts_after_void_response = client.get("/api/accounts")
+    assert accounts_after_void_response.status_code == 200
+    assert accounts_after_void_response.json()[0]["current_balance"] == 100_00
+
 
 def test_dashboard_endpoint_rejects_invalid_month_format(tmp_path) -> None:
     app = create_app(
@@ -2951,6 +2982,50 @@ def test_card_purchase_endpoint_can_reassign_purchase_to_another_card(tmp_path) 
             "due_date": "2026-03-25",
         }
     ]
+
+
+def test_card_purchase_endpoint_can_void_purchase_and_remove_future_commitments(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-11T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Lunch",
+        },
+    )
+
+    response = client.post("/api/card-purchases/purchase-1/void")
+
+    assert response.status_code == 204
+    assert response.text == ""
+    assert client.get("/api/card-purchases").json() == []
+    assert client.get("/api/invoices").json() == []
+    assert client.get(
+        "/api/movements",
+        params={"competence_month": "2026-03"},
+    ).json()["items"] == []
 
 
 def test_invoice_list_aggregates_card_purchases_without_zero_value_rows(

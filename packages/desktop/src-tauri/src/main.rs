@@ -1,9 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::io::{Read, Write};
+use std::mem::{size_of, zeroed};
 use std::net::{SocketAddr, TcpStream};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
+use std::os::windows::{
+    io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle},
+};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,6 +20,15 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::{
+    Foundation::HANDLE,
+    System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        SetInformationJobObject, TerminateJobObject,
+    },
+};
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const BACKEND_BIND_HOST: &str = "0.0.0.0";
@@ -49,14 +63,14 @@ impl TrayAction {
 }
 
 struct RuntimeState {
-    backend_child: Mutex<Option<Child>>,
+    backend_process: Mutex<Option<BackendProcess>>,
     is_quitting: AtomicBool,
 }
 
 impl RuntimeState {
-    fn new(backend_child: Child) -> Self {
+    fn new(backend_process: BackendProcess) -> Self {
         Self {
-            backend_child: Mutex::new(Some(backend_child)),
+            backend_process: Mutex::new(Some(backend_process)),
             is_quitting: AtomicBool::new(false),
         }
     }
@@ -64,7 +78,7 @@ impl RuntimeState {
     #[cfg(test)]
     fn new_empty() -> Self {
         Self {
-            backend_child: Mutex::new(None),
+            backend_process: Mutex::new(None),
             is_quitting: AtomicBool::new(false),
         }
     }
@@ -78,14 +92,56 @@ impl RuntimeState {
     }
 
     fn stop_backend(&self) {
-        let mut guard = match self.backend_child.lock() {
+        let mut guard = match self.backend_process.lock() {
             Ok(guard) => guard,
             Err(_) => return,
         };
 
-        if let Some(mut child) = guard.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+        if let Some(backend_process) = guard.take() {
+            backend_process.terminate();
+        }
+    }
+}
+
+struct BackendProcess {
+    child: Child,
+    #[cfg(target_os = "windows")]
+    job: Option<OwnedHandle>,
+}
+
+impl BackendProcess {
+    fn new(child: Child) -> Self {
+        #[cfg(target_os = "windows")]
+        let job = attach_backend_job(&child).ok();
+
+        Self {
+            child,
+            #[cfg(target_os = "windows")]
+            job,
+        }
+    }
+
+    fn terminate(mut self) {
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(job) = self.job.take() {
+                if terminate_job_object(&job).is_ok() {
+                    let _ = self.child.wait();
+                    return;
+                }
+            }
+
+            if terminate_process_tree(self.child.id()).is_err() {
+                let _ = self.child.kill();
+            }
+            let _ = self.child.wait();
+            return;
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
         }
     }
 }
@@ -127,13 +183,12 @@ fn main() {
             set_autostart_enabled
         ])
         .setup(|app| {
-            let mut backend_child = spawn_backend_process(&app.handle())?;
+            let backend_process = spawn_backend_process(&app.handle())?;
             if let Err(error) = wait_for_backend_ready() {
-                let _ = backend_child.kill();
-                let _ = backend_child.wait();
+                backend_process.terminate();
                 return Err(error);
             }
-            app.manage(RuntimeState::new(backend_child));
+            app.manage(RuntimeState::new(backend_process));
             configure_tray(app)?;
             Ok(())
         })
@@ -251,7 +306,7 @@ fn show_main_window(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::Error>> {
+fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) {
         let backend_dir = resolve_dev_backend_dir()?;
         let mut command = Command::new("uv");
@@ -268,7 +323,7 @@ fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::E
             .stderr(Stdio::null());
         apply_backend_spawn_options(&mut command);
         let child = command.spawn()?;
-        return Ok(child);
+        return Ok(BackendProcess::new(child));
     }
 
     let backend_path = resolve_release_backend_path(app)?;
@@ -303,7 +358,7 @@ fn spawn_backend_process(app: &AppHandle) -> Result<Child, Box<dyn std::error::E
         .stderr(Stdio::null());
     apply_backend_spawn_options(&mut command);
     let child = command.spawn()?;
-    Ok(child)
+    Ok(BackendProcess::new(child))
 }
 
 fn apply_backend_spawn_options(command: &mut Command) {
@@ -311,6 +366,72 @@ fn apply_backend_spawn_options(command: &mut Command) {
     {
         command.creation_flags(CREATE_NO_WINDOW);
     }
+}
+
+#[cfg(target_os = "windows")]
+fn attach_backend_job(child: &Child) -> Result<OwnedHandle, Box<dyn std::error::Error>> {
+    unsafe {
+        let job_handle = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+        if job_handle.is_null() {
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        let job = OwnedHandle::from_raw_handle(job_handle as RawHandle);
+        let mut limit_information: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = zeroed();
+        limit_information.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        let set_result = SetInformationJobObject(
+            job.as_raw_handle() as HANDLE,
+            JobObjectExtendedLimitInformation,
+            (&mut limit_information as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if set_result == 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        let assign_result = AssignProcessToJobObject(
+            job.as_raw_handle() as HANDLE,
+            child.as_raw_handle() as HANDLE,
+        );
+        if assign_result == 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        Ok(job)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn terminate_job_object(job: &OwnedHandle) -> std::io::Result<()> {
+    let result = unsafe { TerminateJobObject(job.as_raw_handle() as HANDLE, 1) };
+    if result == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn terminate_process_tree(pid: u32) -> std::io::Result<()> {
+    let mut command = Command::new("taskkill");
+    command
+        .arg("/PID")
+        .arg(pid.to_string())
+        .arg("/T")
+        .arg("/F")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW);
+
+    let status = command.status()?;
+    if !status.success() {
+        return Err(std::io::Error::other(format!(
+            "taskkill failed for pid {pid} with status {status}"
+        )));
+    }
+
+    Ok(())
 }
 
 fn resolve_dev_backend_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {

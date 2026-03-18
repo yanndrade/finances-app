@@ -1,13 +1,18 @@
 import {
   Drawer,
   DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
   DrawerDescription,
   DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
 } from "../../../components/ui/drawer";
 import { Button } from "../../../components/ui/button";
-import { formatCategoryName, formatCurrency, formatDate, formatPaymentMethod } from "../../../lib/format";
+import {
+  formatCategoryName,
+  formatCurrency,
+  formatDate,
+  formatPaymentMethod,
+} from "../../../lib/format";
 import type { PendingExpenseSummary } from "../../../lib/api";
 import { getTemporalStatus } from "../helpers/temporal-status";
 
@@ -18,6 +23,7 @@ type DetailDrawerProps = {
   accountNameById: Map<string, string>;
   cardNameById: Map<string, string>;
   onConfirm: (id: string) => void;
+  onUndoPayment?: (transactionId: string) => void;
   onViewHistory: () => void;
   isSubmitting: boolean;
 };
@@ -29,18 +35,26 @@ export function DetailDrawer({
   accountNameById,
   cardNameById,
   onConfirm,
+  onUndoPayment,
   onViewHistory,
   isSubmitting,
 }: DetailDrawerProps) {
   if (!pending) return null;
 
   const isConfirmed = pending.status === "confirmed";
+  const canUndoPayment =
+    isConfirmed &&
+    pending.payment_method !== "CARD" &&
+    pending.transaction_id !== null &&
+    onUndoPayment !== undefined;
   const status = getTemporalStatus(pending.due_date, pending.status);
 
   const sourceName =
     pending.payment_method === "CARD"
-      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartão"
-      : accountNameById.get(pending.account_id ?? "") ?? pending.account_id ?? "Conta";
+      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartao"
+      : accountNameById.get(pending.account_id ?? "") ??
+        pending.account_id ??
+        "Conta";
 
   return (
     <Drawer open={isOpen} onOpenChange={onOpenChange}>
@@ -49,13 +63,15 @@ export function DetailDrawer({
           <DrawerHeader>
             <DrawerTitle className="text-xl">{pending.name}</DrawerTitle>
             <DrawerDescription>
-              Detalhes da pendência gerada neste mês
+              Detalhes da pendencia gerada neste mes
             </DrawerDescription>
           </DrawerHeader>
-          
+
           <div className="p-4 pb-0 space-y-4">
             <div className="flex flex-col items-center justify-center py-4 bg-slate-50 rounded-2xl">
-              <span className="text-sm text-slate-500 font-medium">Valor a pagar</span>
+              <span className="text-sm text-slate-500 font-medium">
+                Valor a pagar
+              </span>
               <span className="text-3xl font-black text-slate-900 tabular-nums">
                 {formatCurrency(pending.amount)}
               </span>
@@ -65,17 +81,23 @@ export function DetailDrawer({
               <div className="flex justify-between items-center py-2 border-b border-slate-100">
                 <span className="text-sm text-slate-500">Status</span>
                 <span className="text-sm font-semibold capitalize">
-                  {status === "paid" ? "Pago" : status === "overdue" ? "Atrasado" : status === "due_today" ? "Vence hoje" : "A vencer"}
+                  {status === "paid"
+                    ? "Pago"
+                    : status === "overdue"
+                      ? "Atrasado"
+                      : status === "due_today"
+                        ? "Vence hoje"
+                        : "A vencer"}
                 </span>
               </div>
-              
+
               <div className="flex justify-between items-center py-2 border-b border-slate-100">
                 <span className="text-sm text-slate-500">Vencimento</span>
                 <span className="text-sm font-semibold">
                   {formatDate(pending.due_date)}
                 </span>
               </div>
-              
+
               <div className="flex justify-between items-center py-2 border-b border-slate-100">
                 <span className="text-sm text-slate-500">Categoria</span>
                 <span className="text-sm font-semibold">
@@ -92,28 +114,38 @@ export function DetailDrawer({
 
               <div className="flex justify-between items-center py-2 border-b border-slate-100">
                 <span className="text-sm text-slate-500">Origem</span>
-                <span className="text-sm font-semibold">
-                  {sourceName}
-                </span>
+                <span className="text-sm font-semibold">{sourceName}</span>
               </div>
 
               {pending.description && (
                 <div className="flex flex-col gap-1 py-2">
-                  <span className="text-sm text-slate-500">Descrição</span>
+                  <span className="text-sm text-slate-500">Descricao</span>
                   <span className="text-sm">{pending.description}</span>
                 </div>
               )}
             </div>
           </div>
-          
+
           <DrawerFooter>
             {isConfirmed ? (
-              <Button onClick={onViewHistory} variant="outline" className="w-full">
-                Ver no histórico
-              </Button>
+              <div className="flex flex-col gap-2">
+                {canUndoPayment ? (
+                  <Button
+                    onClick={() => onUndoPayment?.(pending.transaction_id!)}
+                    variant="outline"
+                    className="w-full text-rose-600"
+                    disabled={isSubmitting}
+                  >
+                    Desfazer pagamento
+                  </Button>
+                ) : null}
+                <Button onClick={onViewHistory} variant="outline" className="w-full">
+                  Ver no historico
+                </Button>
+              </div>
             ) : (
-              <Button 
-                onClick={() => onConfirm(pending.pending_id)} 
+              <Button
+                onClick={() => onConfirm(pending.pending_id)}
                 disabled={isSubmitting}
                 className="w-full"
               >

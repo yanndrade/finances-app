@@ -148,6 +148,21 @@ class CardPurchaseService:
         )
         return self.get_card_purchase(purchase_id)
 
+    def void_card_purchase(self, purchase_id: str) -> None:
+        self._sync_projections()
+        existing = self._find_card_purchase(purchase_id)
+        if existing is None:
+            raise CardPurchaseNotFoundError(
+                f"Card purchase '{purchase_id}' was not found."
+            )
+
+        self._append_event(
+            "CardPurchaseVoided",
+            {
+                "id": purchase_id,
+            },
+        )
+
     def list_card_purchases(
         self,
         *,

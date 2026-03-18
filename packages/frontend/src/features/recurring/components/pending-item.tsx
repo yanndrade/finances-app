@@ -1,7 +1,12 @@
-import { formatCategoryName, formatCurrency, formatDate, formatPaymentMethod } from "../../../lib/format";
+import {
+  formatCategoryName,
+  formatCurrency,
+  formatDate,
+  formatPaymentMethod,
+} from "../../../lib/format";
 import type { PendingExpenseSummary } from "../../../lib/api";
 import { cn } from "../../../lib/utils";
-import { getTemporalStatus, TemporalStatus } from "../helpers/temporal-status";
+import { getTemporalStatus, type TemporalStatus } from "../helpers/temporal-status";
 
 type PendingItemProps = {
   pending: PendingExpenseSummary;
@@ -9,6 +14,7 @@ type PendingItemProps = {
   cardNameById: Map<string, string>;
   onClick: () => void;
   onConfirm: (id: string) => void;
+  onUndoPayment: (transactionId: string) => void;
   onViewHistory: () => void;
   isSubmitting: boolean;
 };
@@ -19,16 +25,23 @@ export function PendingItem({
   cardNameById,
   onClick,
   onConfirm,
+  onUndoPayment,
   onViewHistory,
   isSubmitting,
 }: PendingItemProps) {
   const isConfirmed = pending.status === "confirmed";
+  const canUndoPayment =
+    isConfirmed &&
+    pending.payment_method !== "CARD" &&
+    pending.transaction_id !== null;
   const status = getTemporalStatus(pending.due_date, pending.status);
 
   const sourceName =
     pending.payment_method === "CARD"
-      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartão"
-      : accountNameById.get(pending.account_id ?? "") ?? pending.account_id ?? "Conta";
+      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartao"
+      : accountNameById.get(pending.account_id ?? "") ??
+        pending.account_id ??
+        "Conta";
 
   return (
     <article
@@ -43,7 +56,8 @@ export function PendingItem({
           <StatusBadge status={status} />
         </div>
         <p className="text-xs text-slate-600">
-          {formatCategoryName(pending.category_id)} • vence em {formatDate(pending.due_date)}
+          {formatCategoryName(pending.category_id)} • vence em{" "}
+          {formatDate(pending.due_date)}
         </p>
         <p className="text-xs text-slate-500">
           {sourceName} • {formatPaymentMethod(pending.payment_method)}
@@ -54,15 +68,27 @@ export function PendingItem({
         <span className="text-sm font-bold text-slate-900 tabular-nums">
           {formatCurrency(pending.amount)}
         </span>
-        <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
           {isConfirmed ? (
-            <button
-              type="button"
-              className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-              onClick={onViewHistory}
-            >
-              Ver no histórico
-            </button>
+            <>
+              {canUndoPayment ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg border border-rose-200 bg-white text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => onUndoPayment(pending.transaction_id!)}
+                  disabled={isSubmitting}
+                >
+                  Desfazer
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                onClick={onViewHistory}
+              >
+                Ver no historico
+              </button>
+            </>
           ) : (
             <button
               disabled={isSubmitting}
@@ -103,7 +129,12 @@ function StatusBadge({ status }: { status: TemporalStatus }) {
   }
 
   return (
-    <span className={cn("rounded-full px-2 py-0.5 text-[12px] font-black uppercase tracking-[0.14em]", classes)}>
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-[12px] font-black uppercase tracking-[0.14em]",
+        classes,
+      )}
+    >
       {label}
     </span>
   );

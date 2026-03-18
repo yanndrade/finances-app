@@ -28,6 +28,35 @@ const cards: api.CardSummary[] = [
   },
 ];
 
+function buildMovement(
+  movementId: string,
+  title: string,
+): api.UnifiedMovement {
+  return {
+    movement_id: movementId,
+    kind: "expense",
+    origin_type: "manual",
+    title,
+    description: title,
+    amount: 10_00,
+    posted_at: "2026-03-10T00:00:00Z",
+    competence_month: "2026-03",
+    account_id: "acc-1",
+    card_id: null,
+    payment_method: "PIX",
+    category_id: "food",
+    counterparty: null,
+    lifecycle_status: "cleared",
+    edit_policy: "editable",
+    parent_id: null,
+    group_id: null,
+    transfer_direction: null,
+    installment_number: null,
+    installment_total: null,
+    source_event_type: "TransactionAdded",
+  };
+}
+
 describe("HistoryPage mobile scope behavior", () => {
   beforeEach(() => {
     vi.spyOn(api, "fetchMovements").mockResolvedValue({
@@ -101,5 +130,297 @@ describe("HistoryPage mobile scope behavior", () => {
     });
 
     expect(screen.queryByRole("tab", { name: /fixos/i })).not.toBeInTheDocument();
+  });
+
+  it("applies initial filters coming from app navigation", async () => {
+    const fetchMovementsSpy = vi.mocked(api.fetchMovements);
+
+    render(
+      <HistoryPage
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+        initialFilters={{
+          preset: "fixed",
+          text: "internet",
+          account: "acc-1",
+          method: "PIX",
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchMovementsSpy).toHaveBeenCalled();
+    });
+
+    const lastFilters = fetchMovementsSpy.mock.calls.at(-1)?.[0] as api.MovementFilters;
+    expect(lastFilters.scope).toBe("fixed");
+    expect(lastFilters.text).toBe("internet");
+    expect(lastFilters.account_id).toBe("acc-1");
+    expect(lastFilters.payment_method).toBe("PIX");
+  });
+
+  it("navigates between pages and resets to the first page after a new search", async () => {
+    const user = userEvent.setup();
+    const fetchMovementsSpy = vi
+      .mocked(api.fetchMovements)
+      .mockImplementation(async (filters) => {
+        if (filters?.page === 2) {
+          return {
+            items: [buildMovement("movement-page-2", "Lote 2")],
+            total: 55,
+            page: 2,
+            page_size: 50,
+            pages: 2,
+          };
+        }
+
+        return {
+          items: [
+            buildMovement(
+              filters?.text === "mercado" ? "movement-search" : "movement-page-1",
+              filters?.text === "mercado" ? "Mercado" : "Lote 1",
+            ),
+          ],
+          total: 55,
+          page: 1,
+          page_size: 50,
+          pages: 2,
+        };
+      });
+
+    render(
+      <HistoryPage
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/pagina 1 de 2/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: /anterior/i })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /proxima/i }));
+
+    await waitFor(() => {
+      const lastFilters = fetchMovementsSpy.mock.calls.at(-1)?.[0] as api.MovementFilters;
+      expect(lastFilters.page).toBe(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /lote 2/i })).toBeInTheDocument();
+      expect(screen.getByText(/pagina 2 de 2/i)).toBeInTheDocument();
+    });
+
+    await user.clear(screen.getByRole("searchbox"));
+    await user.type(screen.getByRole("searchbox"), "mercado");
+
+    await waitFor(() => {
+      const lastFilters = fetchMovementsSpy.mock.calls.at(-1)?.[0] as api.MovementFilters;
+      expect(lastFilters.page).toBe(1);
+      expect(lastFilters.text).toBe("mercado");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /mercado/i })).toBeInTheDocument();
+      expect(screen.getByText(/pagina 1 de 2/i)).toBeInTheDocument();
+    });
+  });
+
+  it("marks recurring forecast movements as paid from the drawer", async () => {
+    const user = userEvent.setup();
+    const onConfirmPending = vi.fn<(pendingId: string) => Promise<void>>().mockResolvedValue();
+
+    vi.mocked(api.fetchMovements).mockResolvedValue({
+      items: [
+        {
+          movement_id: "rule-rent:2026-03",
+          kind: "expense",
+          origin_type: "recurring",
+          title: "Internet",
+          description: "Fibra",
+          amount: 120_00,
+          posted_at: "2026-03-10T00:00:00Z",
+          competence_month: "2026-03",
+          account_id: "acc-1",
+          card_id: null,
+          payment_method: "PIX",
+          category_id: "internet",
+          counterparty: null,
+          lifecycle_status: "forecast",
+          edit_policy: "inherited",
+          parent_id: null,
+          group_id: "rec-1",
+          transfer_direction: null,
+          installment_number: null,
+          installment_total: null,
+          source_event_type: "RecurringRuleCreated",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      pages: 1,
+    });
+
+    render(
+      <HistoryPage
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+        onConfirmPending={onConfirmPending}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /internet/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /internet/i }));
+    await user.click(screen.getByRole("button", { name: /marcar como pago/i }));
+
+    expect(onConfirmPending).toHaveBeenCalledWith("rule-rent:2026-03");
+  });
+
+  it("allows reassigning a card purchase from the history drawer", async () => {
+    const user = userEvent.setup();
+    const onUpdateCardPurchase = vi
+      .fn<(purchaseId: string, payload: api.CardPurchaseUpdatePayload) => Promise<void>>()
+      .mockResolvedValue();
+
+    vi.mocked(api.fetchMovements).mockResolvedValue({
+      items: [
+        {
+          movement_id: "purchase-1:1",
+          kind: "expense",
+          origin_type: "installment",
+          title: "Notebook - Parcela 1/3",
+          description: "Notebook",
+          amount: 300_00,
+          posted_at: "2026-03-20T00:00:00Z",
+          competence_month: "2026-03",
+          account_id: "acc-1",
+          card_id: "card-1",
+          payment_method: "CREDIT_INSTALLMENT",
+          category_id: "electronics",
+          counterparty: null,
+          lifecycle_status: "pending",
+          edit_policy: "locked",
+          parent_id: "purchase-1",
+          group_id: null,
+          transfer_direction: null,
+          installment_number: 1,
+          installment_total: 3,
+          source_event_type: "CardPurchaseCreated",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      pages: 1,
+    });
+
+    render(
+      <HistoryPage
+        surface="desktop"
+        accounts={accounts}
+        cards={[
+          ...cards,
+          {
+            card_id: "card-2",
+            name: "Cartao Verde",
+            limit: 80_000,
+            closing_day: 15,
+            due_day: 25,
+            payment_account_id: "acc-1",
+            is_active: true,
+            future_installment_total: 0,
+          },
+        ]}
+        month="2026-03"
+        onUpdateCardPurchase={onUpdateCardPurchase}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /notebook - parcela 1\/3/i }),
+      ).toBeInTheDocument();
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /notebook - parcela 1\/3/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /^editar$/i }));
+    await user.selectOptions(screen.getByLabelText(/cartao da compra/i), "card-2");
+    await user.click(screen.getByRole("button", { name: /salvar altera/i }));
+
+    expect(onUpdateCardPurchase).toHaveBeenCalledWith("purchase-1", {
+      cardId: "card-2",
+    });
+  });
+
+  it("voids a card purchase from the history drawer", async () => {
+    const user = userEvent.setup();
+    const onVoidCardPurchase = vi
+      .fn<(purchaseId: string) => Promise<void>>()
+      .mockResolvedValue();
+
+    vi.mocked(api.fetchMovements).mockResolvedValue({
+      items: [
+        {
+          movement_id: "purchase-1:1",
+          kind: "expense",
+          origin_type: "card_purchase",
+          title: "Notebook",
+          description: "Notebook",
+          amount: 900_00,
+          posted_at: "2026-03-20T00:00:00Z",
+          competence_month: "2026-03",
+          account_id: "acc-1",
+          card_id: "card-1",
+          payment_method: "CREDIT_CASH",
+          category_id: "electronics",
+          counterparty: null,
+          lifecycle_status: "pending",
+          edit_policy: "locked",
+          parent_id: "purchase-1",
+          group_id: null,
+          transfer_direction: null,
+          installment_number: null,
+          installment_total: null,
+          source_event_type: "CardPurchaseCreated",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      pages: 1,
+    });
+
+    render(
+      <HistoryPage
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+        onVoidCardPurchase={onVoidCardPurchase}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /notebook/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /notebook/i }));
+    await user.click(screen.getByRole("button", { name: /estornar/i }));
+
+    expect(onVoidCardPurchase).toHaveBeenCalledWith("purchase-1");
   });
 });

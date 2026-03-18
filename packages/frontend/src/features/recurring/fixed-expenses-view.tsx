@@ -38,6 +38,7 @@ type FixedExpensesViewProps = {
   onCreateRule: (payload: RecurringRulePayload) => Promise<void>;
   onMonthChange: (month: string) => void;
   onOpenLedgerFiltered: (filters: Partial<TransactionFilters>, month?: string) => void;
+  onUndoPendingPayment: (transactionId: string) => Promise<void>;
   onUpdateRule: (ruleId: string, payload: RecurringRuleUpdatePayload) => Promise<void>;
   uiDensity: UiDensity;
 };
@@ -55,6 +56,7 @@ export function FixedExpensesView({
   onCreateRule,
   onMonthChange: _onMonthChange,
   onOpenLedgerFiltered,
+  onUndoPendingPayment,
   onUpdateRule,
   uiDensity,
 }: FixedExpensesViewProps) {
@@ -168,6 +170,7 @@ export function FixedExpensesView({
                               month,
                             )
                           }
+                          onUndoPayment={(transactionId) => onUndoPendingPayment(transactionId)}
                         />
                       ))}
                     </PendingGroup>
@@ -253,6 +256,14 @@ export function FixedExpensesView({
             setIsDetailDrawerOpen(false);
           }
         }}
+        onUndoPayment={
+          selectedPending?.transaction_id
+            ? async (transactionId) => {
+                await onUndoPendingPayment(transactionId);
+                setIsDetailDrawerOpen(false);
+              }
+            : undefined
+        }
       />
     </div>
   );

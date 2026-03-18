@@ -91,6 +91,7 @@ describe("FixedExpensesView", () => {
         onCreateRule={vi.fn().mockResolvedValue(undefined)}
         onMonthChange={vi.fn()}
         onOpenLedgerFiltered={vi.fn()}
+        onUndoPendingPayment={vi.fn().mockResolvedValue(undefined)}
         onUpdateRule={onUpdateRule}
         uiDensity="compact"
       />,
@@ -141,6 +142,7 @@ describe("FixedExpensesView", () => {
         onCreateRule={vi.fn().mockResolvedValue(undefined)}
         onMonthChange={vi.fn()}
         onOpenLedgerFiltered={vi.fn()}
+        onUndoPendingPayment={vi.fn().mockResolvedValue(undefined)}
         onUpdateRule={vi.fn().mockResolvedValue(undefined)}
         uiDensity="compact"
       />,
@@ -165,6 +167,7 @@ describe("FixedExpensesView", () => {
         onCreateRule={vi.fn().mockResolvedValue(undefined)}
         onMonthChange={vi.fn()}
         onOpenLedgerFiltered={vi.fn()}
+        onUndoPendingPayment={vi.fn().mockResolvedValue(undefined)}
         onUpdateRule={vi.fn().mockResolvedValue(undefined)}
         uiDensity="compact"
       />,
@@ -191,6 +194,7 @@ describe("FixedExpensesView", () => {
         onCreateRule={vi.fn().mockResolvedValue(undefined)}
         onMonthChange={vi.fn()}
         onOpenLedgerFiltered={vi.fn()}
+        onUndoPendingPayment={vi.fn().mockResolvedValue(undefined)}
         onUpdateRule={vi.fn().mockResolvedValue(undefined)}
         uiDensity="compact"
       />,
@@ -201,5 +205,42 @@ describe("FixedExpensesView", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /pagar agora/i }));
     expect(onConfirmPending).toHaveBeenCalledWith("rec-1:2026-03");
+  });
+
+  it("allows undoing a confirmed wallet payment directly from the recurring list", async () => {
+    const onUndoPendingPayment = vi
+      .fn<(transactionId: string) => Promise<void>>()
+      .mockResolvedValue();
+
+    render(
+      <FixedExpensesView
+        accounts={accounts}
+        cards={cards}
+        categories={categories}
+        isSubmitting={false}
+        month="2026-03"
+        pendingExpenses={[
+          {
+            ...pendingExpenses[0],
+            status: "confirmed",
+            transaction_id: "rec-1:2026-03:expense",
+          },
+        ]}
+        recurringRules={recurringRules}
+        onConfirmPending={vi.fn().mockResolvedValue(undefined)}
+        onCreateRule={vi.fn().mockResolvedValue(undefined)}
+        onMonthChange={vi.fn()}
+        onOpenLedgerFiltered={vi.fn()}
+        onUndoPendingPayment={onUndoPendingPayment}
+        onUpdateRule={vi.fn().mockResolvedValue(undefined)}
+        uiDensity="compact"
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /desfazer/i }));
+
+    expect(onUndoPendingPayment).toHaveBeenCalledWith(
+      "rec-1:2026-03:expense",
+    );
   });
 });

@@ -11,6 +11,7 @@ import { ToastViewport, type AppToast } from "./components/toast-viewport";
 import { useAppDataOrchestrator } from "./features/app/use-app-data-orchestrator";
 import {
   createCategoryOption,
+  getCategoryOptions,
   readStoredCategoryOptions,
   storeCategoryOptions,
   type CategoryOption,
@@ -49,6 +50,7 @@ import {
   updateCardPurchase,
   updateRecurringRule,
   updateTransaction,
+  voidCardPurchase,
   voidTransaction,
   type AccountSummary,
   type AccountPayload,
@@ -725,6 +727,13 @@ export function App() {
     );
   }
 
+  async function handleVoidCardPurchase(purchaseId: string): Promise<void> {
+    await runMutation(
+      () => voidCardPurchase(purchaseId),
+      "Compra no cartÃ£o estornada com sucesso.",
+    );
+  }
+
   async function handlePayInvoice(
     payload: InvoicePaymentPayload,
   ): Promise<void> {
@@ -1048,7 +1057,8 @@ export function App() {
       return false;
     }
 
-    const alreadyExists = categoryOptions.some(
+    const availableCategoryOptions = getCategoryOptions(undefined, categoryOptions);
+    const alreadyExists = availableCategoryOptions.some(
       (option) =>
         option.value === nextCategory.value ||
         option.label.toLowerCase() === nextCategory.label.toLowerCase(),
@@ -1152,7 +1162,14 @@ export function App() {
             cards={cards}
             month={selectedMonth}
             refreshKey={refreshKey}
+            initialFilters={transactionFilters}
+            isSubmitting={isSubmitting}
+            onConfirmPending={handleConfirmPendingExpense}
             onError={(error) => showErrorToast(error)}
+            onUpdateCardPurchase={handleUpdateCardPurchase}
+            onUpdateTransaction={handleUpdateTransaction}
+            onVoidCardPurchase={handleVoidCardPurchase}
+            onVoidTransaction={handleVoidTransaction}
           />
         ) : null}
 
@@ -1181,6 +1198,7 @@ export function App() {
             onCreateRule={handleCreateRecurringRule}
             onMonthChange={setSelectedMonth}
             onOpenLedgerFiltered={openLedgerWithFilters}
+            onUndoPendingPayment={handleVoidTransaction}
             onUpdateRule={handleUpdateRecurringRule}
             uiDensity={uiDensity}
           />

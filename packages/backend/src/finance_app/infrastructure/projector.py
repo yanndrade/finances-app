@@ -351,6 +351,7 @@ class Projector:
 
             movement.origin_type = expected_origin_type
             movement.payment_method = expected_payment_method
+            movement.edit_policy = "editable"
             movement.installment_number = expected_installment_number
             movement.installment_total = expected_installment_total
 
@@ -1965,6 +1966,10 @@ class Projector:
             self._apply_card_purchase_updated(session, event.payload)
             return
 
+        if event.type == "CardPurchaseVoided":
+            self._apply_card_purchase_voided(session, event.payload)
+            return
+
         if event.type == "RecurringRuleCreated":
             self._apply_recurring_rule_created(session, event.payload)
             return
@@ -2215,7 +2220,7 @@ class Projector:
                 category_id=_purchase_category_id,
                 counterparty=None,
                 lifecycle_status="pending",
-                edit_policy="locked",
+                edit_policy="editable",
                 parent_id=purchase_id,
                 group_id=None,
                 transfer_direction=None,
@@ -2335,7 +2340,7 @@ class Projector:
                 category_id=existing.category_id,
                 counterparty=None,
                 lifecycle_status="pending",
-                edit_policy="locked",
+                edit_policy="editable",
                 parent_id=purchase_id,
                 group_id=None,
                 transfer_direction=None,
@@ -2351,6 +2356,33 @@ class Projector:
                 ),
                 source_event_type="CardPurchaseCreated",
             )
+
+    def _apply_card_purchase_voided(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        purchase_id = str(payload["id"])
+        existing = session.get(CardPurchaseProjectionRecord, purchase_id)
+        if existing is None:
+            return
+
+        installments = list(
+            session.query(CardPurchaseInstallmentRecord)
+            .filter(CardPurchaseInstallmentRecord.purchase_id == purchase_id)
+            .all()
+        )
+        self._remove_card_purchase_installments(
+            session,
+            purchase_id=purchase_id,
+            installments=installments,
+        )
+        self._remove_unified_movements_by_parent(session, parent_id=purchase_id)
+        session.query(ReimbursementProjectionRecord).filter(
+            ReimbursementProjectionRecord.source_transaction_id == purchase_id,
+            ReimbursementProjectionRecord.status != "received",
+        ).delete(synchronize_session=False)
+        session.delete(existing)
 
     def _apply_recurring_rule_created(
         self,
@@ -2734,6 +2766,11 @@ class Projector:
         existing.status = new_status
         existing.transfer_id = _optional_string(payload.get("transfer_id"))
         existing.direction = _optional_string(payload.get("direction"))
+        self._sync_pending_from_transaction(
+            session,
+            transaction_id=transaction_id,
+            transaction_status=existing.status,
+        )
         self._sync_reimbursement_from_transaction(
             session,
             transaction_id=transaction_id,
@@ -2793,6 +2830,11 @@ class Projector:
             delta=-self._transaction_balance_impact(existing),
         )
         existing.status = "voided"
+        self._sync_pending_from_transaction(
+            session,
+            transaction_id=transaction_id,
+            transaction_status=existing.status,
+        )
         self._sync_reimbursement_from_transaction(
             session,
             transaction_id=transaction_id,
@@ -2932,6 +2974,44 @@ class Projector:
         if existing_um is not None:
             existing_um.lifecycle_status = "cleared"
             existing_um.edit_policy = "inherited"
+
+    def _sync_pending_from_transaction(
+        self,
+        session: Session,
+        *,
+        transaction_id: str,
+        transaction_status: str,
+    ) -> None:
+        pending_id = self._pending_id_from_transaction_id(transaction_id)
+        if pending_id is None:
+            return
+
+        pending = session.get(PendingProjectionRecord, pending_id)
+        if pending is None:
+            pending_month = self._pending_month_from_id(pending_id)
+            if pending_month is not None:
+                self._ensure_month_pendings(session, month=pending_month)
+                pending = session.get(PendingProjectionRecord, pending_id)
+
+        if pending is None:
+            return
+
+        pending_um = session.get(UnifiedMovementRecord, pending_id)
+
+        if transaction_status == "active":
+            pending.status = "confirmed"
+            pending.transaction_id = transaction_id
+            if pending_um is not None:
+                pending_um.lifecycle_status = "cleared"
+                pending_um.edit_policy = "inherited"
+            return
+
+        pending.status = "pending"
+        pending.transaction_id = None
+        pending.confirmed_at = None
+        if pending_um is not None:
+            pending_um.lifecycle_status = "forecast"
+            pending_um.edit_policy = "inherited"
 
     def _apply_transfer_created(
         self,
@@ -3219,6 +3299,13 @@ class Projector:
             return None
 
         return month
+
+    @staticmethod
+    def _pending_id_from_transaction_id(transaction_id: str) -> str | None:
+        for suffix in (":expense", ":purchase"):
+            if transaction_id.endswith(suffix):
+                return transaction_id[: -len(suffix)]
+        return None
 
     def _due_date_for_month(self, month: str, due_day: int) -> str:
         parsed_month = datetime.strptime(month, "%Y-%m")

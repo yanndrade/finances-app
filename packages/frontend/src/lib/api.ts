@@ -1072,6 +1072,15 @@ export async function updateCardPurchase(
   );
 }
 
+export async function voidCardPurchase(purchaseId: string): Promise<void> {
+  await requestJson<void>(
+    `/api/card-purchases/${encodeURIComponent(purchaseId)}/void`,
+    {
+      method: "POST",
+    },
+  );
+}
+
 export async function payInvoice(
   payload: InvoicePaymentPayload,
 ): Promise<InvoiceSummary> {

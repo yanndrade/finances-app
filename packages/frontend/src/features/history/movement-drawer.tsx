@@ -44,7 +44,7 @@ type MovementDrawerProps = {
   isOpen: boolean;
   onClose: () => void;
   onEdit?: (movement: UnifiedMovement) => void;
-  onVoid?: (movementId: string) => void;
+  onVoid?: (movement: UnifiedMovement) => void;
   onMarkPaid?: (movementId: string) => void;
   isSubmitting?: boolean;
 };
@@ -183,10 +183,16 @@ export function MovementDrawer({
   const isVoided = lifecycle_status === "voided";
   const isForecast = lifecycle_status === "forecast";
   const isPending = lifecycle_status === "pending";
+  const isCardPurchase =
+    origin_type === "card_purchase" ||
+    origin_type === "installment" ||
+    source_event_type === "CardPurchaseCreated" ||
+    source_event_type === "CardPurchaseUpdated";
 
-  const canEdit = isEditable && !isVoided;
-  const canVoid = (isEditable || isInherited) && !isVoided;
-  const canMarkPaid = (isForecast || isPending) && !isVoided;
+  const canEdit = (isEditable || isCardPurchase) && !isVoided;
+  const canVoid = (isEditable || isInherited || isCardPurchase) && !isVoided;
+  const canMarkPaid =
+    origin_type === "recurring" && (isForecast || isPending) && !isVoided;
 
   const accountName =
     accounts.find((a) => a.account_id === account_id)?.name ?? account_id;
@@ -244,7 +250,7 @@ export function MovementDrawer({
               {formatLifecycleStatus(lifecycle_status)}
             </span>
 
-            {isLocked && (
+            {isLocked && !isCardPurchase && (
               <span className="ml-auto flex items-center gap-1 text-[12px] font-semibold text-muted-foreground">
                 <Lock className="h-3 w-3" />
                 Protegido
@@ -414,7 +420,7 @@ export function MovementDrawer({
               {canVoid && (
                 <Button
                   variant="ghost"
-                  onClick={() => onVoid?.(movement.movement_id)}
+                  onClick={() => onVoid?.(movement)}
                   disabled={isSubmitting}
                   className="h-10 px-4 rounded-xl text-finance-expense border border-finance-expense/30 hover:bg-red-50 disabled:opacity-50"
                 >
@@ -449,7 +455,7 @@ export function MovementDrawer({
           )}
 
           {/* Locked hint */}
-          {isLocked && (
+          {isLocked && !isCardPurchase && (
             <div className="flex items-center gap-2 py-1.5 text-muted-foreground text-xs justify-center">
               <Lock className="h-3 w-3" />
               Lançamento gerado automaticamente — não editável.
@@ -460,4 +466,3 @@ export function MovementDrawer({
     </Sheet>
   );
 }
-

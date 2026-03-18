@@ -272,6 +272,21 @@ describe("api timestamp normalization", () => {
     });
   });
 
+  it("calls the card purchase void endpoint", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.voidCardPurchase("purchase-1");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/card-purchases/purchase-1/void",
+    );
+  });
+
   it("requests future card installments for a specific card and month", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(JSON.stringify([])),

@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { QuickAddComposer } from "./quick-add-composer";
 
 import type { AccountSummary, CardSummary } from "../lib/api";
+import type { CategoryOption } from "../lib/categories";
 
 type MatchMediaController = {
   setMatches: (matches: boolean) => void;
@@ -131,9 +132,12 @@ function renderComposer(options?: {
     total_amount: number;
     paid_amount: number;
     remaining_amount: number;
-    purchase_count: number;
-    status: string;
-  }>;
+      purchase_count: number;
+      status: string;
+    }>;
+  categories?: CategoryOption[];
+  onCreateCategory?: (label: string) => boolean;
+  onRemoveCategory?: (categoryId: string) => void;
 }) {
   const onSubmitTransaction = vi.fn(() => Promise.resolve());
   const onSubmitTransfer = vi.fn(() => Promise.resolve());
@@ -150,6 +154,9 @@ function renderComposer(options?: {
       invoices={options?.invoices ?? []}
       preset={options?.preset}
       presetInvoiceId={options?.presetInvoiceId}
+      categories={options?.categories}
+      onCreateCategory={options?.onCreateCategory}
+      onRemoveCategory={options?.onRemoveCategory}
       onSubmitTransaction={onSubmitTransaction}
       onSubmitTransfer={onSubmitTransfer}
       onSubmitCardPurchase={onSubmitCardPurchase}
@@ -314,6 +321,31 @@ describe("QuickAddComposer", () => {
         }),
       );
     });
+  });
+
+  it("does not submit the parent entry when adding a category from the manager", async () => {
+    installMatchMedia(false);
+    const user = userEvent.setup();
+    const onCreateCategory = vi.fn(() => true);
+    const { onSubmitTransaction } = renderComposer({
+      categories: [],
+      onCreateCategory,
+      onRemoveCategory: vi.fn(),
+    });
+
+    await user.type(screen.getByPlaceholderText("0,00"), "2000");
+    const descriptionInput = document.querySelector<HTMLInputElement>("#quick-add-description");
+    expect(descriptionInput).not.toBeNull();
+    await user.type(descriptionInput!, "Cinema");
+    await user.click(screen.getByRole("button", { name: /gerenciar categorias/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/nova categoria/i), "Cinema premium");
+    await user.click(within(dialog).getByRole("button", { name: /^adicionar$/i }));
+
+    expect(onCreateCategory).toHaveBeenCalledWith("Cinema premium");
+    expect(onSubmitTransaction).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("status")).toHaveTextContent(/adicionada/i);
   });
 
   it("hides the account field for card expenses and still submits", async () => {
