@@ -654,6 +654,14 @@ class Projector:
             for row in rows
         ]
 
+    def get_card_purchase_person_id(self, *, purchase_id: str) -> str | None:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                return self._card_purchase_person_id(
+                    session, purchase_id=purchase_id
+                )
+
     def list_balance_states(self) -> list[dict[str, str | int]]:
         with self._lock:
             self.bootstrap()
@@ -2203,6 +2211,7 @@ class Projector:
             "CREDIT_INSTALLMENT" if _installments_count > 1 else "CREDIT_CASH"
         )
         _origin_type = "installment" if _installments_count > 1 else "card_purchase"
+        _purchase_person_id = _optional_string(payload.get("person_id"))
         for allocation in visible_allocations:
             posted_at, competence_month = self._resolve_card_purchase_unified_timing(
                 purchase_date=str(payload["purchase_date"]),
@@ -2246,7 +2255,7 @@ class Projector:
                 card_id=card_id,
                 payment_method=_purchase_method,
                 category_id=_purchase_category_id,
-                counterparty=None,
+                counterparty=_purchase_person_id,
                 lifecycle_status="pending",
                 edit_policy="editable",
                 parent_id=purchase_id,
@@ -2271,8 +2280,39 @@ class Projector:
         if existing is None:
             return
 
+        current_person_id = self._card_purchase_person_id(
+            session, purchase_id=purchase_id
+        )
+        new_purchase_date = (
+            _optional_string(payload.get("purchase_date")) or existing.purchase_date
+        )
+        new_amount = int(payload.get("amount", existing.amount))
+        new_installments_count = int(
+            payload.get("installments_count", existing.installments_count)
+        )
+        new_category_id = (
+            _optional_string(payload.get("category_id")) or existing.category_id
+        )
         new_card_id = _optional_string(payload.get("card_id")) or existing.card_id
-        if new_card_id == existing.card_id:
+        new_description = (
+            _optional_string(payload.get("description"))
+            if "description" in payload
+            else existing.description
+        )
+        new_person_id = (
+            _optional_string(payload.get("person_id"))
+            if "person_id" in payload
+            else current_person_id
+        )
+        if (
+            new_purchase_date == existing.purchase_date
+            and new_amount == existing.amount
+            and new_installments_count == existing.installments_count
+            and new_category_id == existing.category_id
+            and new_card_id == existing.card_id
+            and new_description == existing.description
+            and new_person_id == current_person_id
+        ):
             return
 
         card = session.get(CardProjectionRecord, new_card_id)
@@ -2284,9 +2324,6 @@ class Projector:
             .filter(CardPurchaseInstallmentRecord.purchase_id == purchase_id)
             .all()
         )
-        current_person_id = self._card_purchase_person_id(
-            session, purchase_id=purchase_id
-        )
         self._remove_card_purchase_installments(
             session,
             purchase_id=purchase_id,
@@ -2294,9 +2331,9 @@ class Projector:
         )
 
         allocations = allocate_purchase_installments(
-            purchase_date=existing.purchase_date,
-            total_amount=existing.amount,
-            installments_count=existing.installments_count,
+            purchase_date=new_purchase_date,
+            total_amount=new_amount,
+            installments_count=new_installments_count,
             closing_day=card.closing_day,
             due_day=card.due_day,
         )
@@ -2307,7 +2344,12 @@ class Projector:
             return
 
         first_allocation = visible_allocations[0]
+        existing.purchase_date = new_purchase_date
+        existing.amount = new_amount
+        existing.category_id = new_category_id
         existing.card_id = new_card_id
+        existing.description = new_description
+        existing.installments_count = new_installments_count
         existing.invoice_id = f"{new_card_id}:{first_allocation.reference_month}"
         existing.reference_month = first_allocation.reference_month
         existing.closing_date = first_allocation.closing_date
@@ -2316,7 +2358,7 @@ class Projector:
         self._sync_reimbursement_from_card_purchase(
             session,
             purchase_id=purchase_id,
-            person_id=current_person_id,
+            person_id=new_person_id,
             account_id=card.payment_account_id,
             allocations=visible_allocations,
         )
@@ -2324,15 +2366,13 @@ class Projector:
         self._remove_unified_movements_by_parent(session, parent_id=purchase_id)
 
         _upd_method = (
-            "CREDIT_INSTALLMENT" if existing.installments_count > 1 else "CREDIT_CASH"
+            "CREDIT_INSTALLMENT" if new_installments_count > 1 else "CREDIT_CASH"
         )
-        _origin_type = (
-            "installment" if existing.installments_count > 1 else "card_purchase"
-        )
+        _origin_type = "installment" if new_installments_count > 1 else "card_purchase"
         for allocation in visible_allocations:
             posted_at, competence_month = self._resolve_card_purchase_unified_timing(
-                purchase_date=existing.purchase_date,
-                installments_count=existing.installments_count,
+                purchase_date=new_purchase_date,
+                installments_count=new_installments_count,
                 reference_month=allocation.reference_month,
                 due_date=allocation.due_date,
             )
@@ -2342,10 +2382,10 @@ class Projector:
                     installment_id=installment_id,
                     purchase_id=purchase_id,
                     card_id=new_card_id,
-                    purchase_date=existing.purchase_date,
-                    category_id=existing.category_id,
+                    purchase_date=new_purchase_date,
+                    category_id=new_category_id,
                     installment_number=allocation.installment_number,
-                    installments_count=existing.installments_count,
+                    installments_count=new_installments_count,
                     amount=allocation.amount,
                     invoice_id=f"{new_card_id}:{allocation.reference_month}",
                     reference_month=allocation.reference_month,
@@ -2363,16 +2403,16 @@ class Projector:
                 movement_id=installment_id,
                 kind="expense",
                 origin_type=_origin_type,
-                title=existing.description or existing.category_id,
-                description=existing.description,
+                title=new_description or new_category_id,
+                description=new_description,
                 amount=allocation.amount,
                 posted_at=posted_at,
                 competence_month=competence_month,
                 account_id=card.payment_account_id,
                 card_id=new_card_id,
                 payment_method=_upd_method,
-                category_id=existing.category_id,
-                counterparty=None,
+                category_id=new_category_id,
+                counterparty=new_person_id,
                 lifecycle_status="pending",
                 edit_policy="editable",
                 parent_id=purchase_id,
@@ -2380,15 +2420,15 @@ class Projector:
                 transfer_direction=None,
                 installment_number=(
                     allocation.installment_number
-                    if existing.installments_count > 1
+                    if new_installments_count > 1
                     else None
                 ),
                 installment_total=(
-                    existing.installments_count
-                    if existing.installments_count > 1
+                    new_installments_count
+                    if new_installments_count > 1
                     else None
                 ),
-                source_event_type="CardPurchaseCreated",
+                source_event_type="CardPurchaseUpdated",
             )
 
     def _apply_card_purchase_voided(
@@ -4320,7 +4360,7 @@ class Projector:
         if installments_count <= 1:
             return purchase_date, purchase_date[:7]
 
-        return f"{due_date}T00:00:00Z", reference_month
+        return purchase_date, reference_month
 
     def _upsert_unified_movement(
         self,

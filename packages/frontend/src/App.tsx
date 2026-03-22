@@ -723,7 +723,7 @@ export function App() {
   ): Promise<void> {
     await runMutation(
       () => updateCardPurchase(purchaseId, payload),
-      "Cartão da compra atualizado com sucesso.",
+      "Compra no cartao atualizada com sucesso.",
     );
   }
 

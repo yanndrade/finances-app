@@ -909,6 +909,17 @@ export function QuickAddComposer({
                 />
                 <FieldError message={validationErrors.installments} />
               </div>
+              <div className="md:col-span-2 space-y-2">
+                <Label htmlFor="quick-add-person-card">Pessoa relacionada</Label>
+                <Input
+                  id="quick-add-person-card"
+                  className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
+                  placeholder="Opcional â€” para rastrear reembolsos"
+                  maxLength={100}
+                  value={personId}
+                  onChange={(event) => setPersonId(event.target.value)}
+                />
+              </div>
             </>
           ) : (
             <>

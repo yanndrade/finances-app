@@ -11,6 +11,7 @@ import {
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import {
+  fetchCardPurchases,
   type CardPurchaseUpdatePayload,
   fetchMovements,
   fetchMovementsSummary,
@@ -72,7 +73,13 @@ type EditableMovementForm = {
 
 type CardPurchaseEditForm = {
   purchaseId: string;
+  occurredAt: string;
+  amount: string;
+  installmentsCount: string;
+  categoryId: string;
   cardId: string;
+  description: string;
+  personId: string;
   title: string;
 };
 
@@ -146,6 +153,9 @@ export function HistoryPage({
   const [editingCardPurchase, setEditingCardPurchase] =
     useState<CardPurchaseEditForm | null>(null);
   const editingCategoryOptions = getCategoryOptions(editingMovement?.categoryId);
+  const editingCardPurchaseCategoryOptions = getCategoryOptions(
+    editingCardPurchase?.categoryId,
+  );
 
   const [movementPage, setMovementPage] = useState<MovementPage>(EMPTY_PAGE);
   const [summary, setSummary] = useState<MovementSummary>(EMPTY_SUMMARY);
@@ -282,14 +292,28 @@ export function HistoryPage({
     setCurrentPage(page);
   }
 
-  function handleEditMovement(movement: UnifiedMovement) {
+  async function handleEditMovement(movement: UnifiedMovement) {
     if (isCardPurchaseMovement(movement)) {
       if (onUpdateCardPurchase === undefined) {
         return;
       }
-      const nextForm = buildCardPurchaseEditForm(movement);
-      if (nextForm !== null) {
-        setEditingCardPurchase(nextForm);
+      const purchaseId = resolveCardPurchaseId(movement);
+      if (purchaseId === null) {
+        return;
+      }
+
+      try {
+        const purchases = await fetchCardPurchases();
+        const purchase = purchases.find((item) => item.purchase_id === purchaseId);
+        const nextForm = buildCardPurchaseEditForm(movement, purchase ?? null);
+        if (nextForm !== null) {
+          setEditingCardPurchase(nextForm);
+          setEditingMovement(null);
+        } else {
+          onError?.(new Error("Nao foi possivel localizar a compra no cartao."));
+        }
+      } catch (error) {
+        onError?.(error);
       }
       return;
     }
@@ -330,7 +354,16 @@ export function HistoryPage({
     }
 
     await onUpdateCardPurchase(editingCardPurchase.purchaseId, {
+      purchaseDate: toIsoDateTime(editingCardPurchase.occurredAt),
+      amountInCents: toCents(editingCardPurchase.amount),
+      installmentsCount: Math.max(
+        1,
+        Number.parseInt(editingCardPurchase.installmentsCount, 10) || 1,
+      ),
+      categoryId: editingCardPurchase.categoryId,
       cardId: editingCardPurchase.cardId,
+      description: editingCardPurchase.description,
+      personId: editingCardPurchase.personId || null,
     });
 
     setEditingCardPurchase(null);
@@ -732,39 +765,159 @@ export function HistoryPage({
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Editar compra no cartao</DialogTitle>
             <DialogDescription>
-              Reatribua a compra para outro cartao sem perder o historico da
-              parcela.
+              Ajuste a compra para reprojetar parcelas, faturas e reembolsos
+              relacionados.
             </DialogDescription>
           </DialogHeader>
 
           {editingCardPurchase ? (
             <form className="space-y-4" onSubmit={handleCardPurchaseEditSubmit}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-2 text-sm font-medium text-foreground">
+                  Data da compra
+                  <Input
+                    type="datetime-local"
+                    value={editingCardPurchase.occurredAt}
+                    onChange={(event) =>
+                      setEditingCardPurchase((current) =>
+                        current === null
+                          ? null
+                          : {
+                              ...current,
+                              occurredAt: event.target.value,
+                            },
+                      )
+                    }
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm font-medium text-foreground">
+                  Valor total
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={editingCardPurchase.amount}
+                    onChange={(event) =>
+                      setEditingCardPurchase((current) =>
+                        current === null
+                          ? null
+                          : {
+                              ...current,
+                              amount: event.target.value,
+                            },
+                      )
+                    }
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm font-medium text-foreground">
+                  Cartao da compra
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={editingCardPurchase.cardId}
+                    onChange={(event) =>
+                      setEditingCardPurchase((current) =>
+                        current === null
+                          ? null
+                          : {
+                              ...current,
+                              cardId: event.target.value,
+                            },
+                      )
+                    }
+                  >
+                    {cards.map((card) => (
+                      <option key={card.card_id} value={card.card_id}>
+                        {card.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-2 text-sm font-medium text-foreground">
+                  Parcelas
+                  <Input
+                    type="number"
+                    min="1"
+                    max="48"
+                    value={editingCardPurchase.installmentsCount}
+                    onChange={(event) =>
+                      setEditingCardPurchase((current) =>
+                        current === null
+                          ? null
+                          : {
+                              ...current,
+                              installmentsCount: event.target.value,
+                            },
+                      )
+                    }
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm font-medium text-foreground">
+                  Categoria
+                  <Input
+                    list="history-edit-card-purchase-category-options"
+                    value={editingCardPurchase.categoryId}
+                    onChange={(event) =>
+                      setEditingCardPurchase((current) =>
+                        current === null
+                          ? null
+                          : {
+                              ...current,
+                              categoryId: event.target.value,
+                            },
+                      )
+                    }
+                  />
+                  <datalist id="history-edit-card-purchase-category-options">
+                    {editingCardPurchaseCategoryOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </datalist>
+                </label>
+
+                <label className="space-y-2 text-sm font-medium text-foreground">
+                  Pessoa
+                  <Input
+                    value={editingCardPurchase.personId}
+                    onChange={(event) =>
+                      setEditingCardPurchase((current) =>
+                        current === null
+                          ? null
+                          : {
+                              ...current,
+                              personId: event.target.value,
+                            },
+                      )
+                    }
+                  />
+                </label>
+              </div>
+
               <label className="space-y-2 text-sm font-medium text-foreground block">
-                Cartao da compra
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  value={editingCardPurchase.cardId}
+                Descricao
+                <textarea
+                  className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={editingCardPurchase.description}
                   onChange={(event) =>
                     setEditingCardPurchase((current) =>
                       current === null
                         ? null
                         : {
                             ...current,
-                            cardId: event.target.value,
+                            description: event.target.value,
                           },
                     )
                   }
-                >
-                  {cards.map((card) => (
-                    <option key={card.card_id} value={card.card_id}>
-                      {card.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
 
               <p className="text-sm text-muted-foreground">
@@ -851,16 +1004,30 @@ function buildEditableMovementForm(
 
 function buildCardPurchaseEditForm(
   movement: UnifiedMovement,
+  purchase: {
+    purchase_date: string;
+    amount: number;
+    category_id: string;
+    card_id: string;
+    description: string | null;
+    installments_count: number;
+  } | null,
 ): CardPurchaseEditForm | null {
   const purchaseId = resolveCardPurchaseId(movement);
-  if (!isCardPurchaseMovement(movement) || purchaseId === null || movement.card_id === null) {
+  if (!isCardPurchaseMovement(movement) || purchaseId === null || purchase === null) {
     return null;
   }
 
   return {
     purchaseId,
-    cardId: movement.card_id,
-    title: movement.description ?? movement.title,
+    occurredAt: toDateTimeInputValue(purchase.purchase_date),
+    amount: (purchase.amount / 100).toFixed(2),
+    installmentsCount: String(purchase.installments_count),
+    categoryId: purchase.category_id,
+    cardId: purchase.card_id,
+    description: purchase.description ?? movement.description ?? movement.title,
+    personId: movement.counterparty ?? "",
+    title: purchase.description ?? movement.description ?? movement.title,
   };
 }
 

@@ -6,6 +6,8 @@ from typing import Protocol
 from finance_app.domain.cards import parse_utc_timestamp
 from finance_app.domain.events import NewEvent
 
+_UNSET = object()
+
 
 class CardPurchaseServiceError(Exception):
     pass
@@ -51,6 +53,8 @@ class CardPurchaseProjector(Protocol):
         card_id: str | None = None,
         reference_month_from: str | None = None,
     ) -> list[dict[str, str | int | None]]: ...
+
+    def get_card_purchase_person_id(self, *, purchase_id: str) -> str | None: ...
 
 
 class CardReader(Protocol):
@@ -123,7 +127,13 @@ class CardPurchaseService:
         self,
         purchase_id: str,
         *,
-        card_id: str,
+        purchase_date: object = _UNSET,
+        amount: object = _UNSET,
+        installments_count: object = _UNSET,
+        category_id: object = _UNSET,
+        card_id: object = _UNSET,
+        description: object = _UNSET,
+        person_id: object = _UNSET,
     ) -> dict[str, str | int | None]:
         self._sync_projections()
         existing = self._find_card_purchase(purchase_id)
@@ -132,18 +142,79 @@ class CardPurchaseService:
                 f"Card purchase '{purchase_id}' was not found."
             )
 
-        if not card_id.strip():
-            raise CardPurchaseServiceError("card_id is required.")
+        current_person_id = self._projector.get_card_purchase_person_id(
+            purchase_id=purchase_id
+        )
 
-        if str(existing["card_id"]) == card_id:
+        next_purchase_date = (
+            str(purchase_date)
+            if purchase_date is not _UNSET and purchase_date is not None
+            else str(existing["purchase_date"])
+        )
+        next_amount = (
+            int(amount) if amount is not _UNSET and amount is not None else int(existing["amount"])
+        )
+        next_installments_count = (
+            int(installments_count)
+            if installments_count is not _UNSET and installments_count is not None
+            else int(existing["installments_count"])
+        )
+        next_category_id = (
+            str(category_id).strip()
+            if category_id is not _UNSET and category_id is not None
+            else str(existing["category_id"])
+        )
+        next_card_id = (
+            str(card_id).strip()
+            if card_id is not _UNSET and card_id is not None
+            else str(existing["card_id"])
+        )
+        next_description = (
+            None
+            if description is not _UNSET and description is None
+            else str(description).strip() or None
+            if description is not _UNSET
+            else existing.get("description")
+        )
+        next_person_id = (
+            None
+            if person_id is not _UNSET and person_id is None
+            else str(person_id).strip() or None
+            if person_id is not _UNSET
+            else current_person_id
+        )
+
+        self._validate_payload(
+            purchase_date=next_purchase_date,
+            amount=next_amount,
+            installments_count=next_installments_count,
+            category_id=next_category_id,
+            card_id=next_card_id,
+        )
+        self._card_reader.get_card(next_card_id)
+
+        if (
+            next_purchase_date == str(existing["purchase_date"])
+            and next_amount == int(existing["amount"])
+            and next_installments_count == int(existing["installments_count"])
+            and next_category_id == str(existing["category_id"])
+            and next_card_id == str(existing["card_id"])
+            and next_description == existing.get("description")
+            and next_person_id == current_person_id
+        ):
             return existing
 
-        self._card_reader.get_card(card_id)
         self._append_event(
             "CardPurchaseUpdated",
             {
                 "id": purchase_id,
-                "card_id": card_id,
+                "purchase_date": next_purchase_date,
+                "amount": next_amount,
+                "installments_count": next_installments_count,
+                "category_id": next_category_id,
+                "card_id": next_card_id,
+                "description": next_description,
+                "person_id": next_person_id,
             },
         )
         return self.get_card_purchase(purchase_id)

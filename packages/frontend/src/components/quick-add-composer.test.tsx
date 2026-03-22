@@ -309,6 +309,8 @@ describe("QuickAddComposer", () => {
 
     await user.type(screen.getByPlaceholderText("0,00"), "4500");
     await user.selectOptions(screen.getByLabelText(/modo de pagamento/i), "CARD");
+    await user.type(screen.getByLabelText(/pessoa relacionada/i), "empresa");
+    await user.type(screen.getByLabelText(/pessoa relacionada/i), "empresa");
     await user.type(screen.getByLabelText(/^descrição$/i), "Taxi{Enter}");
 
     await waitFor(() => {
@@ -356,6 +358,7 @@ describe("QuickAddComposer", () => {
     await user.type(screen.getByPlaceholderText("0,00"), "21264");
     await user.type(screen.getByLabelText(/^descrição$/i), "Ventilador");
     await user.selectOptions(screen.getByLabelText(/modo de pagamento/i), "CARD");
+    await user.type(screen.getByLabelText(/pessoa relacionada/i), "empresa");
 
     expect(screen.queryByLabelText(/^conta$/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/^cartão$/i)).toBeInTheDocument();
@@ -368,6 +371,7 @@ describe("QuickAddComposer", () => {
           amountInCents: 21264,
           description: "Ventilador",
           cardId: "card-1",
+          personId: "empresa",
         }),
       );
     });

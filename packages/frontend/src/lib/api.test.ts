@@ -240,7 +240,7 @@ describe("api timestamp normalization", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/card-purchases?card=card-1");
   });
 
-  it("sends card_id when reassigning a card purchase", async () => {
+  it("sends the editable fields when updating a card purchase", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -261,14 +261,26 @@ describe("api timestamp normalization", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await api.updateCardPurchase("purchase-1", {
+      purchaseDate: "2026-03-10T14:30:00Z",
+      amountInCents: 120_00,
+      installmentsCount: 4,
+      categoryId: "transport",
       cardId: "card-2",
+      description: "Taxi executivo",
+      personId: "empresa",
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PATCH");
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/card-purchases/purchase-1");
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      purchase_date: "2026-03-10T14:30:00Z",
+      amount: 120_00,
+      installments_count: 4,
+      category_id: "transport",
       card_id: "card-2",
+      description: "Taxi executivo",
+      person_id: "empresa",
     });
   });
 

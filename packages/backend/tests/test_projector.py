@@ -825,7 +825,7 @@ def test_projector_distributes_installments_into_future_invoice_cycles(
     ]
 
 
-def test_projector_reassigns_card_purchase_without_duplicating_invoices(
+def test_projector_reprojects_card_purchase_update_without_duplicating_invoices(
     tmp_path: Path,
 ) -> None:
     event_store = EventStore(
@@ -873,9 +873,11 @@ def test_projector_reassigns_card_purchase_without_duplicating_invoices(
                 "id": "purchase-1",
                 "purchase_date": "2026-03-11T12:00:00Z",
                 "amount": 90_00,
+                "installments_count": 3,
                 "category_id": "food",
                 "card_id": "card-1",
                 "description": "Lunch",
+                "person_id": "empresa",
             },
             version=1,
         )
@@ -892,7 +894,13 @@ def test_projector_reassigns_card_purchase_without_duplicating_invoices(
             timestamp="2026-03-12T12:00:00Z",
             payload={
                 "id": "purchase-1",
+                "purchase_date": "2026-03-08T10:30:00Z",
+                "amount": 120_00,
+                "installments_count": 4,
+                "category_id": "transport",
                 "card_id": "card-2",
+                "description": "Taxi",
+                "person_id": "cliente",
             },
             version=1,
         )
@@ -905,12 +913,12 @@ def test_projector_reassigns_card_purchase_without_duplicating_invoices(
     assert projector.list_card_purchases(card_id="card-2") == [
         {
             "purchase_id": "purchase-1",
-            "purchase_date": "2026-03-11T12:00:00Z",
-            "amount": 90_00,
-            "category_id": "food",
+            "purchase_date": "2026-03-08T10:30:00Z",
+            "amount": 120_00,
+            "category_id": "transport",
             "card_id": "card-2",
-            "description": "Lunch",
-            "installments_count": 1,
+            "description": "Taxi",
+            "installments_count": 4,
             "invoice_id": "card-2:2026-03",
             "reference_month": "2026-03",
             "closing_date": "2026-03-15",
@@ -920,18 +928,179 @@ def test_projector_reassigns_card_purchase_without_duplicating_invoices(
     assert projector.list_invoices(card_id="card-1") == []
     assert projector.list_invoices(card_id="card-2") == [
         {
+            "invoice_id": "card-2:2026-06",
+            "card_id": "card-2",
+            "reference_month": "2026-06",
+            "closing_date": "2026-06-15",
+            "due_date": "2026-06-25",
+            "total_amount": 30_00,
+            "paid_amount": 0,
+            "remaining_amount": 30_00,
+            "purchase_count": 1,
+            "status": "open",
+        },
+        {
+            "invoice_id": "card-2:2026-05",
+            "card_id": "card-2",
+            "reference_month": "2026-05",
+            "closing_date": "2026-05-15",
+            "due_date": "2026-05-25",
+            "total_amount": 30_00,
+            "paid_amount": 0,
+            "remaining_amount": 30_00,
+            "purchase_count": 1,
+            "status": "open",
+        },
+        {
+            "invoice_id": "card-2:2026-04",
+            "card_id": "card-2",
+            "reference_month": "2026-04",
+            "closing_date": "2026-04-15",
+            "due_date": "2026-04-25",
+            "total_amount": 30_00,
+            "paid_amount": 0,
+            "remaining_amount": 30_00,
+            "purchase_count": 1,
+            "status": "open",
+        },
+        {
             "invoice_id": "card-2:2026-03",
             "card_id": "card-2",
             "reference_month": "2026-03",
             "closing_date": "2026-03-15",
             "due_date": "2026-03-25",
-            "total_amount": 90_00,
+            "total_amount": 30_00,
             "paid_amount": 0,
-            "remaining_amount": 90_00,
+            "remaining_amount": 30_00,
             "purchase_count": 1,
             "status": "open",
         }
     ]
+    assert projector.list_reimbursements() == [
+        {
+            "transaction_id": "purchase-1:4",
+            "person_id": "cliente",
+            "amount": 30_00,
+            "amount_received": 0,
+            "status": "pending",
+            "account_id": "acc-2",
+            "occurred_at": "2026-06-15T00:00:00Z",
+            "expected_at": None,
+            "received_at": None,
+            "receipt_transaction_id": None,
+            "notes": None,
+        },
+        {
+            "transaction_id": "purchase-1:3",
+            "person_id": "cliente",
+            "amount": 30_00,
+            "amount_received": 0,
+            "status": "pending",
+            "account_id": "acc-2",
+            "occurred_at": "2026-05-15T00:00:00Z",
+            "expected_at": None,
+            "received_at": None,
+            "receipt_transaction_id": None,
+            "notes": None,
+        },
+        {
+            "transaction_id": "purchase-1:2",
+            "person_id": "cliente",
+            "amount": 30_00,
+            "amount_received": 0,
+            "status": "pending",
+            "account_id": "acc-2",
+            "occurred_at": "2026-04-15T00:00:00Z",
+            "expected_at": None,
+            "received_at": None,
+            "receipt_transaction_id": None,
+            "notes": None,
+        },
+        {
+            "transaction_id": "purchase-1:1",
+            "person_id": "cliente",
+            "amount": 30_00,
+            "amount_received": 0,
+            "status": "pending",
+            "account_id": "acc-2",
+            "occurred_at": "2026-03-15T00:00:00Z",
+            "expected_at": None,
+            "received_at": None,
+            "receipt_transaction_id": None,
+            "notes": None,
+        },
+    ]
+
+
+def test_projector_keeps_installment_history_on_purchase_day(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-15T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-15T12:00:00Z",
+                "amount": 90_00,
+                "installments_count": 3,
+                "category_id": "electronics",
+                "card_id": "card-1",
+                "description": "Notebook",
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+
+    april_installments = projector.list_unified_movements(
+        competence_month="2026-04",
+        scope="installments",
+    )
+
+    assert april_installments["items"][0]["movement_id"] == "purchase-1:1"
+    assert april_installments["items"][0]["posted_at"] == "2026-03-15T12:00:00Z"
+    assert april_installments["items"][0]["competence_month"] == "2026-04"
 
 
 def test_projector_voids_card_purchase_and_removes_open_projections(

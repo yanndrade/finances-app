@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import * as api from "../../lib/api";
@@ -85,6 +85,7 @@ describe("HistoryPage mobile scope behavior", () => {
         reimbursements: 0,
       },
     });
+    vi.spyOn(api, "fetchCardPurchases").mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -288,7 +289,7 @@ describe("HistoryPage mobile scope behavior", () => {
     expect(onConfirmPending).toHaveBeenCalledWith("rule-rent:2026-03");
   });
 
-  it("allows reassigning a card purchase from the history drawer", async () => {
+  it("allows editing a card purchase from the history drawer", async () => {
     const user = userEvent.setup();
     const onUpdateCardPurchase = vi
       .fn<(purchaseId: string, payload: api.CardPurchaseUpdatePayload) => Promise<void>>()
@@ -309,7 +310,7 @@ describe("HistoryPage mobile scope behavior", () => {
           card_id: "card-1",
           payment_method: "CREDIT_INSTALLMENT",
           category_id: "electronics",
-          counterparty: null,
+          counterparty: "empresa",
           lifecycle_status: "pending",
           edit_policy: "locked",
           parent_id: "purchase-1",
@@ -325,6 +326,21 @@ describe("HistoryPage mobile scope behavior", () => {
       page_size: 50,
       pages: 1,
     });
+    vi.mocked(api.fetchCardPurchases).mockResolvedValue([
+      {
+        purchase_id: "purchase-1",
+        purchase_date: "2026-03-10T14:30:00Z",
+        amount: 900_00,
+        category_id: "electronics",
+        card_id: "card-1",
+        description: "Notebook",
+        installments_count: 3,
+        invoice_id: "card-1:2026-03",
+        reference_month: "2026-03",
+        closing_date: "2026-03-10",
+        due_date: "2026-03-20",
+      },
+    ]);
 
     render(
       <HistoryPage
@@ -358,11 +374,27 @@ describe("HistoryPage mobile scope behavior", () => {
       screen.getByRole("button", { name: /notebook - parcela 1\/3/i }),
     );
     await user.click(screen.getByRole("button", { name: /^editar$/i }));
-    await user.selectOptions(screen.getByLabelText(/cartao da compra/i), "card-2");
-    await user.click(screen.getByRole("button", { name: /salvar altera/i }));
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText(/valor total/i)).toHaveValue(900);
+    });
+    await user.clear(within(dialog).getByLabelText(/valor total/i));
+    await user.type(within(dialog).getByLabelText(/valor total/i), "1200");
+    await user.clear(within(dialog).getByLabelText(/^parcelas$/i));
+    await user.type(within(dialog).getByLabelText(/^parcelas$/i), "4");
+    await user.clear(within(dialog).getByLabelText(/^pessoa$/i));
+    await user.type(within(dialog).getByLabelText(/^pessoa$/i), "cliente");
+    await user.selectOptions(within(dialog).getByLabelText(/cartao da compra/i), "card-2");
+    await user.click(within(dialog).getByRole("button", { name: /salvar altera/i }));
 
     expect(onUpdateCardPurchase).toHaveBeenCalledWith("purchase-1", {
+      purchaseDate: "2026-03-10T14:30:00Z",
+      amountInCents: 1200_00,
+      installmentsCount: 4,
+      categoryId: "electronics",
       cardId: "card-2",
+      description: "Notebook",
+      personId: "cliente",
     });
   });
 

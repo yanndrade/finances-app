@@ -57,7 +57,13 @@ class CreateCardPurchaseRequest(BaseModel):
 
 
 class UpdateCardPurchaseRequest(BaseModel):
-    card_id: str = Field(min_length=1)
+    purchase_date: str | None = None
+    amount: int | None = Field(default=None, gt=0)
+    installments_count: int | None = Field(default=None, ge=1)
+    category_id: str | None = Field(default=None, min_length=1)
+    card_id: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    person_id: str | None = None
 
 
 class CreateInvoicePaymentRequest(BaseModel):
@@ -173,10 +179,16 @@ def build_cards_router(
         purchase_id: str,
         payload: UpdateCardPurchaseRequest,
     ) -> dict[str, str | int | None]:
+        updates = payload.model_dump(exclude_unset=True)
+        if not updates:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No fields provided to update.",
+            )
         try:
             return card_purchase_service.update_card_purchase(
                 purchase_id,
-                card_id=payload.card_id,
+                **updates,
             )
         except (AccountNotFoundError, CardNotFoundError) as exc:
             raise HTTPException(

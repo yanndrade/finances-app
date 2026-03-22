@@ -323,7 +323,13 @@ export type CardPurchasePayload = {
 };
 
 export type CardPurchaseUpdatePayload = {
-  cardId: string;
+  purchaseDate?: string;
+  amountInCents?: number;
+  installmentsCount?: number;
+  categoryId?: string;
+  cardId?: string;
+  description?: string | null;
+  personId?: string | null;
 };
 
 export type InvoicePaymentPayload = {
@@ -1061,13 +1067,33 @@ export async function updateCardPurchase(
   purchaseId: string,
   payload: CardPurchaseUpdatePayload,
 ): Promise<CardPurchaseSummary> {
+  const body = {
+    ...(payload.purchaseDate !== undefined
+      ? { purchase_date: normalizeTimestampForApi(payload.purchaseDate) }
+      : {}),
+    ...(payload.amountInCents !== undefined
+      ? { amount: payload.amountInCents }
+      : {}),
+    ...(payload.installmentsCount !== undefined
+      ? { installments_count: payload.installmentsCount }
+      : {}),
+    ...(payload.categoryId !== undefined
+      ? { category_id: payload.categoryId }
+      : {}),
+    ...(payload.cardId !== undefined ? { card_id: payload.cardId } : {}),
+    ...(payload.description !== undefined
+      ? { description: payload.description || null }
+      : {}),
+    ...(payload.personId !== undefined
+      ? { person_id: payload.personId || null }
+      : {}),
+  };
+
   return requestJson<CardPurchaseSummary>(
     `/api/card-purchases/${encodeURIComponent(purchaseId)}`,
     {
       method: "PATCH",
-      body: JSON.stringify({
-        card_id: payload.cardId,
-      }),
+      body: JSON.stringify(body),
     },
   );
 }
