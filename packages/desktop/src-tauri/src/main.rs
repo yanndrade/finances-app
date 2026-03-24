@@ -1,14 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::ffi::OsStr;
+use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::mem::{size_of, zeroed};
 use std::net::{SocketAddr, TcpStream};
 #[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
+use std::os::windows::ffi::OsStrExt;
 #[cfg(target_os = "windows")]
-use std::os::windows::{
-    io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle},
-};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,9 +27,10 @@ use windows_sys::Win32::{
     Foundation::HANDLE,
     System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-        SetInformationJobObject, TerminateJobObject,
+        SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     },
+    UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK},
 };
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -105,20 +108,30 @@ impl RuntimeState {
 
 struct BackendProcess {
     child: Child,
+    startup_log_path: PathBuf,
     #[cfg(target_os = "windows")]
     job: Option<OwnedHandle>,
 }
 
 impl BackendProcess {
-    fn new(child: Child) -> Self {
+    fn new(child: Child, startup_log_path: PathBuf) -> Self {
         #[cfg(target_os = "windows")]
         let job = attach_backend_job(&child).ok();
 
         Self {
             child,
+            startup_log_path,
             #[cfg(target_os = "windows")]
             job,
         }
+    }
+
+    fn startup_log_path(&self) -> &Path {
+        &self.startup_log_path
+    }
+
+    fn try_wait(&mut self) -> Result<Option<std::process::ExitStatus>, std::io::Error> {
+        self.child.try_wait()
     }
 
     fn terminate(mut self) {
@@ -168,7 +181,7 @@ fn set_autostart_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
 }
 
 fn main() {
-    let app = tauri::Builder::default()
+    let app = match tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             let _ = show_main_window(&app);
         }))
@@ -183,8 +196,8 @@ fn main() {
             set_autostart_enabled
         ])
         .setup(|app| {
-            let backend_process = spawn_backend_process(&app.handle())?;
-            if let Err(error) = wait_for_backend_ready() {
+            let mut backend_process = spawn_backend_process(&app.handle())?;
+            if let Err(error) = wait_for_backend_ready(&mut backend_process) {
                 backend_process.terminate();
                 return Err(error);
             }
@@ -206,7 +219,15 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to build finances desktop shell");
+    {
+        Ok(app) => app,
+        Err(error) => {
+            let message = format!("Failed to start MeuCofri desktop shell: {error}");
+            show_startup_error_dialog(&message);
+            eprintln!("{message}");
+            return;
+        }
+    };
 
     app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Ready) {
@@ -309,6 +330,9 @@ fn show_main_window(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) {
         let backend_dir = resolve_dev_backend_dir()?;
+        let startup_log_path = resolve_backend_startup_log_path(None);
+        let startup_log_file = open_startup_log_file(&startup_log_path)?;
+        let stdout_log_file = startup_log_file.try_clone()?;
         let mut command = Command::new("uv");
         command
             .arg("run")
@@ -319,11 +343,11 @@ fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std:
             .arg(BACKEND_PORT.to_string())
             .current_dir(backend_dir)
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stdout(Stdio::from(stdout_log_file))
+            .stderr(Stdio::from(startup_log_file));
         apply_backend_spawn_options(&mut command);
         let child = command.spawn()?;
-        return Ok(BackendProcess::new(child));
+        return Ok(BackendProcess::new(child, startup_log_path));
     }
 
     let backend_path = resolve_release_backend_path(app)?;
@@ -332,6 +356,9 @@ fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std:
         .ok_or("backend executable directory is missing")?
         .to_path_buf();
     let backend_data_dir = resolve_release_data_dir(app, &working_dir);
+    let startup_log_path = resolve_backend_startup_log_path(Some(&backend_data_dir));
+    let startup_log_file = open_startup_log_file(&startup_log_path)?;
+    let stdout_log_file = startup_log_file.try_clone()?;
     let certificate_dir = backend_data_dir.join("certs");
     std::fs::create_dir_all(&certificate_dir)?;
     let projection_database_path = backend_data_dir.join("app.db");
@@ -343,6 +370,9 @@ fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std:
         .arg(BACKEND_BIND_HOST)
         .arg("--port")
         .arg(BACKEND_PORT.to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout_log_file))
+        .stderr(Stdio::from(startup_log_file))
         .env(
             "FINANCE_APP_DATABASE_PATH",
             projection_database_path.as_os_str(),
@@ -352,13 +382,10 @@ fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std:
             event_database_path.as_os_str(),
         )
         .env("FINANCE_APP_CERT_DIR", certificate_dir.as_os_str())
-        .current_dir(working_dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .current_dir(working_dir);
     apply_backend_spawn_options(&mut command);
     let child = command.spawn()?;
-    Ok(BackendProcess::new(child))
+    Ok(BackendProcess::new(child, startup_log_path))
 }
 
 fn apply_backend_spawn_options(command: &mut Command) {
@@ -485,19 +512,76 @@ fn resolve_release_backend_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std:
     Err(format!("unable to locate `{binary_name}` sidecar for desktop runtime").into())
 }
 
-fn wait_for_backend_ready() -> Result<(), Box<dyn std::error::Error>> {
+fn wait_for_backend_ready(
+    backend_process: &mut BackendProcess,
+) -> Result<(), Box<dyn std::error::Error>> {
     let socket_address: SocketAddr = format!("{BACKEND_HEALTH_HOST}:{BACKEND_PORT}").parse()?;
     let started_at = Instant::now();
 
     while started_at.elapsed() < BACKEND_BOOTSTRAP_TIMEOUT {
+        if let Some(exit_status) = backend_process.try_wait()? {
+            return Err(format!(
+                "backend exited before becoming ready (status: {exit_status:?}). Log file: {}",
+                backend_process.startup_log_path().display()
+            )
+            .into());
+        }
         if backend_healthcheck(&socket_address) {
             return Ok(());
         }
         thread::sleep(Duration::from_millis(250));
     }
 
-    Err("backend failed to become ready within timeout".into())
+    Err(format!(
+        "backend failed to become ready within timeout. Log file: {}",
+        backend_process.startup_log_path().display()
+    )
+    .into())
 }
+
+fn resolve_backend_startup_log_path(data_dir: Option<&Path>) -> PathBuf {
+    match data_dir {
+        Some(path) => path.join("backend-startup.log"),
+        None => std::env::temp_dir().join("meucofri-backend-startup.log"),
+    }
+}
+
+fn open_startup_log_file(path: &Path) -> Result<std::fs::File, std::io::Error> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+}
+
+#[cfg(target_os = "windows")]
+fn show_startup_error_dialog(message: &str) {
+    let title = "MeuCofri";
+    let message_wide: Vec<u16> = OsStr::new(message)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let title_wide: Vec<u16> = OsStr::new(title)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            message_wide.as_ptr(),
+            title_wide.as_ptr(),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn show_startup_error_dialog(_message: &str) {}
 
 fn backend_healthcheck(address: &SocketAddr) -> bool {
     let mut stream = match TcpStream::connect_timeout(address, Duration::from_millis(500)) {
