@@ -53,12 +53,12 @@ describe("FilterPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /filtros avancados/i }));
 
-    expect(screen.getByLabelText("Tipo")).toHaveValue("adjustment");
-    expect(screen.getByLabelText("Origem")).toHaveValue("imported");
-    expect(screen.getByLabelText("Situacao")).toHaveValue("active");
-    expect(screen.getByLabelText("Metodo")).toHaveValue("CARD");
-    expect(screen.getByLabelText("Conta")).toHaveValue("acc-legacy");
-    expect(screen.getByLabelText("Cartao")).toHaveValue("card-legacy");
-    expect(screen.getByLabelText("Categoria")).toHaveValue("custom-category");
+    expect(screen.getByRole("combobox", { name: "Tipo" })).toHaveTextContent("Ajuste");
+    expect(screen.getByRole("combobox", { name: "Origem" })).toHaveTextContent("Importado");
+    expect(screen.getByRole("combobox", { name: "Situacao" })).toHaveTextContent("Compensada");
+    expect(screen.getByRole("combobox", { name: "Metodo" })).toHaveTextContent("Cartao");
+    expect(screen.getByRole("combobox", { name: "Conta" })).toHaveTextContent("acc-legacy");
+    expect(screen.getByRole("combobox", { name: "Cartao" })).toHaveTextContent("card-legacy");
+    expect(screen.getByRole("combobox", { name: "Categoria" })).toHaveTextContent("Custom Category");
   });
 });

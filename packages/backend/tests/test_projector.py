@@ -2872,6 +2872,242 @@ def test_projector_keeps_confirmed_recurring_wallet_payment_as_single_fixed_move
     assert fixed_page_after_void["items"][0]["lifecycle_status"] == "forecast"
 
 
+def test_projector_repairs_legacy_confirmed_recurring_wallet_projection_on_bootstrap(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="RecurringRuleCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "rule-rent",
+                "name": "Rent",
+                "amount": 25_00,
+                "due_day": 5,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "rent",
+                "description": "Apartment rent",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="PendingConfirmed",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "pending_id": "rule-rent:2026-03",
+                "transaction_id": "rule-rent:2026-03:expense",
+                "confirmed_at": "2026-03-02T12:02:00Z",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "rule-rent:2026-03:expense",
+                "occurred_at": "2026-03-05T00:00:00Z",
+                "type": "expense",
+                "amount": 25_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "rent",
+                "description": "Apartment rent",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+
+    legacy_projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    legacy_projector.run()
+
+    with legacy_projector._session_factory.begin() as session:
+        pending = session.get(projector_module.PendingProjectionRecord, "rule-rent:2026-03")
+        assert pending is not None
+        legacy_projector._upsert_pending_unified_movement(session, pending=pending)
+        movement = session.get(
+            projector_module.UnifiedMovementRecord,
+            "rule-rent:2026-03:expense",
+        )
+        assert movement is not None
+        movement.origin_type = "manual"
+        movement.title = "Apartment rent"
+        movement.group_id = None
+        movement.edit_policy = "editable"
+
+    repaired_projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    fixed_page = repaired_projector.list_unified_movements(
+        competence_month="2026-03",
+        scope="fixed",
+    )
+
+    assert [item["movement_id"] for item in fixed_page["items"]] == [
+        "rule-rent:2026-03:expense"
+    ]
+    assert fixed_page["items"][0]["origin_type"] == "recurring"
+    assert fixed_page["items"][0]["group_id"] == "rule-rent"
+    assert fixed_page["items"][0]["edit_policy"] == "inherited"
+
+
+def test_projector_repairs_legacy_confirmed_recurring_card_projection_on_bootstrap(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:30Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="RecurringRuleCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "rule-streaming",
+                "name": "Streaming",
+                "amount": 30_00,
+                "due_day": 9,
+                "card_id": "card-1",
+                "payment_method": "CARD",
+                "category_id": "streaming",
+                "description": "Monthly streaming",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="PendingConfirmed",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "pending_id": "rule-streaming:2026-03",
+                "transaction_id": "rule-streaming:2026-03:purchase",
+                "confirmed_at": "2026-03-02T12:02:00Z",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "rule-streaming:2026-03:purchase",
+                "purchase_date": "2026-03-09T00:00:00Z",
+                "amount": 30_00,
+                "category_id": "streaming",
+                "card_id": "card-1",
+                "description": "Monthly streaming",
+            },
+            version=1,
+        )
+    )
+
+    legacy_projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+    legacy_projector.run()
+
+    with legacy_projector._session_factory.begin() as session:
+        pending = session.get(
+            projector_module.PendingProjectionRecord,
+            "rule-streaming:2026-03",
+        )
+        assert pending is not None
+        legacy_projector._upsert_pending_unified_movement(session, pending=pending)
+        movement = session.get(
+            projector_module.UnifiedMovementRecord,
+            "rule-streaming:2026-03:purchase:1",
+        )
+        assert movement is not None
+        movement.origin_type = "card_purchase"
+        movement.title = "Monthly streaming"
+        movement.group_id = None
+        movement.edit_policy = "editable"
+
+    repaired_projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    fixed_page = repaired_projector.list_unified_movements(
+        competence_month="2026-03",
+        scope="fixed",
+    )
+
+    assert [item["movement_id"] for item in fixed_page["items"]] == [
+        "rule-streaming:2026-03:purchase:1"
+    ]
+    assert fixed_page["items"][0]["origin_type"] == "recurring"
+    assert fixed_page["items"][0]["title"] == "Streaming"
+    assert fixed_page["items"][0]["group_id"] == "rule-streaming"
+    assert fixed_page["items"][0]["edit_policy"] == "inherited"
+
+
 def test_projector_keeps_dashboard_totals_unbounded_when_preview_is_limited(
     tmp_path: Path,
 ) -> None:

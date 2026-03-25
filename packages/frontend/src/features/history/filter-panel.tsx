@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, SlidersHorizontal, X } from "lucide-react";
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { getCategoryOptions } from "../../lib/categories";
 import {
   formatCategoryName,
@@ -28,6 +35,8 @@ type SelectOption = {
   value: string;
   label: string;
 };
+
+const ALL_OPTION_VALUE = "__all__";
 
 function activeFilterCount(filters: MovementFilters): number {
   return [
@@ -70,24 +79,31 @@ function SelectField({
       <label className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground">
         {label}
       </label>
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={cn(
-          "h-8 w-full rounded-lg border border-input bg-surface px-2.5 text-xs font-medium text-foreground",
-          "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 focus:border-ring",
-          "transition-colors duration-100",
-          value && "border-primary/50 bg-primary/5",
-        )}
+      <Select
+        value={value || ALL_OPTION_VALUE}
+        onValueChange={(nextValue) =>
+          onChange(nextValue === ALL_OPTION_VALUE ? "" : nextValue)
+        }
       >
-        <option value="">Todos</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger
+          aria-label={label}
+          className={cn(
+            "h-8 rounded-lg border bg-surface px-2.5 text-xs font-medium text-foreground shadow-none",
+            "focus:ring-2 focus:ring-ring focus:ring-offset-0",
+            value && "border-primary/50 bg-primary/5",
+          )}
+        >
+          <SelectValue placeholder="Todos" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_OPTION_VALUE}>Todos</SelectItem>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

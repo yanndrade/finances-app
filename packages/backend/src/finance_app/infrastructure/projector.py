@@ -292,6 +292,7 @@ class Projector:
                     )
                 if not self._projection_consistency_checked:
                     self._repair_card_purchase_projection_consistency(session)
+                    self._repair_recurring_projection_consistency(session)
                     self._projection_consistency_checked = True
 
     def _repair_card_purchase_projection_consistency(
@@ -376,6 +377,136 @@ class Projector:
             movement.edit_policy = "editable"
             movement.installment_number = expected_installment_number
             movement.installment_total = expected_installment_total
+
+    def _repair_recurring_projection_consistency(
+        self,
+        session: Session,
+    ) -> None:
+        pendings = (
+            session.query(PendingProjectionRecord)
+            .order_by(PendingProjectionRecord.pending_id.asc())
+            .all()
+        )
+
+        for pending in pendings:
+            if pending.payment_method == "CARD":
+                self._repair_card_recurring_projection(session, pending=pending)
+                continue
+
+            self._repair_wallet_recurring_projection(session, pending=pending)
+
+    def _repair_wallet_recurring_projection(
+        self,
+        session: Session,
+        *,
+        pending: PendingProjectionRecord,
+    ) -> None:
+        transaction = (
+            session.get(TransactionProjectionRecord, pending.transaction_id)
+            if pending.transaction_id is not None
+            else None
+        )
+
+        if transaction is not None and transaction.status == "active":
+            pending.status = "confirmed"
+            pending.transaction_id = transaction.transaction_id
+            pending.confirmed_at = pending.confirmed_at or (
+                pending.due_date + "T00:00:00Z"
+            )
+            self._remove_unified_movement(session, movement_id=pending.pending_id)
+            self._upsert_unified_movement(
+                session,
+                movement_id=transaction.transaction_id,
+                kind=(
+                    "reimbursement"
+                    if transaction.category_id == "reimbursement"
+                    else transaction.type
+                ),
+                origin_type="recurring",
+                title=pending.name,
+                description=pending.description,
+                amount=transaction.amount,
+                posted_at=transaction.occurred_at,
+                competence_month=transaction.occurred_at[:7],
+                account_id=transaction.account_id,
+                card_id=pending.card_id,
+                payment_method=transaction.payment_method,
+                category_id=transaction.category_id,
+                counterparty=transaction.person_id,
+                lifecycle_status="cleared",
+                edit_policy="inherited",
+                parent_id=None,
+                group_id=pending.rule_id,
+                transfer_direction=None,
+                installment_number=None,
+                installment_total=None,
+                source_event_type=(
+                    "IncomeCreated"
+                    if transaction.type == "income"
+                    else "ExpenseCreated"
+                ),
+            )
+            return
+
+        stale_transaction_id = pending.transaction_id
+        pending.status = "pending"
+        pending.transaction_id = None
+        pending.confirmed_at = None
+        if stale_transaction_id is not None:
+            self._remove_unified_movement(
+                session,
+                movement_id=stale_transaction_id,
+            )
+        self._upsert_pending_unified_movement(session, pending=pending)
+
+    def _repair_card_recurring_projection(
+        self,
+        session: Session,
+        *,
+        pending: PendingProjectionRecord,
+    ) -> None:
+        purchase = (
+            session.get(CardPurchaseProjectionRecord, pending.transaction_id)
+            if pending.transaction_id is not None
+            else None
+        )
+
+        if purchase is not None:
+            pending.status = "confirmed"
+            pending.transaction_id = purchase.purchase_id
+            pending.confirmed_at = pending.confirmed_at or (
+                pending.due_date + "T00:00:00Z"
+            )
+            self._remove_unified_movement(session, movement_id=pending.pending_id)
+            card = session.get(CardProjectionRecord, purchase.card_id)
+            movements = (
+                session.query(UnifiedMovementRecord)
+                .filter(UnifiedMovementRecord.parent_id == purchase.purchase_id)
+                .all()
+            )
+            for movement in movements:
+                movement.origin_type = "recurring"
+                movement.title = pending.name
+                movement.description = pending.description
+                movement.account_id = (
+                    card.payment_account_id if card is not None else movement.account_id
+                )
+                movement.card_id = purchase.card_id
+                movement.group_id = pending.rule_id
+                movement.edit_policy = "inherited"
+                movement.lifecycle_status = "pending"
+            return
+
+        stale_purchase_id = pending.transaction_id
+        pending.status = "pending"
+        pending.transaction_id = None
+        pending.confirmed_at = None
+        if stale_purchase_id is not None:
+            self._remove_unified_movements_by_parent(
+                session,
+                parent_id=stale_purchase_id,
+            )
+        self._upsert_pending_unified_movement(session, pending=pending)
 
     def run(self) -> int:
         with self._lock:
