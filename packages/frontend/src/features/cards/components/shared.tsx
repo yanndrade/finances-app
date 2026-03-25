@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { isAfter, parseISO, startOfDay } from "date-fns";
 
 import { Badge } from "../../../components/ui/badge";
 import { Card } from "../../../components/ui/card";
@@ -90,6 +91,31 @@ export function renderStatusBadge(status: string) {
     default:
       return <Badge variant="outline">{status}</Badge>;
   }
+}
+
+function getInvoiceBadgeStatus(invoice: InvoiceSummary) {
+  if (invoice.status !== "open") {
+    return invoice.status;
+  }
+
+  const today = startOfDay(new Date());
+  const closingDate = startOfDay(parseISO(invoice.closing_date));
+
+  return isAfter(today, closingDate) ? "closed" : "open";
+}
+
+export function renderInvoiceStatusBadge(invoice: InvoiceSummary) {
+  const badgeStatus = getInvoiceBadgeStatus(invoice);
+
+  if (badgeStatus === "closed") {
+    return (
+      <Badge className="rounded-lg border-none bg-slate-200 px-3 py-1 text-slate-700 hover:bg-slate-200">
+        Fechada
+      </Badge>
+    );
+  }
+
+  return renderStatusBadge(badgeStatus);
 }
 
 export function cardName(cardId: string, cards: CardSummary[]) {

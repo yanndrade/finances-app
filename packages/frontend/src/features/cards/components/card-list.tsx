@@ -4,7 +4,7 @@ import { EmptyState } from "../../../components/ui/empty-state";
 import { Progress } from "../../../components/ui/progress";
 import type { CardSummary, InvoiceSummary } from "../../../lib/api";
 import { formatCurrency } from "../../../lib/format";
-import { getDisplayedInvoiceAmount, renderStatusBadge } from "./shared";
+import { getDisplayedInvoiceAmount, renderInvoiceStatusBadge } from "./shared";
 
 type CardListProps = {
   activeCards: CardSummary[];
@@ -48,7 +48,7 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
             <div className="w-40 shrink-0">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate text-sm font-bold text-foreground">{card.name}</span>
-                {currentInvoice && renderStatusBadge(currentInvoice.status)}
+                {currentInvoice && renderInvoiceStatusBadge(currentInvoice)}
               </div>
               <p className="mt-0.5 text-[13px] text-muted-foreground">
                 Fecha {card.closing_day} · Vence {card.due_day}

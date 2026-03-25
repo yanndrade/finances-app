@@ -15,7 +15,7 @@ import type {
 import { formatCurrency } from "../../../lib/format";
 import type { QuickAddPreset } from "../../../components/quick-add-composer";
 import { cn } from "../../../lib/utils";
-import { getDisplayedInvoiceAmount, MetricPanel, MiniMetric, renderStatusBadge } from "./shared";
+import { getDisplayedInvoiceAmount, MetricPanel, MiniMetric, renderInvoiceStatusBadge } from "./shared";
 
 type QuickAddOpenOptions = {
   invoiceId?: string;
@@ -141,7 +141,7 @@ export function CardDetail({
                   <span className="text-3xl font-black tracking-tighter text-slate-900 truncate tabular-nums">
                     {formatCurrency(displayedInvoiceAmount)}
                   </span>
-                  {renderStatusBadge(invoice.status)}
+                  {renderInvoiceStatusBadge(invoice)}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -405,7 +405,7 @@ export function CardDetail({
                       <div className="flex items-center gap-2.5">
                         <Receipt className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                         <span className="text-sm font-bold text-slate-700">{inv.reference_month}</span>
-                        {renderStatusBadge(inv.status)}
+                        {renderInvoiceStatusBadge(inv)}
                       </div>
                       <span className="text-sm font-black text-slate-900 tabular-nums">
                         {formatCurrency(getDisplayedInvoiceAmount(inv))}

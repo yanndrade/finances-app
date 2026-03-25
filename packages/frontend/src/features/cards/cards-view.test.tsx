@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import * as api from "../../lib/api";
@@ -113,6 +114,7 @@ describe("CardsView", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -147,6 +149,123 @@ describe("CardsView", () => {
     expect(screen.getByText(/em aberto/i).closest("div")).toHaveTextContent("R$ 70,00");
     expect(screen.getAllByText("R$ 70,00").length).toBeGreaterThanOrEqual(3);
     expect(screen.queryByText("R$ 90,00")).not.toBeInTheDocument();
+  });
+
+  it("shows Fechada for open invoices after the closing date", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 25, 12, 0, 0));
+
+    renderCardsView({
+      invoices: [
+        {
+          ...defaultInvoices[0],
+          paid_amount: 0,
+          remaining_amount: 90_00,
+          status: "open",
+          closing_date: "2026-03-24",
+        },
+        {
+          ...defaultInvoices[0],
+          invoice_id: "card-1:2026-02",
+          reference_month: "2026-02",
+          closing_date: "2026-02-10",
+          due_date: "2026-02-20",
+          paid_amount: 0,
+          remaining_amount: 60_00,
+          total_amount: 60_00,
+          purchase_count: 2,
+          status: "open",
+        },
+      ],
+    });
+
+    expect(screen.getByText("Fechada")).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /detalhes/i }));
+    });
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    expect(screen.getAllByText("Fechada").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("keeps Aberta for open invoices on the closing date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 24, 12, 0, 0));
+
+    renderCardsView({
+      invoices: [
+        {
+          ...defaultInvoices[0],
+          paid_amount: 0,
+          remaining_amount: 90_00,
+          status: "open",
+          closing_date: "2026-03-24",
+        },
+      ],
+    });
+
+    expect(screen.getByText("Aberta")).toBeInTheDocument();
+    expect(screen.queryByText("Fechada")).not.toBeInTheDocument();
+  });
+
+  it("keeps Aberta for open invoices before the closing date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 25, 12, 0, 0));
+
+    renderCardsView({
+      invoices: [
+        {
+          ...defaultInvoices[0],
+          paid_amount: 0,
+          remaining_amount: 90_00,
+          status: "open",
+          closing_date: "2026-03-26",
+        },
+      ],
+    });
+
+    expect(screen.getByText("Aberta")).toBeInTheDocument();
+    expect(screen.queryByText("Fechada")).not.toBeInTheDocument();
+  });
+
+  it("keeps Parcial after the closing date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 25, 12, 0, 0));
+
+    renderCardsView({
+      invoices: [
+        {
+          ...defaultInvoices[0],
+          status: "partial",
+          closing_date: "2026-03-24",
+        },
+      ],
+    });
+
+    expect(screen.getByText("Parcial")).toBeInTheDocument();
+    expect(screen.queryByText("Fechada")).not.toBeInTheDocument();
+  });
+
+  it("keeps Paga after the closing date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 25, 12, 0, 0));
+
+    renderCardsView({
+      invoices: [
+        {
+          ...defaultInvoices[0],
+          paid_amount: 90_00,
+          remaining_amount: 0,
+          status: "paid",
+          closing_date: "2026-03-24",
+        },
+      ],
+    });
+
+    expect(screen.getByText("Paga")).toBeInTheDocument();
+    expect(screen.queryByText("Fechada")).not.toBeInTheDocument();
   });
 
   it("opens card detail and allows invoice payment quick add", async () => {
