@@ -31,6 +31,7 @@ const cards: api.CardSummary[] = [
 function buildMovement(
   movementId: string,
   title: string,
+  overrides: Partial<api.UnifiedMovement> = {},
 ): api.UnifiedMovement {
   return {
     movement_id: movementId,
@@ -54,6 +55,7 @@ function buildMovement(
     installment_number: null,
     installment_total: null,
     source_event_type: "TransactionAdded",
+    ...overrides,
   };
 }
 
@@ -287,6 +289,85 @@ describe("HistoryPage mobile scope behavior", () => {
     await user.click(screen.getByRole("button", { name: /marcar como pago/i }));
 
     expect(onConfirmPending).toHaveBeenCalledWith("rule-rent:2026-03");
+  });
+
+  it("shows the 'Debito em' column only for card purchases in desktop history", async () => {
+    vi.mocked(api.fetchMovements).mockResolvedValue({
+      items: [
+        buildMovement("purchase-1:1", "Notebook", {
+          origin_type: "card_purchase",
+          posted_at: "2026-03-25T00:00:00Z",
+          competence_month: "2026-04",
+          card_id: "card-1",
+          payment_method: "CREDIT_CASH",
+          source_event_type: "CardPurchaseCreated",
+        }),
+        buildMovement("tx-1", "Mercado"),
+      ],
+      total: 2,
+      page: 1,
+      page_size: 50,
+      pages: 1,
+    });
+
+    render(
+      <HistoryPage
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/debito em/i)).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /notebook/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText(/abril de 2026/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/março de 2026/i)).not.toBeInTheDocument();
+  });
+
+  it("shows debit month for card purchases inside the drawer", async () => {
+    const user = userEvent.setup();
+
+    vi.mocked(api.fetchMovements).mockResolvedValue({
+      items: [
+        buildMovement("purchase-1:1", "Notebook", {
+          origin_type: "card_purchase",
+          posted_at: "2026-03-25T00:00:00Z",
+          competence_month: "2026-04",
+          card_id: "card-1",
+          payment_method: "CREDIT_CASH",
+          source_event_type: "CardPurchaseCreated",
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      pages: 1,
+    });
+
+    render(
+      <HistoryPage
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /notebook/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /notebook/i }));
+
+    expect(screen.getByText(/débito em/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/abril de 2026/i).length).toBeGreaterThan(0);
   });
 
   it("allows editing a card purchase from the history drawer", async () => {

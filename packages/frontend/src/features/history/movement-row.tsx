@@ -1,5 +1,6 @@
 import {
   formatCategoryName,
+  formatCompetenceMonth,
   formatCurrency,
   formatDate,
   formatLifecycleStatus,
@@ -12,6 +13,8 @@ import type {
   UnifiedMovement,
 } from "../../lib/api";
 import { cn } from "../../lib/utils";
+
+import { isCardPurchaseMovement } from "./card-purchase-utils";
 
 type MovementRowProps = {
   movement: UnifiedMovement;
@@ -178,6 +181,9 @@ export function MovementRow({
 
   const amountSign = kind === "income" || kind === "reimbursement" ? 1 : -1;
   const signedAmount = amountSign > 0 ? amount : -amount;
+  const debitMonth = isCardPurchaseMovement(movement)
+    ? formatCompetenceMonth(movement.competence_month)
+    : null;
 
   return (
     <button
@@ -241,6 +247,14 @@ export function MovementRow({
             {formatOriginType(origin_type)}
           </Badge>
         )}
+      </div>
+
+      <div className="shrink-0 hidden md:flex items-center justify-end w-28">
+        {debitMonth ? (
+          <span className="text-[12px] font-semibold text-muted-foreground text-right leading-tight">
+            {debitMonth}
+          </span>
+        ) : null}
       </div>
 
       <div className="shrink-0 hidden md:flex flex-col items-end gap-0.5 w-28">

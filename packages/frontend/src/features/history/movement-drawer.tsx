@@ -37,6 +37,8 @@ import {
 } from "../../lib/format";
 import type { UnifiedMovement, AccountSummary, CardSummary } from "../../lib/api";
 
+import { isCardPurchaseMovement } from "./card-purchase-utils";
+
 type MovementDrawerProps = {
   movement: UnifiedMovement | null;
   accounts: AccountSummary[];
@@ -183,11 +185,7 @@ export function MovementDrawer({
   const isVoided = lifecycle_status === "voided";
   const isForecast = lifecycle_status === "forecast";
   const isPending = lifecycle_status === "pending";
-  const isCardPurchase =
-    origin_type === "card_purchase" ||
-    origin_type === "installment" ||
-    source_event_type === "CardPurchaseCreated" ||
-    source_event_type === "CardPurchaseUpdated";
+  const isCardPurchase = isCardPurchaseMovement(movement);
 
   const canEdit = (isEditable || isCardPurchase) && !isVoided;
   const canVoid = (isEditable || isInherited || isCardPurchase) && !isVoided;
@@ -365,6 +363,13 @@ export function MovementDrawer({
                 label="Competência"
                 value={formatCompetenceMonth(competence_month)}
               />
+              {isCardPurchase ? (
+                <InfoRow
+                  icon={<CalendarClock className="h-3.5 w-3.5" />}
+                  label="Débito em"
+                  value={formatCompetenceMonth(competence_month)}
+                />
+              ) : null}
             </div>
           </section>
 

@@ -39,6 +39,11 @@ from finance_app.domain.projections import (
 from finance_app.infrastructure.db import get_engine
 from finance_app.infrastructure.event_store import EventStore
 
+CARD_PURCHASE_SOURCE_EVENT_TYPES = (
+    "CardPurchaseCreated",
+    "CardPurchaseUpdated",
+)
+
 
 class ProjectionBase(DeclarativeBase):
     """Metadata for app.db materialized projections."""
@@ -323,7 +328,7 @@ class Projector:
             )
             .filter(
                 UnifiedMovementRecord.source_event_type.in_(
-                    ["CardPurchaseCreated", "CardPurchaseUpdated"]
+                    CARD_PURCHASE_SOURCE_EVENT_TYPES
                 )
             )
             .all()
@@ -4588,9 +4593,6 @@ class Projector:
         reference_month: str,
         due_date: str,
     ) -> tuple[str, str]:
-        if installments_count <= 1:
-            return purchase_date, purchase_date[:7]
-
         return purchase_date, reference_month
 
     def _upsert_unified_movement(
@@ -4851,7 +4853,18 @@ class Projector:
                 # Individual filters
                 if competence_month is not None:
                     query = query.filter(
-                        UnifiedMovementRecord.competence_month == competence_month
+                        or_(
+                            UnifiedMovementRecord.competence_month
+                            == competence_month,
+                            and_(
+                                UnifiedMovementRecord.source_event_type.in_(
+                                    CARD_PURCHASE_SOURCE_EVENT_TYPES
+                                ),
+                                UnifiedMovementRecord.posted_at.like(
+                                    f"{competence_month}-%"
+                                ),
+                            ),
+                        )
                     )
                 if kind is not None:
                     query = query.filter(UnifiedMovementRecord.kind == kind)

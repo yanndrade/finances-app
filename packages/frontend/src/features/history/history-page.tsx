@@ -35,6 +35,7 @@ import { MovementDrawer } from "./movement-drawer";
 import { MovementLedger } from "./movement-ledger";
 import { ScopeBar } from "./scope-bar";
 import { SummaryRibbon } from "./summary-ribbon";
+import { isCardPurchaseMovement } from "./card-purchase-utils";
 
 type HistoryPageProps = {
   surface?: "desktop" | "mobile";
@@ -457,6 +458,9 @@ export function HistoryPage({
             Origem
           </span>
           <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground w-28 shrink-0 text-right">
+            Debito em
+          </span>
+          <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground w-28 shrink-0 text-right">
             Conta
           </span>
           <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground w-28 shrink-0 text-right">
@@ -474,6 +478,8 @@ export function HistoryPage({
                 <div className="h-4 w-10 rounded bg-muted animate-pulse shrink-0" />
                 <div className="h-4 flex-1 rounded bg-muted animate-pulse" />
                 <div className="h-4 w-24 rounded bg-muted animate-pulse shrink-0 hidden sm:block" />
+                <div className="h-4 w-28 rounded bg-muted animate-pulse shrink-0" />
+                <div className="h-4 w-28 rounded bg-muted animate-pulse shrink-0" />
                 <div className="h-4 w-28 rounded bg-muted animate-pulse shrink-0" />
               </div>
             ))}
@@ -1038,15 +1044,6 @@ function resolveCardPurchaseId(movement: UnifiedMovement): string | null {
 
   const [purchaseId] = movement.movement_id.split(":");
   return purchaseId?.trim() ? purchaseId : null;
-}
-
-function isCardPurchaseMovement(movement: UnifiedMovement): boolean {
-  return (
-    movement.origin_type === "card_purchase" ||
-    movement.origin_type === "installment" ||
-    movement.source_event_type === "CardPurchaseCreated" ||
-    movement.source_event_type === "CardPurchaseUpdated"
-  );
 }
 
 function resolveEditableTransactionType(

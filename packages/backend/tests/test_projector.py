@@ -1093,11 +1093,29 @@ def test_projector_keeps_installment_history_on_purchase_day(
 
     projector.run()
 
+    march_installments = projector.list_unified_movements(
+        competence_month="2026-03",
+        scope="installments",
+    )
     april_installments = projector.list_unified_movements(
         competence_month="2026-04",
         scope="installments",
     )
 
+    assert [item["movement_id"] for item in march_installments["items"]] == [
+        "purchase-1:3",
+        "purchase-1:2",
+        "purchase-1:1",
+    ]
+    assert all(
+        item["posted_at"] == "2026-03-15T12:00:00Z"
+        for item in march_installments["items"]
+    )
+    assert [item["competence_month"] for item in march_installments["items"]] == [
+        "2026-06",
+        "2026-05",
+        "2026-04",
+    ]
     assert april_installments["items"][0]["movement_id"] == "purchase-1:1"
     assert april_installments["items"][0]["posted_at"] == "2026-03-15T12:00:00Z"
     assert april_installments["items"][0]["competence_month"] == "2026-04"
@@ -1645,17 +1663,22 @@ def test_projector_classifies_single_card_purchase_as_variable_in_unified_histor
 
     projector.run()
 
-    variable_page = projector.list_unified_movements(
+    march_variable_page = projector.list_unified_movements(
         competence_month="2026-03",
+        scope="variable",
+    )
+    april_variable_page = projector.list_unified_movements(
+        competence_month="2026-04",
         scope="variable",
     )
     installments_page = projector.list_unified_movements(
         competence_month="2026-03",
         scope="installments",
     )
-    summary = projector.get_movements_summary(competence_month="2026-03")
+    march_summary = projector.get_movements_summary(competence_month="2026-03")
+    april_summary = projector.get_movements_summary(competence_month="2026-04")
 
-    assert variable_page["items"] == [
+    assert march_variable_page["items"] == [
         {
             "movement_id": "purchase-1:1",
             "kind": "expense",
@@ -1664,7 +1687,7 @@ def test_projector_classifies_single_card_purchase_as_variable_in_unified_histor
             "description": "Sorvete",
             "amount": 100_00,
             "posted_at": "2026-03-15T12:00:00Z",
-            "competence_month": "2026-03",
+            "competence_month": "2026-04",
             "account_id": "acc-1",
             "card_id": "card-1",
             "payment_method": "CREDIT_CASH",
@@ -1681,11 +1704,18 @@ def test_projector_classifies_single_card_purchase_as_variable_in_unified_histor
             "needs_review": False,
         }
     ]
+    assert april_variable_page["items"] == march_variable_page["items"]
     assert installments_page["items"] == []
-    assert summary["total_variable"] == 100_00
-    assert summary["total_installments"] == 0
-    assert summary["counts"]["variable"] == 1
-    assert summary["counts"]["installments"] == 0
+    assert march_summary["total_variable"] == 0
+    assert march_summary["total_installments"] == 0
+    assert march_summary["counts"]["all"] == 0
+    assert march_summary["counts"]["variable"] == 0
+    assert march_summary["counts"]["installments"] == 0
+    assert april_summary["total_variable"] == 100_00
+    assert april_summary["total_installments"] == 0
+    assert april_summary["counts"]["all"] == 1
+    assert april_summary["counts"]["variable"] == 1
+    assert april_summary["counts"]["installments"] == 0
 
 
 def test_projector_keeps_single_card_purchase_out_of_dashboard_installments(
@@ -1859,6 +1889,10 @@ def test_projector_repairs_stale_single_card_purchase_history_classification(
         competence_month="2026-03",
         scope="variable",
     )
+    april_variable_page = repaired_projector.list_unified_movements(
+        competence_month="2026-04",
+        scope="variable",
+    )
     installments_page = repaired_projector.list_unified_movements(
         competence_month="2026-03",
         scope="installments",
@@ -1866,8 +1900,11 @@ def test_projector_repairs_stale_single_card_purchase_history_classification(
 
     assert [item["movement_id"] for item in variable_page["items"]] == ["purchase-1:1"]
     assert variable_page["items"][0]["posted_at"] == "2026-03-15T12:00:00Z"
-    assert variable_page["items"][0]["competence_month"] == "2026-03"
+    assert variable_page["items"][0]["competence_month"] == "2026-04"
     assert variable_page["items"][0]["edit_policy"] == "editable"
+    assert [item["movement_id"] for item in april_variable_page["items"]] == [
+        "purchase-1:1"
+    ]
     assert installments_page["items"] == []
 
 

@@ -2627,6 +2627,186 @@ def test_backend_allows_cors_for_local_frontend_origins(tmp_path) -> None:
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
 
 
+def test_movements_history_previews_card_purchase_in_purchase_month_without_affecting_summary(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Lunch",
+        },
+    )
+
+    march_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-03", "scope": "variable"},
+    )
+    april_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-04", "scope": "variable"},
+    )
+    march_summary_response = client.get(
+        "/api/movements/summary",
+        params={"competence_month": "2026-03"},
+    )
+    april_summary_response = client.get(
+        "/api/movements/summary",
+        params={"competence_month": "2026-04"},
+    )
+
+    expected_item = {
+        "movement_id": "purchase-1:1",
+        "kind": "expense",
+        "origin_type": "card_purchase",
+        "title": "Lunch",
+        "description": "Lunch",
+        "amount": 90_00,
+        "posted_at": "2026-03-15T12:00:00Z",
+        "competence_month": "2026-04",
+        "account_id": "acc-1",
+        "card_id": "card-1",
+        "payment_method": "CREDIT_CASH",
+        "category_id": "food",
+        "counterparty": None,
+        "lifecycle_status": "pending",
+        "edit_policy": "editable",
+        "parent_id": "purchase-1",
+        "group_id": None,
+        "transfer_direction": None,
+        "installment_number": None,
+        "installment_total": None,
+        "source_event_type": "CardPurchaseCreated",
+        "needs_review": False,
+    }
+
+    assert march_movements_response.status_code == 200
+    assert march_movements_response.json()["items"] == [expected_item]
+    assert april_movements_response.status_code == 200
+    assert april_movements_response.json()["items"] == [expected_item]
+    assert march_summary_response.status_code == 200
+    assert march_summary_response.json()["total_variable"] == 0
+    assert march_summary_response.json()["counts"]["all"] == 0
+    assert march_summary_response.json()["counts"]["variable"] == 0
+    assert april_summary_response.status_code == 200
+    assert april_summary_response.json()["total_variable"] == 90_00
+    assert april_summary_response.json()["counts"]["all"] == 1
+    assert april_summary_response.json()["counts"]["variable"] == 1
+
+
+def test_movements_history_previews_confirmed_recurring_card_purchase_in_purchase_month_without_affecting_summary(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_recurring_rule(
+        client,
+        {
+            "id": "rule-streaming",
+            "name": "Streaming",
+            "amount": 30_00,
+            "due_day": 11,
+            "card_id": "card-1",
+            "payment_method": "CARD",
+            "category_id": "streaming",
+            "description": "Monthly streaming",
+        },
+    )
+
+    confirm_response = client.post("/api/pendings/rule-streaming:2026-03/confirm")
+    march_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-03", "scope": "fixed"},
+    )
+    april_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-04", "scope": "fixed"},
+    )
+    march_summary_response = client.get(
+        "/api/movements/summary",
+        params={"competence_month": "2026-03"},
+    )
+    april_summary_response = client.get(
+        "/api/movements/summary",
+        params={"competence_month": "2026-04"},
+    )
+
+    expected_item = {
+        "movement_id": "rule-streaming:2026-03:purchase:1",
+        "kind": "expense",
+        "origin_type": "recurring",
+        "title": "Streaming",
+        "description": "Monthly streaming",
+        "amount": 30_00,
+        "posted_at": "2026-03-11T00:00:00Z",
+        "competence_month": "2026-04",
+        "account_id": "acc-1",
+        "card_id": "card-1",
+        "payment_method": "CREDIT_CASH",
+        "category_id": "streaming",
+        "counterparty": None,
+        "lifecycle_status": "pending",
+        "edit_policy": "inherited",
+        "parent_id": "rule-streaming:2026-03:purchase",
+        "group_id": "rule-streaming",
+        "transfer_direction": None,
+        "installment_number": None,
+        "installment_total": None,
+        "source_event_type": "CardPurchaseCreated",
+        "needs_review": False,
+    }
+
+    assert confirm_response.status_code == 201
+    assert march_movements_response.status_code == 200
+    assert march_movements_response.json()["items"] == [expected_item]
+    assert april_movements_response.status_code == 200
+    assert april_movements_response.json()["items"] == [expected_item]
+    assert march_summary_response.status_code == 200
+    assert march_summary_response.json()["total_fixed"] == 0
+    assert march_summary_response.json()["counts"]["all"] == 0
+    assert march_summary_response.json()["counts"]["fixed"] == 0
+    assert april_summary_response.status_code == 200
+    assert april_summary_response.json()["total_fixed"] == 30_00
+    assert april_summary_response.json()["counts"]["all"] == 1
+    assert april_summary_response.json()["counts"]["fixed"] == 1
+
+
 def test_dev_reset_endpoint_clears_accounts_transfers_and_card_purchases(
     tmp_path,
 ) -> None:
