@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { Badge } from "../../../components/ui/badge";
 import { Card } from "../../../components/ui/card";
-import type { AccountSummary, CardSummary } from "../../../lib/api";
+import type { AccountSummary, CardSummary, InvoiceSummary } from "../../../lib/api";
 import { formatCurrency } from "../../../lib/format";
 import { cn } from "../../../lib/utils";
 import type { UiDensity } from "../../../lib/ui-density";
@@ -106,6 +106,10 @@ export function accountName(accountId: string, accounts: AccountSummary[]) {
 
 export function formatCurrencyInput(value: string) {
   return formatCurrency(parseInt(value || "0", 10));
+}
+
+export function getDisplayedInvoiceAmount(invoice: InvoiceSummary) {
+  return invoice.status === "partial" ? invoice.remaining_amount : invoice.total_amount;
 }
 
 export function getCardPadding(uiDensity: UiDensity) {

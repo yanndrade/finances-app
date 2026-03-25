@@ -67,7 +67,7 @@ const defaultInvoices: api.InvoiceSummary[] = [
     paid_amount: 20_00,
     remaining_amount: 70_00,
     purchase_count: 3,
-    status: "open",
+    status: "partial",
   },
 ];
 
@@ -121,6 +121,32 @@ describe("CardsView", () => {
     renderCardsView();
     expect(screen.getByText(/total do m/i)).toBeInTheDocument();
     expect(screen.getByText(/a pagar/i)).toBeInTheDocument();
+  });
+
+  it("shows remaining amount as invoice total when the invoice is partial", async () => {
+    const user = userEvent.setup();
+    renderCardsView({
+      invoices: [
+        ...defaultInvoices,
+        {
+          ...defaultInvoices[0],
+          invoice_id: "card-1:2026-02",
+          reference_month: "2026-02",
+          closing_date: "2026-02-10",
+          due_date: "2026-02-20",
+        },
+      ],
+    });
+
+    expect(screen.getByText(/a pagar/i).parentElement).toHaveTextContent("R$ 70,00");
+    expect(screen.getAllByText("R$ 70,00").length).toBeGreaterThanOrEqual(2);
+
+    await user.click(screen.getByRole("button", { name: /detalhes/i }));
+
+    expect(screen.getByText(/pago/i).closest("div")).toHaveTextContent("R$ 20,00");
+    expect(screen.getByText(/em aberto/i).closest("div")).toHaveTextContent("R$ 70,00");
+    expect(screen.getAllByText("R$ 70,00").length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText("R$ 90,00")).not.toBeInTheDocument();
   });
 
   it("opens card detail and allows invoice payment quick add", async () => {

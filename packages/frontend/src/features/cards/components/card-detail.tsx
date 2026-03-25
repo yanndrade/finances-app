@@ -15,7 +15,7 @@ import type {
 import { formatCurrency } from "../../../lib/format";
 import type { QuickAddPreset } from "../../../components/quick-add-composer";
 import { cn } from "../../../lib/utils";
-import { MetricPanel, MiniMetric, renderStatusBadge } from "./shared";
+import { getDisplayedInvoiceAmount, MetricPanel, MiniMetric, renderStatusBadge } from "./shared";
 
 type QuickAddOpenOptions = {
   invoiceId?: string;
@@ -94,6 +94,7 @@ export function CardDetail({
     );
   }
 
+  const displayedInvoiceAmount = getDisplayedInvoiceAmount(invoice);
   const progress = invoice.total_amount > 0 ? (invoice.paid_amount / invoice.total_amount) * 100 : 0;
   const isPaidFull = progress >= 100;
 
@@ -138,7 +139,7 @@ export function CardDetail({
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-center gap-3">
                   <span className="text-3xl font-black tracking-tighter text-slate-900 truncate tabular-nums">
-                    {formatCurrency(invoice.total_amount)}
+                    {formatCurrency(displayedInvoiceAmount)}
                   </span>
                   {renderStatusBadge(invoice.status)}
                 </div>
@@ -407,7 +408,7 @@ export function CardDetail({
                         {renderStatusBadge(inv.status)}
                       </div>
                       <span className="text-sm font-black text-slate-900 tabular-nums">
-                        {formatCurrency(inv.total_amount)}
+                        {formatCurrency(getDisplayedInvoiceAmount(inv))}
                       </span>
                     </button>
                   ))}

@@ -4,7 +4,7 @@ import { EmptyState } from "../../../components/ui/empty-state";
 import { Progress } from "../../../components/ui/progress";
 import type { CardSummary, InvoiceSummary } from "../../../lib/api";
 import { formatCurrency } from "../../../lib/format";
-import { renderStatusBadge } from "./shared";
+import { getDisplayedInvoiceAmount, renderStatusBadge } from "./shared";
 
 type CardListProps = {
   activeCards: CardSummary[];
@@ -31,7 +31,7 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
     <div className="divide-y divide-border/60">
       {activeCards.map((card) => {
         const currentInvoice = invoicesByCard.get(card.card_id);
-        const invoiceAmount = currentInvoice?.total_amount ?? 0;
+        const invoiceAmount = currentInvoice ? getDisplayedInvoiceAmount(currentInvoice) : 0;
         const futureInstallments = card.future_installment_total ?? 0;
         const remainingAmount = currentInvoice?.remaining_amount ?? 0;
 
