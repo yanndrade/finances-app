@@ -244,7 +244,10 @@ export type InvoiceItemSummary = {
   card_id: string;
   purchase_date: string;
   category_id: string;
+  title?: string | null;
   description: string | null;
+  origin_type?: string | null;
+  group_id?: string | null;
   installment_number: number;
   installments_count: number;
   amount: number;

@@ -1573,7 +1573,10 @@ def test_projector_lists_invoice_items_for_a_single_invoice(tmp_path: Path) -> N
             "card_id": "card-1",
             "purchase_date": "2026-03-15T12:00:00Z",
             "category_id": "electronics",
+            "title": "Headphones",
             "description": "Headphones",
+            "origin_type": "installment",
+            "group_id": None,
             "installment_number": 1,
             "installments_count": 3,
             "amount": 33_33,
@@ -2720,6 +2723,153 @@ def test_projector_get_pending_does_not_materialize_implicitly(
     monkeypatch.setattr(projector, "_ensure_month_pendings", _should_not_be_called)
 
     assert projector.get_pending("rule-rent:2026-03") is None
+
+
+def test_projector_keeps_confirmed_recurring_wallet_payment_as_single_fixed_movement(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="RecurringRuleCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "rule-rent",
+                "name": "Rent",
+                "amount": 25_00,
+                "due_day": 5,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "rent",
+                "description": "Apartment rent",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="PendingConfirmed",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "pending_id": "rule-rent:2026-03",
+                "transaction_id": "rule-rent:2026-03:expense",
+                "confirmed_at": "2026-03-02T12:02:00Z",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "rule-rent:2026-03:expense",
+                "occurred_at": "2026-03-05T00:00:00Z",
+                "type": "expense",
+                "amount": 25_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "rent",
+                "description": "Apartment rent",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+
+    fixed_page = projector.list_unified_movements(
+        competence_month="2026-03",
+        scope="fixed",
+    )
+    all_page = projector.list_unified_movements(competence_month="2026-03")
+    summary = projector.get_movements_summary(competence_month="2026-03")
+
+    assert fixed_page["items"] == [
+        {
+            "movement_id": "rule-rent:2026-03:expense",
+            "kind": "expense",
+            "origin_type": "recurring",
+            "title": "Rent",
+            "description": "Apartment rent",
+            "amount": 25_00,
+            "posted_at": "2026-03-05T00:00:00Z",
+            "competence_month": "2026-03",
+            "account_id": "acc-1",
+            "card_id": None,
+            "payment_method": "PIX",
+            "category_id": "rent",
+            "counterparty": None,
+            "lifecycle_status": "cleared",
+            "edit_policy": "inherited",
+            "parent_id": None,
+            "group_id": "rule-rent",
+            "transfer_direction": None,
+            "installment_number": None,
+            "installment_total": None,
+            "source_event_type": "ExpenseCreated",
+            "needs_review": False,
+        }
+    ]
+    assert [item["movement_id"] for item in all_page["items"]] == [
+        "rule-rent:2026-03:expense"
+    ]
+    assert summary["total_expenses"] == 25_00
+    assert summary["total_fixed"] == 25_00
+    assert summary["total_variable"] == 0
+    assert summary["counts"]["all"] == 1
+    assert summary["counts"]["fixed"] == 1
+    assert summary["counts"]["variable"] == 0
+
+    append_event.execute(
+        NewEvent(
+            type="TransactionVoided",
+            timestamp="2026-03-06T10:00:00Z",
+            payload={
+                "id": "rule-rent:2026-03:expense",
+                "reason": "Payment entered by mistake",
+            },
+            version=1,
+        )
+    )
+
+    projector.run()
+
+    fixed_page_after_void = projector.list_unified_movements(
+        competence_month="2026-03",
+        scope="fixed",
+    )
+
+    assert [item["movement_id"] for item in fixed_page_after_void["items"]] == [
+        "rule-rent:2026-03"
+    ]
+    assert fixed_page_after_void["items"][0]["lifecycle_status"] == "forecast"
 
 
 def test_projector_keeps_dashboard_totals_unbounded_when_preview_is_limited(

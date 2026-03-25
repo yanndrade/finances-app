@@ -2486,10 +2486,29 @@ def test_confirm_pending_for_card_recurring_rule_creates_card_purchase(
     ]
 
     dashboard_response = client.get("/api/dashboard", params={"month": "2026-03"})
+    invoice_items_response = client.get("/api/invoices/card-1:2026-03/items")
     assert dashboard_response.status_code == 200
+    assert invoice_items_response.status_code == 200
     assert dashboard_response.json()["total_expense"] == 30_00
     assert dashboard_response.json()["fixed_expenses_total"] == 30_00
     assert dashboard_response.json()["installment_total"] == 0
+    assert invoice_items_response.json() == [
+        {
+            "invoice_item_id": "rule-streaming:2026-03:purchase:1",
+            "invoice_id": "card-1:2026-03",
+            "purchase_id": "rule-streaming:2026-03:purchase",
+            "card_id": "card-1",
+            "purchase_date": "2026-03-09T00:00:00Z",
+            "category_id": "streaming",
+            "title": "Streaming",
+            "description": "Streaming · gasto fixo",
+            "origin_type": "recurring",
+            "group_id": "rule-streaming",
+            "installment_number": 1,
+            "installments_count": 1,
+            "amount": 30_00,
+        }
+    ]
     assert dashboard_response.json()["monthly_fixed_expenses"] == [
         {
             "pending_id": "rule-streaming:2026-03",
@@ -2505,6 +2524,88 @@ def test_confirm_pending_for_card_recurring_rule_creates_card_purchase(
             "transaction_id": "rule-streaming:2026-03:purchase",
         }
     ]
+
+
+def test_confirmed_card_recurring_payment_appears_once_in_movements_history(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_recurring_rule(
+        client,
+        {
+            "id": "rule-streaming",
+            "name": "Streaming",
+            "amount": 30_00,
+            "due_day": 9,
+            "card_id": "card-1",
+            "payment_method": "CARD",
+            "category_id": "streaming",
+            "description": "Monthly streaming",
+        },
+    )
+
+    confirm_response = client.post("/api/pendings/rule-streaming:2026-03/confirm")
+    assert confirm_response.status_code == 201
+
+    movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-03", "scope": "fixed"},
+    )
+    summary_response = client.get(
+        "/api/movements/summary",
+        params={"competence_month": "2026-03"},
+    )
+
+    assert movements_response.status_code == 200
+    assert movements_response.json()["items"] == [
+        {
+            "movement_id": "rule-streaming:2026-03:purchase:1",
+            "kind": "expense",
+            "origin_type": "recurring",
+            "title": "Streaming",
+            "description": "Monthly streaming",
+            "amount": 30_00,
+            "posted_at": "2026-03-09T00:00:00Z",
+            "competence_month": "2026-03",
+            "account_id": "acc-1",
+            "card_id": "card-1",
+            "payment_method": "CREDIT_CASH",
+            "category_id": "streaming",
+            "counterparty": None,
+            "lifecycle_status": "pending",
+            "edit_policy": "inherited",
+            "parent_id": "rule-streaming:2026-03:purchase",
+            "group_id": "rule-streaming",
+            "transfer_direction": None,
+            "installment_number": None,
+            "installment_total": None,
+            "source_event_type": "CardPurchaseCreated",
+            "needs_review": False,
+        }
+    ]
+    assert summary_response.status_code == 200
+    assert summary_response.json()["total_expenses"] == 30_00
+    assert summary_response.json()["total_fixed"] == 30_00
+    assert summary_response.json()["total_variable"] == 0
+    assert summary_response.json()["counts"]["all"] == 1
+    assert summary_response.json()["counts"]["fixed"] == 1
+    assert summary_response.json()["counts"]["variable"] == 0
 
 
 def test_backend_allows_cors_for_local_frontend_origins(tmp_path) -> None:
@@ -4253,7 +4354,10 @@ def test_invoice_items_endpoint_lists_only_requested_invoice_rows(tmp_path) -> N
             "card_id": "card-1",
             "purchase_date": "2026-03-15T12:00:00Z",
             "category_id": "electronics",
+            "title": "Headphones",
             "description": "Headphones",
+            "origin_type": "installment",
+            "group_id": None,
             "installment_number": 1,
             "installments_count": 3,
             "amount": 30_00,

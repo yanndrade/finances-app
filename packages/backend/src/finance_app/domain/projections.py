@@ -109,7 +109,10 @@ class InvoiceItemProjection:
     card_id: str
     purchase_date: str
     category_id: str
+    title: str | None
     description: str | None
+    origin_type: str | None
+    group_id: str | None
     installment_number: int
     installments_count: int
     amount: int
@@ -122,7 +125,10 @@ class InvoiceItemProjection:
             "card_id": self.card_id,
             "purchase_date": self.purchase_date,
             "category_id": self.category_id,
+            "title": self.title,
             "description": self.description,
+            "origin_type": self.origin_type,
+            "group_id": self.group_id,
             "installment_number": self.installment_number,
             "installments_count": self.installments_count,
             "amount": self.amount,

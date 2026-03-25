@@ -580,6 +580,23 @@ class Projector:
                         .all()
                     )
                 }
+                movement_meta = {
+                    row.movement_id: {
+                        "title": row.title,
+                        "description": row.description,
+                        "origin_type": row.origin_type,
+                        "group_id": row.group_id,
+                    }
+                    for row in (
+                        session.query(UnifiedMovementRecord)
+                        .filter(
+                            UnifiedMovementRecord.movement_id.in_(
+                                [item.installment_id for item in rows]
+                            )
+                        )
+                        .all()
+                    )
+                }
 
         return [
             InvoiceItemProjection(
@@ -589,7 +606,25 @@ class Projector:
                 card_id=row.card_id,
                 purchase_date=row.purchase_date,
                 category_id=row.category_id,
-                description=descriptions.get(row.purchase_id),
+                title=(
+                    movement_meta.get(row.installment_id, {}).get("title")
+                    if row.installment_id in movement_meta
+                    else descriptions.get(row.purchase_id)
+                ),
+                description=self._invoice_item_description(
+                    title=movement_meta.get(row.installment_id, {}).get("title"),
+                    description=movement_meta.get(row.installment_id, {}).get(
+                        "description"
+                    )
+                    or descriptions.get(row.purchase_id),
+                    origin_type=movement_meta.get(row.installment_id, {}).get(
+                        "origin_type"
+                    ),
+                ),
+                origin_type=movement_meta.get(row.installment_id, {}).get(
+                    "origin_type"
+                ),
+                group_id=movement_meta.get(row.installment_id, {}).get("group_id"),
                 installment_number=row.installment_number,
                 installments_count=row.installments_count,
                 amount=row.amount,
@@ -2203,6 +2238,11 @@ class Projector:
             account_id=card.payment_account_id,
             allocations=visible_allocations,
         )
+        linked_pending = self._sync_pending_from_card_purchase(
+            session,
+            purchase_id=purchase_id,
+            purchase_is_active=True,
+        )
 
         _purchase_description = _optional_string(payload.get("description"))
         _purchase_category_id = str(payload["category_id"])
@@ -2210,7 +2250,11 @@ class Projector:
         _purchase_method = (
             "CREDIT_INSTALLMENT" if _installments_count > 1 else "CREDIT_CASH"
         )
-        _origin_type = "installment" if _installments_count > 1 else "card_purchase"
+        _origin_type = (
+            "recurring"
+            if linked_pending is not None
+            else ("installment" if _installments_count > 1 else "card_purchase")
+        )
         _purchase_person_id = _optional_string(payload.get("person_id"))
         for allocation in visible_allocations:
             posted_at, competence_month = self._resolve_card_purchase_unified_timing(
@@ -2246,8 +2290,16 @@ class Projector:
                 movement_id=installment_id,
                 kind="expense",
                 origin_type=_origin_type,
-                title=_purchase_description or _purchase_category_id,
-                description=_purchase_description,
+                title=(
+                    linked_pending.name
+                    if linked_pending is not None
+                    else (_purchase_description or _purchase_category_id)
+                ),
+                description=(
+                    linked_pending.description
+                    if linked_pending is not None
+                    else _purchase_description
+                ),
                 amount=allocation.amount,
                 posted_at=posted_at,
                 competence_month=competence_month,
@@ -2257,9 +2309,9 @@ class Projector:
                 category_id=_purchase_category_id,
                 counterparty=_purchase_person_id,
                 lifecycle_status="pending",
-                edit_policy="editable",
+                edit_policy="inherited" if linked_pending is not None else "editable",
                 parent_id=purchase_id,
-                group_id=None,
+                group_id=linked_pending.rule_id if linked_pending is not None else None,
                 transfer_direction=None,
                 installment_number=(
                     allocation.installment_number if _installments_count > 1 else None
@@ -2362,13 +2414,22 @@ class Projector:
             account_id=card.payment_account_id,
             allocations=visible_allocations,
         )
+        linked_pending = self._sync_pending_from_card_purchase(
+            session,
+            purchase_id=purchase_id,
+            purchase_is_active=True,
+        )
         # Remove stale unified movements before recreating
         self._remove_unified_movements_by_parent(session, parent_id=purchase_id)
 
         _upd_method = (
             "CREDIT_INSTALLMENT" if new_installments_count > 1 else "CREDIT_CASH"
         )
-        _origin_type = "installment" if new_installments_count > 1 else "card_purchase"
+        _origin_type = (
+            "recurring"
+            if linked_pending is not None
+            else ("installment" if new_installments_count > 1 else "card_purchase")
+        )
         for allocation in visible_allocations:
             posted_at, competence_month = self._resolve_card_purchase_unified_timing(
                 purchase_date=new_purchase_date,
@@ -2403,8 +2464,16 @@ class Projector:
                 movement_id=installment_id,
                 kind="expense",
                 origin_type=_origin_type,
-                title=new_description or new_category_id,
-                description=new_description,
+                title=(
+                    linked_pending.name
+                    if linked_pending is not None
+                    else (new_description or new_category_id)
+                ),
+                description=(
+                    linked_pending.description
+                    if linked_pending is not None
+                    else new_description
+                ),
                 amount=allocation.amount,
                 posted_at=posted_at,
                 competence_month=competence_month,
@@ -2414,9 +2483,9 @@ class Projector:
                 category_id=new_category_id,
                 counterparty=new_person_id,
                 lifecycle_status="pending",
-                edit_policy="editable",
+                edit_policy="inherited" if linked_pending is not None else "editable",
                 parent_id=purchase_id,
-                group_id=None,
+                group_id=linked_pending.rule_id if linked_pending is not None else None,
                 transfer_direction=None,
                 installment_number=(
                     allocation.installment_number
@@ -2457,6 +2526,11 @@ class Projector:
             ReimbursementProjectionRecord.status != "received",
         ).delete(synchronize_session=False)
         session.delete(existing)
+        self._sync_pending_from_card_purchase(
+            session,
+            purchase_id=purchase_id,
+            purchase_is_active=False,
+        )
 
     def _apply_recurring_rule_created(
         self,
@@ -2753,6 +2827,11 @@ class Projector:
             account_id=str(payload["account_id"]),
             occurred_at=str(payload["occurred_at"]),
         )
+        linked_pending = self._sync_pending_from_transaction(
+            session,
+            transaction_id=transaction_id,
+            transaction_status=str(payload.get("status", "active")),
+        )
         _tx_type = str(payload["type"])
         _occurred_at = str(payload["occurred_at"])
         _tx_status = str(payload.get("status", "active"))
@@ -2763,21 +2842,33 @@ class Projector:
             session,
             movement_id=transaction_id,
             kind=_unified_kind,
-            origin_type="manual",
-            title=_description or _category_id,
-            description=_description,
+            origin_type="recurring" if linked_pending is not None else "manual",
+            title=(
+                linked_pending.name
+                if linked_pending is not None
+                else (_description or _category_id)
+            ),
+            description=(
+                linked_pending.description
+                if linked_pending is not None
+                else _description
+            ),
             amount=int(payload["amount"]),
             posted_at=_occurred_at,
             competence_month=_occurred_at[:7],
             account_id=str(payload["account_id"]),
-            card_id=None,
+            card_id=linked_pending.card_id if linked_pending is not None else None,
             payment_method=str(payload["payment_method"]),
             category_id=_category_id,
             counterparty=_optional_string(payload.get("person_id")),
             lifecycle_status="cleared" if _tx_status == "active" else "voided",
-            edit_policy="editable" if _tx_status == "active" else "locked",
+            edit_policy=(
+                "inherited"
+                if linked_pending is not None and _tx_status == "active"
+                else ("editable" if _tx_status == "active" else "locked")
+            ),
             parent_id=None,
-            group_id=None,
+            group_id=linked_pending.rule_id if linked_pending is not None else None,
             transfer_direction=None,
             installment_number=None,
             installment_total=None,
@@ -2840,7 +2931,7 @@ class Projector:
         existing.status = new_status
         existing.transfer_id = _optional_string(payload.get("transfer_id"))
         existing.direction = _optional_string(payload.get("direction"))
-        self._sync_pending_from_transaction(
+        linked_pending = self._sync_pending_from_transaction(
             session,
             transaction_id=transaction_id,
             transaction_status=existing.status,
@@ -2864,21 +2955,33 @@ class Projector:
             session,
             movement_id=transaction_id,
             kind=_updated_unified_kind,
-            origin_type="manual",
-            title=existing.description or existing.category_id,
-            description=existing.description,
+            origin_type="recurring" if linked_pending is not None else "manual",
+            title=(
+                linked_pending.name
+                if linked_pending is not None
+                else (existing.description or existing.category_id)
+            ),
+            description=(
+                linked_pending.description
+                if linked_pending is not None
+                else existing.description
+            ),
             amount=existing.amount,
             posted_at=existing.occurred_at,
             competence_month=existing.occurred_at[:7],
             account_id=existing.account_id,
-            card_id=None,
+            card_id=linked_pending.card_id if linked_pending is not None else None,
             payment_method=existing.payment_method,
             category_id=existing.category_id,
             counterparty=existing.person_id,
             lifecycle_status="cleared" if existing.status == "active" else "voided",
-            edit_policy="editable" if existing.status == "active" else "locked",
+            edit_policy=(
+                "inherited"
+                if linked_pending is not None and existing.status == "active"
+                else ("editable" if existing.status == "active" else "locked")
+            ),
             parent_id=None,
-            group_id=None,
+            group_id=linked_pending.rule_id if linked_pending is not None else None,
             transfer_direction=None,
             installment_number=None,
             installment_total=None,
@@ -2904,7 +3007,7 @@ class Projector:
             delta=-self._transaction_balance_impact(existing),
         )
         existing.status = "voided"
-        self._sync_pending_from_transaction(
+        linked_pending = self._sync_pending_from_transaction(
             session,
             transaction_id=transaction_id,
             transaction_status=existing.status,
@@ -2919,37 +3022,38 @@ class Projector:
             account_id=existing.account_id,
             occurred_at=existing.occurred_at,
         )
-        _voided_unified_kind = (
-            "reimbursement"
-            if existing.category_id == "reimbursement"
-            else existing.type
-        )
-        self._upsert_unified_movement(
-            session,
-            movement_id=transaction_id,
-            kind=_voided_unified_kind,
-            origin_type="manual",
-            title=existing.description or existing.category_id,
-            description=existing.description,
-            amount=existing.amount,
-            posted_at=existing.occurred_at,
-            competence_month=existing.occurred_at[:7],
-            account_id=existing.account_id,
-            card_id=None,
-            payment_method=existing.payment_method,
-            category_id=existing.category_id,
-            counterparty=existing.person_id,
-            lifecycle_status="voided",
-            edit_policy="locked",
-            parent_id=None,
-            group_id=None,
-            transfer_direction=None,
-            installment_number=None,
-            installment_total=None,
-            source_event_type=(
-                "IncomeCreated" if existing.type == "income" else "ExpenseCreated"
-            ),
-        )
+        if linked_pending is None:
+            _voided_unified_kind = (
+                "reimbursement"
+                if existing.category_id == "reimbursement"
+                else existing.type
+            )
+            self._upsert_unified_movement(
+                session,
+                movement_id=transaction_id,
+                kind=_voided_unified_kind,
+                origin_type="manual",
+                title=existing.description or existing.category_id,
+                description=existing.description,
+                amount=existing.amount,
+                posted_at=existing.occurred_at,
+                competence_month=existing.occurred_at[:7],
+                account_id=existing.account_id,
+                card_id=None,
+                payment_method=existing.payment_method,
+                category_id=existing.category_id,
+                counterparty=existing.person_id,
+                lifecycle_status="voided",
+                edit_policy="locked",
+                parent_id=None,
+                group_id=None,
+                transfer_direction=None,
+                installment_number=None,
+                installment_total=None,
+                source_event_type=(
+                    "IncomeCreated" if existing.type == "income" else "ExpenseCreated"
+                ),
+            )
 
     def _apply_reimbursement_received(
         self,
@@ -3055,37 +3159,54 @@ class Projector:
         *,
         transaction_id: str,
         transaction_status: str,
-    ) -> None:
-        pending_id = self._pending_id_from_transaction_id(transaction_id)
-        if pending_id is None:
-            return
-
-        pending = session.get(PendingProjectionRecord, pending_id)
+    ) -> PendingProjectionRecord | None:
+        pending = self._pending_from_transaction_id(
+            session,
+            transaction_id=transaction_id,
+        )
         if pending is None:
-            pending_month = self._pending_month_from_id(pending_id)
-            if pending_month is not None:
-                self._ensure_month_pendings(session, month=pending_month)
-                pending = session.get(PendingProjectionRecord, pending_id)
-
-        if pending is None:
-            return
-
-        pending_um = session.get(UnifiedMovementRecord, pending_id)
+            return None
 
         if transaction_status == "active":
             pending.status = "confirmed"
             pending.transaction_id = transaction_id
-            if pending_um is not None:
-                pending_um.lifecycle_status = "cleared"
-                pending_um.edit_policy = "inherited"
-            return
+            pending.confirmed_at = pending.confirmed_at or pending.due_date + "T00:00:00Z"
+            self._remove_unified_movement(session, movement_id=pending.pending_id)
+            return pending
 
         pending.status = "pending"
         pending.transaction_id = None
         pending.confirmed_at = None
-        if pending_um is not None:
-            pending_um.lifecycle_status = "forecast"
-            pending_um.edit_policy = "inherited"
+        self._remove_unified_movement(session, movement_id=transaction_id)
+        self._upsert_pending_unified_movement(session, pending=pending)
+        return pending
+
+    def _sync_pending_from_card_purchase(
+        self,
+        session: Session,
+        *,
+        purchase_id: str,
+        purchase_is_active: bool,
+    ) -> PendingProjectionRecord | None:
+        pending = self._pending_from_transaction_id(
+            session,
+            transaction_id=purchase_id,
+        )
+        if pending is None:
+            return None
+
+        if purchase_is_active:
+            pending.status = "confirmed"
+            pending.transaction_id = purchase_id
+            pending.confirmed_at = pending.confirmed_at or pending.due_date + "T00:00:00Z"
+            self._remove_unified_movement(session, movement_id=pending.pending_id)
+            return pending
+
+        pending.status = "pending"
+        pending.transaction_id = None
+        pending.confirmed_at = None
+        self._upsert_pending_unified_movement(session, pending=pending)
+        return pending
 
     def _apply_transfer_created(
         self,
@@ -3316,30 +3437,9 @@ class Projector:
                     confirmed_at=None,
                 )
             )
-            self._upsert_unified_movement(
-                session,
-                movement_id=pending_id,
-                kind="expense",
-                origin_type="recurring",
-                title=row.name,
-                description=row.description,
-                amount=row.amount,
-                posted_at=_pending_due_date + "T00:00:00Z",
-                competence_month=month,
-                account_id=row.account_id or "",
-                card_id=row.card_id,
-                payment_method=row.payment_method,
-                category_id=row.category_id,
-                counterparty=None,
-                lifecycle_status="forecast",
-                edit_policy="inherited",
-                parent_id=None,
-                group_id=row.rule_id,
-                transfer_direction=None,
-                installment_number=None,
-                installment_total=None,
-                source_event_type="RecurringRuleCreated",
-            )
+            pending = session.get(PendingProjectionRecord, pending_id)
+            if pending is not None:
+                self._upsert_pending_unified_movement(session, pending=pending)
 
     def _pending_to_dict(
         self,
@@ -4446,6 +4546,88 @@ class Projector:
         session.query(UnifiedMovementRecord).filter(
             UnifiedMovementRecord.parent_id == parent_id
         ).delete(synchronize_session=False)
+
+    def _remove_unified_movement(
+        self,
+        session: Session,
+        *,
+        movement_id: str,
+    ) -> None:
+        existing = session.get(UnifiedMovementRecord, movement_id)
+        if existing is not None:
+            session.delete(existing)
+
+    def _pending_from_transaction_id(
+        self,
+        session: Session,
+        *,
+        transaction_id: str,
+    ) -> PendingProjectionRecord | None:
+        pending_id = self._pending_id_from_transaction_id(transaction_id)
+        if pending_id is None:
+            return None
+
+        pending = session.get(PendingProjectionRecord, pending_id)
+        if pending is not None:
+            return pending
+
+        pending_month = self._pending_month_from_id(pending_id)
+        if pending_month is None:
+            return None
+
+        self._ensure_month_pendings(session, month=pending_month)
+        return session.get(PendingProjectionRecord, pending_id)
+
+    def _upsert_pending_unified_movement(
+        self,
+        session: Session,
+        *,
+        pending: PendingProjectionRecord,
+    ) -> None:
+        self._upsert_unified_movement(
+            session,
+            movement_id=pending.pending_id,
+            kind="expense",
+            origin_type="recurring",
+            title=pending.name,
+            description=pending.description,
+            amount=pending.amount,
+            posted_at=pending.due_date + "T00:00:00Z",
+            competence_month=pending.month,
+            account_id=pending.account_id or "",
+            card_id=pending.card_id,
+            payment_method=pending.payment_method,
+            category_id=pending.category_id,
+            counterparty=None,
+            lifecycle_status="forecast",
+            edit_policy="inherited",
+            parent_id=None,
+            group_id=pending.rule_id,
+            transfer_direction=None,
+            installment_number=None,
+            installment_total=None,
+            source_event_type="RecurringRuleCreated",
+        )
+
+    @staticmethod
+    def _invoice_item_description(
+        *,
+        title: object | None,
+        description: object | None,
+        origin_type: object | None,
+    ) -> str | None:
+        resolved_title = _optional_string(title)
+        resolved_description = _optional_string(description)
+        resolved_origin_type = _optional_string(origin_type)
+
+        if resolved_origin_type == "recurring":
+            if resolved_title is not None:
+                return f"{resolved_title} · gasto fixo"
+            if resolved_description is not None:
+                return f"{resolved_description} · gasto fixo"
+            return "Gasto fixo"
+
+        return resolved_description
 
     def _unified_movement_to_dict(
         self, row: UnifiedMovementRecord
