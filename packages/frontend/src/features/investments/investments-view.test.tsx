@@ -90,6 +90,7 @@ describe("InvestmentsView", () => {
 
     expect(screen.getByRole("tab", { name: /painel/i })).toHaveAttribute("data-state", "active");
     expect(screen.getByRole("heading", { name: /composi/i })).toBeInTheDocument();
+    expect(screen.queryByText(/meta patrimonial/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /evolu.*patrim/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /evolu/i }));

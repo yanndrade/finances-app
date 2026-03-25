@@ -3339,7 +3339,7 @@ def test_projector_materializes_investment_movements_and_monthly_overview(
             "target": 0,
             "realized": 35_00,
             "remaining": 0,
-            "progress_percent": 100,
+            "progress_percent": 0,
         },
         "series": {
             "wealth_evolution": [

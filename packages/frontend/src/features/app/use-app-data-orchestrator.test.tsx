@@ -62,7 +62,7 @@ function buildInvestmentOverview(): InvestmentOverview {
       target: 0,
       realized: 0,
       remaining: 0,
-      progress_percent: 100,
+      progress_percent: 0,
     },
     series: {
       wealth_evolution: [],
@@ -155,6 +155,7 @@ describe("useAppDataOrchestrator", () => {
         initialInvestmentView: "monthly",
         initialInvestmentFromDate: "2026-01-01",
         initialInvestmentToDate: "2026-01-31",
+        investmentGoalPercent: 10,
         onError,
       }),
     );
@@ -182,5 +183,63 @@ describe("useAppDataOrchestrator", () => {
       expect(result.current.dashboard?.month).toBe("2026-02");
     });
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps dashboard investment overview synced to the selected month while preserving the workspace range", async () => {
+    vi.spyOn(api, "fetchCards").mockResolvedValue([]);
+    vi.spyOn(api, "fetchInvoices").mockResolvedValue([]);
+    vi.spyOn(api, "fetchAccounts").mockResolvedValue([]);
+    vi.spyOn(api, "fetchTransactions").mockResolvedValue([]);
+    vi.spyOn(api, "fetchRecurringRules").mockResolvedValue([]);
+    vi.spyOn(api, "fetchPendings").mockResolvedValue([]);
+    vi.spyOn(api, "fetchInvestmentMovements").mockResolvedValue([]);
+    vi.spyOn(api, "fetchDashboardSummary").mockResolvedValue(buildDashboard("2026-02"));
+    const fetchInvestmentOverviewSpy = vi
+      .spyOn(api, "fetchInvestmentOverview")
+      .mockResolvedValue(buildInvestmentOverview());
+
+    const { result } = renderHook(() =>
+      useAppDataOrchestrator({
+        activeView: "dashboard",
+        selectedMonth: "2026-01",
+        initialTransactionFilters: {
+          period: "month",
+          reference: "2026-01-15",
+          from: "",
+          to: "",
+          category: "",
+          account: "",
+          card: "",
+          method: "",
+          person: "",
+          text: "",
+        },
+        initialInvestmentView: "monthly",
+        initialInvestmentFromDate: "2025-12-01",
+        initialInvestmentToDate: "2025-12-31",
+        investmentGoalPercent: 15,
+        onError: vi.fn(),
+      }),
+    );
+
+    fetchInvestmentOverviewSpy.mockClear();
+
+    await act(async () => {
+      await result.current.refreshData({ month: "2026-02" });
+    });
+
+    expect(fetchInvestmentOverviewSpy).toHaveBeenCalledTimes(2);
+    expect(fetchInvestmentOverviewSpy).toHaveBeenNthCalledWith(1, {
+      view: "monthly",
+      from: "2026-02-01T00:00:00Z",
+      to: "2026-02-28T23:59:59Z",
+      goalPercent: 15,
+    });
+    expect(fetchInvestmentOverviewSpy).toHaveBeenNthCalledWith(2, {
+      view: "monthly",
+      from: "2025-12-01T00:00:00Z",
+      to: "2025-12-31T23:59:59Z",
+      goalPercent: 15,
+    });
   });
 });

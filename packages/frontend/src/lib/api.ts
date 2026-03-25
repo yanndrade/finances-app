@@ -464,6 +464,7 @@ export type InvestmentOverviewParams = {
   view: InvestmentView;
   from: string;
   to: string;
+  goalPercent?: number;
 };
 
 export type TransactionFilters = {
@@ -1349,11 +1350,15 @@ export async function fetchInvestmentMovements(filters?: {
 export async function fetchInvestmentOverview(
   params: InvestmentOverviewParams,
 ): Promise<InvestmentOverview> {
-  const query = new URLSearchParams({
+  const searchParams = new URLSearchParams({
     view: params.view,
     from: params.from,
     to: params.to,
-  }).toString();
+  });
+  if (typeof params.goalPercent === "number") {
+    searchParams.set("goal_percent", String(params.goalPercent));
+  }
+  const query = searchParams.toString();
 
   return requestJson<InvestmentOverview>(`/api/investments/overview?${query}`);
 }

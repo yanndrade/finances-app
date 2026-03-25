@@ -499,7 +499,7 @@ function installAppFetchMock(initialState?: {
           target: 0,
           realized: 0,
           remaining: 0,
-          progress_percent: 100,
+          progress_percent: 0,
         },
         series: {
           wealth_evolution: [],
@@ -537,6 +537,7 @@ describe("App", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -753,6 +754,195 @@ describe("App", () => {
         fetchMock.mock.calls.some(([url, init]) => {
           return String(url).endsWith("/api/dev/reset") && init?.method === "POST";
         }),
+      ).toBe(true);
+    });
+  });
+
+  it("recomputes the dashboard investment goal when the selected month changes", async () => {
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}`;
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (!url.includes("/api/")) {
+        return originalFetch(input, init);
+      }
+
+      if (url.includes("/api/dashboard") && method === "GET") {
+        const requestUrl = new URL(url, "http://localhost");
+        const month = requestUrl.searchParams.get("month");
+        return new Response(
+          JSON.stringify(
+            month === nextMonthKey
+              ? buildDashboard({
+                  month: nextMonthKey,
+                  total_income: 0,
+                  total_expense: 127_359,
+                  net_flow: -127_359,
+                  current_balance: 5_141,
+                  fixed_expenses_total: 88_073,
+                  installment_total: 97_521,
+                  variable_expenses_total: -58_235,
+                  free_to_spend: 0,
+                })
+              : buildDashboard({
+                  month: currentMonthKey,
+                  total_income: 814_798,
+                  total_expense: 376_030,
+                  net_flow: 438_768,
+                  fixed_expenses_total: 88_073,
+                  installment_total: 97_521,
+                  variable_expenses_total: 190_436,
+                  free_to_spend: 438_768,
+                }),
+          ),
+        );
+      }
+
+      if (url.includes("/api/investments/overview") && method === "GET") {
+        const requestUrl = new URL(url, "http://localhost");
+        const from = requestUrl.searchParams.get("from");
+        const nextMonthFirstDay = `${nextMonthKey}-01T00:00:00Z`;
+        const currentMonthFirstDay = `${currentMonthKey}-01T00:00:00Z`;
+        return new Response(
+          JSON.stringify(
+            from === nextMonthFirstDay
+              ? buildInvestmentOverview({
+                  from: nextMonthFirstDay,
+                  to: `${nextMonthKey}-30T23:59:59Z`,
+                  goal: {
+                    target: 0,
+                    realized: 0,
+                    remaining: 0,
+                    progress_percent: 0,
+                  },
+                })
+              : buildInvestmentOverview({
+                  from: currentMonthFirstDay,
+                  to: `${currentMonthKey}-31T23:59:59Z`,
+                  goal: {
+                    target: 81_480,
+                    realized: 81_480,
+                    remaining: 0,
+                    progress_percent: 100,
+                  },
+                }),
+          ),
+        );
+      }
+
+      if (url.includes("/api/accounts") && method === "GET") {
+        return new Response(JSON.stringify([buildAccount()]));
+      }
+      if (url.includes("/api/cards") && method === "GET") {
+        return new Response(JSON.stringify([buildCard()]));
+      }
+      if (url.includes("/api/invoices") && method === "GET") {
+        return new Response(JSON.stringify([buildInvoice()]));
+      }
+      if (url.includes("/api/transactions") && method === "GET") {
+        return new Response(JSON.stringify([buildTransaction()]));
+      }
+      if (url.includes("/api/recurring-rules") && method === "GET") {
+        return new Response(JSON.stringify([]));
+      }
+      if (url.includes("/api/pendings") && method === "GET") {
+        return new Response(JSON.stringify([]));
+      }
+      if (url.includes("/api/investments/movements") && method === "GET") {
+        return new Response(JSON.stringify([]));
+      }
+      if (url.includes("/api/security/state") && method === "GET") {
+        return new Response(
+          JSON.stringify({
+            password_configured: false,
+            is_locked: false,
+            requires_lock_on_startup: false,
+            inactivity_lock_seconds: null,
+          }),
+        );
+      }
+      if (url.includes("/api/movements") && method === "GET") {
+        return new Response(
+          JSON.stringify({
+            items: [],
+            total: 0,
+            page: 1,
+            page_size: 50,
+            pages: 1,
+          }),
+        );
+      }
+      if (url.includes("/api/movements/summary") && method === "GET") {
+        return new Response(
+          JSON.stringify({
+            total_income: 0,
+            total_fixed: 0,
+            total_installments: 0,
+            total_variable: 0,
+            total_investments: 0,
+            total_reimbursements: 0,
+            total_expenses: 0,
+            total_result: 0,
+            counts: {
+              all: 0,
+              fixed: 0,
+              installments: 0,
+              variable: 0,
+              transfers: 0,
+              investments: 0,
+              reimbursements: 0,
+            },
+          }),
+        );
+      }
+
+      return new Response(JSON.stringify([]));
+    });
+
+    render(<App />);
+
+    expect(await screen.findAllByText(/814,80/)).not.toHaveLength(0);
+
+    fireEvent.change(screen.getByLabelText(/selecionar compet/i), {
+      target: { value: nextMonthKey },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryAllByText(/814,80/)).toHaveLength(0);
+      expect(screen.getAllByText(/0,00/).length).toBeGreaterThan(0);
+    });
+
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes(
+          `/api/investments/overview?view=monthly&from=${encodeURIComponent(`${nextMonthKey}-01T00:00:00Z`)}&`,
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("persists the configured investment goal percent and sends it in overview requests", async () => {
+    const fetchMock = installAppFetchMock();
+
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: /vis/i });
+    await userEvent.click(screen.getByRole("button", { name: /config/i }));
+    await userEvent.clear(screen.getByLabelText(/percentual da receita/i));
+    await userEvent.type(screen.getByLabelText(/percentual da receita/i), "15");
+    await userEvent.click(screen.getByRole("button", { name: /salvar/i }));
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("finance.investment-goal-percent")).toBe("15");
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).includes("goal_percent=15"),
+        ),
       ).toBe(true);
     });
   });

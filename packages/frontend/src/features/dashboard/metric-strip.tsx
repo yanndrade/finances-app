@@ -33,15 +33,8 @@ export function MetricStrip({
     dashboard.variable_expenses_total ??
     total_expense - fixed_expenses_total - installment_total;
 
-  const investmentMeta =
-    investmentOverview?.goal.target ?? dashboard.total_income * 0.1;
-  const realizedInvestment =
-    investmentOverview?.goal.realized ??
-    dashboard.spending_by_category.find(
-      (c) =>
-        c.category_id === "investment" || c.category_id === "investimentos",
-    )?.total ??
-    0;
+  const investmentMeta = investmentOverview?.goal.target ?? 0;
+  const realizedInvestment = investmentOverview?.goal.realized ?? 0;
 
   const progressPct =
     investmentMeta > 0

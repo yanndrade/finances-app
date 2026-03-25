@@ -389,7 +389,7 @@ describe("api timestamp normalization", () => {
             target: 0,
             realized: 35_00,
             remaining: 0,
-            progress_percent: 100,
+            progress_percent: 0,
           },
           series: {
             wealth_evolution: [],
@@ -406,6 +406,7 @@ describe("api timestamp normalization", () => {
           view: "monthly";
           from: string;
           to: string;
+          goalPercent?: number;
         }) => Promise<unknown>;
       }
     ).fetchInvestmentOverview;
@@ -414,11 +415,12 @@ describe("api timestamp normalization", () => {
       view: "monthly",
       from: "2026-03-01T00:00:00Z",
       to: "2026-03-31T23:59:59Z",
+      goalPercent: 15,
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
-      "/api/investments/overview?view=monthly&from=2026-03-01T00%3A00%3A00Z&to=2026-03-31T23%3A59%3A59Z",
+      "/api/investments/overview?view=monthly&from=2026-03-01T00%3A00%3A00Z&to=2026-03-31T23%3A59%3A59Z&goal_percent=15",
     );
   });
 

@@ -10,10 +10,12 @@ function renderSettingsView(overrides?: Partial<ComponentProps<typeof SettingsVi
       isSubmitting={false}
       themeColor="#831bb0"
       darkMode={false}
+      investmentGoalPercent={10}
       onExportBackup={vi.fn()}
       onResetApplicationData={vi.fn(() => Promise.resolve())}
       onThemeColorChange={vi.fn()}
       onDarkModeChange={vi.fn()}
+      onInvestmentGoalPercentChange={vi.fn()}
       securityState={{
         password_configured: true,
         is_locked: false,
@@ -77,6 +79,30 @@ describe("SettingsView", () => {
 
     await userEvent.click(screen.getByRole("listitem", { name: /verde petr/i }));
     expect(onThemeColorChange).toHaveBeenCalledWith("#0f766e");
+  });
+
+  it("allows updating the investment goal percent", async () => {
+    const onInvestmentGoalPercentChange = vi.fn();
+    renderSettingsView({ onInvestmentGoalPercentChange });
+
+    await userEvent.clear(screen.getByLabelText(/percentual da receita/i));
+    await userEvent.type(screen.getByLabelText(/percentual da receita/i), "15");
+    await userEvent.click(screen.getByRole("button", { name: /salvar/i }));
+
+    expect(onInvestmentGoalPercentChange).toHaveBeenCalledWith(15);
+  });
+
+  it("restores the default investment goal percent", async () => {
+    const onInvestmentGoalPercentChange = vi.fn();
+    renderSettingsView({
+      investmentGoalPercent: 25,
+      onInvestmentGoalPercentChange,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /restaurar 10%/i }));
+
+    expect(onInvestmentGoalPercentChange).toHaveBeenCalledWith(10);
+    expect(screen.getByLabelText(/percentual da receita/i)).toHaveValue(10);
   });
 
   it("renders desktop section and toggles autostart", async () => {

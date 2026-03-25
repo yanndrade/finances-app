@@ -23,7 +23,12 @@ import {
   type TransactionFilters,
   type TransactionSummary,
 } from "../../lib/api";
-import { toIsoFromDate, toTransactionApiFilters } from "../../lib/date-filters";
+import {
+  monthFirstDay,
+  monthLastDay,
+  toIsoFromDate,
+  toTransactionApiFilters,
+} from "../../lib/date-filters";
 
 type RefreshOptions = {
   month?: string;
@@ -31,6 +36,7 @@ type RefreshOptions = {
   investmentView?: InvestmentView;
   investmentFromDate?: string;
   investmentToDate?: string;
+  investmentGoalPercent?: number;
 };
 
 type UseAppDataOrchestratorParams = {
@@ -40,6 +46,7 @@ type UseAppDataOrchestratorParams = {
   initialInvestmentView: InvestmentView;
   initialInvestmentFromDate: string;
   initialInvestmentToDate: string;
+  investmentGoalPercent: number;
   onError: (error: unknown) => void;
   onRefreshSuccess?: () => void;
 };
@@ -51,10 +58,13 @@ export function useAppDataOrchestrator({
   initialInvestmentView,
   initialInvestmentFromDate,
   initialInvestmentToDate,
+  investmentGoalPercent,
   onError,
   onRefreshSuccess,
 }: UseAppDataOrchestratorParams) {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [dashboardInvestmentOverview, setDashboardInvestmentOverview] =
+    useState<InvestmentOverview | null>(null);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [cards, setCards] = useState<CardSummary[]>([]);
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
@@ -80,7 +90,11 @@ export function useAppDataOrchestrator({
       const activeInvestmentView = options?.investmentView ?? investmentView;
       const activeFromDate = options?.investmentFromDate ?? investmentFromDate;
       const activeToDate = options?.investmentToDate ?? investmentToDate;
+      const activeGoalPercent =
+        options?.investmentGoalPercent ?? investmentGoalPercent;
       const transactionApiFilters = toTransactionApiFilters(filters);
+      const dashboardInvestmentFrom = toIsoFromDate(monthFirstDay(month), false);
+      const dashboardInvestmentTo = toIsoFromDate(monthLastDay(month), true);
 
       setLoading(true);
 
@@ -93,6 +107,7 @@ export function useAppDataOrchestrator({
           nextTransactions,
           nextRecurringRules,
           nextPendingExpenses,
+          nextDashboardInvestmentOverview,
           nextInvestmentOverview,
           nextInvestmentMovements,
         ] = await Promise.all([
@@ -104,9 +119,16 @@ export function useAppDataOrchestrator({
           fetchRecurringRules(),
           fetchPendings(month),
           fetchInvestmentOverview({
+            view: "monthly",
+            from: dashboardInvestmentFrom,
+            to: dashboardInvestmentTo,
+            goalPercent: activeGoalPercent,
+          }),
+          fetchInvestmentOverview({
             view: activeInvestmentView,
             from: toIsoFromDate(activeFromDate, false),
             to: toIsoFromDate(activeToDate, true),
+            goalPercent: activeGoalPercent,
           }),
           fetchInvestmentMovements({
             from: toIsoFromDate(activeFromDate, false),
@@ -125,6 +147,7 @@ export function useAppDataOrchestrator({
         setTransactions(nextTransactions);
         setRecurringRules(nextRecurringRules);
         setPendingExpenses(nextPendingExpenses);
+        setDashboardInvestmentOverview(nextDashboardInvestmentOverview);
         setInvestmentOverview(nextInvestmentOverview);
         setInvestmentMovements(nextInvestmentMovements);
         setTransactionFilters(filters);
@@ -145,6 +168,7 @@ export function useAppDataOrchestrator({
     [
       activeView,
       investmentFromDate,
+      investmentGoalPercent,
       investmentToDate,
       investmentView,
       onError,
@@ -156,6 +180,7 @@ export function useAppDataOrchestrator({
 
   return {
     dashboard,
+    dashboardInvestmentOverview,
     accounts,
     cards,
     invoices,

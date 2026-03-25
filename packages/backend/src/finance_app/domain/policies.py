@@ -1,5 +1,5 @@
-def investment_goal_target(*, monthly_income_total: int) -> int:
-    return int(round(monthly_income_total * 0.1))
+def investment_goal_target(*, monthly_income_total: int, goal_percent: int = 10) -> int:
+    return int(round(monthly_income_total * (goal_percent / 100)))
 
 
 def budget_status(*, spent: int, limit: int) -> str:

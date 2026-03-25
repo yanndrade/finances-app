@@ -184,10 +184,6 @@ export function InvestmentsView({
               onOpenQuickAdd={() => onOpenQuickAdd("investment_contribution")}
             />
             <InsightGrid
-              goalTarget={overview?.goal.target ?? 0}
-              goalProgress={overview?.goal.progress_percent ?? 0}
-              goalRemaining={overview?.goal.remaining ?? 0}
-              goalRealized={overview?.goal.realized ?? 0}
               investedBalance={overview?.totals.invested_balance ?? 0}
               rendimentoAcumulado={rendimentoAcumulado}
               contributionTotal={overview?.totals.contribution_total ?? 0}

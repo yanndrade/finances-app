@@ -83,6 +83,10 @@ import {
   type UiDensity,
 } from "./lib/ui-density";
 import {
+  INVESTMENT_GOAL_PERCENT_STORAGE_KEY,
+  readStoredInvestmentGoalPercent,
+} from "./lib/investment-goal-settings";
+import {
   APP_THEME_STORAGE_KEY,
   APP_DARK_MODE_STORAGE_KEY,
   applyDarkMode,
@@ -238,6 +242,9 @@ export function App() {
   );
   const [themeColor, setThemeColor] = useState(() => readStoredThemeColor());
   const [darkMode, setDarkMode] = useState(() => readStoredDarkMode());
+  const [investmentGoalPercent, setInvestmentGoalPercent] = useState(() =>
+    readStoredInvestmentGoalPercent(),
+  );
   const [securityState, setSecurityState] = useState<SecurityState | null>(null);
   const [lanSecurityState, setLanSecurityState] =
     useState<LanSecurityState | null>(null);
@@ -266,6 +273,7 @@ export function App() {
 
   const {
     dashboard,
+    dashboardInvestmentOverview,
     accounts,
     cards,
     invoices,
@@ -287,6 +295,7 @@ export function App() {
     initialInvestmentView: "monthly",
     initialInvestmentFromDate: monthFirstDay(currentMonth()),
     initialInvestmentToDate: monthLastDay(currentMonth()),
+    investmentGoalPercent,
     onError: (error) => {
       showErrorToast(error);
       if (surface === "mobile" && isLikelyLanConnectionError(error)) {
@@ -303,7 +312,7 @@ export function App() {
 
   useEffect(() => {
     void refreshData({ month: selectedMonth });
-  }, [selectedMonth]);
+  }, [investmentGoalPercent, selectedMonth]);
 
   useEffect(() => {
     storeCategoryOptions(categoryOptions);
@@ -318,6 +327,17 @@ export function App() {
       // ignore preference persistence failures
     }
   }, [themeColor, darkMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        INVESTMENT_GOAL_PERCENT_STORAGE_KEY,
+        String(investmentGoalPercent),
+      );
+    } catch {
+      // ignore preference persistence failures
+    }
+  }, [investmentGoalPercent]);
 
   useEffect(() => {
     if (toast === null) {
@@ -1118,7 +1138,7 @@ export function App() {
             cards={cards}
             dashboard={dashboard}
             invoices={invoices}
-            investmentOverview={investmentOverview}
+            investmentOverview={dashboardInvestmentOverview}
             isSubmitting={isSubmitting}
             loading={isDataLoading}
             month={selectedMonth}
@@ -1238,12 +1258,14 @@ export function App() {
             isSubmitting={isSubmitting}
             themeColor={themeColor}
             darkMode={darkMode}
+            investmentGoalPercent={investmentGoalPercent}
             onExportBackup={() => {
               void handleExportBackup();
             }}
             onResetApplicationData={handleResetAllData}
             onThemeColorChange={setThemeColor}
             onDarkModeChange={setDarkMode}
+            onInvestmentGoalPercentChange={setInvestmentGoalPercent}
             securityState={securityState}
             desktopAutostartEnabled={desktopAutostartEnabled}
             desktopAutostartLoading={desktopAutostartLoading}

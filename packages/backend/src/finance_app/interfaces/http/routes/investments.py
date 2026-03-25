@@ -91,12 +91,14 @@ def build_investments_router(investment_service: InvestmentService) -> APIRouter
         view: Literal["daily", "weekly", "monthly", "bimonthly", "quarterly", "yearly"] = Query(...),
         occurred_from: str = Query(..., alias="from"),
         occurred_to: str = Query(..., alias="to"),
+        goal_percent: int = Query(default=10, ge=0, le=100),
     ) -> dict[str, object]:
         try:
             return investment_service.get_overview(
                 view=view,
                 occurred_from=occurred_from,
                 occurred_to=occurred_to,
+                goal_percent=goal_percent,
             )
         except (
             InvalidInvestmentDateError,

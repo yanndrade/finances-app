@@ -56,6 +56,7 @@ class InvestmentProjector(Protocol):
         view: Literal["daily", "weekly", "monthly", "bimonthly", "quarterly", "yearly"],
         occurred_from: str,
         occurred_to: str,
+        goal_percent: int,
     ) -> dict[str, object]: ...
 
 
@@ -101,6 +102,7 @@ class InvestmentService:
         view: str,
         occurred_from: str,
         occurred_to: str,
+        goal_percent: int = 10,
     ) -> dict[str, object]:
         self._sync_projections()
         self._validate_view(view)
@@ -113,6 +115,7 @@ class InvestmentService:
             view=view,  # type: ignore[arg-type]
             occurred_from=occurred_from,
             occurred_to=occurred_to,
+            goal_percent=goal_percent,
         )
 
     def create_movement(
@@ -285,4 +288,3 @@ class InvestmentService:
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-

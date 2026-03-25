@@ -3,7 +3,6 @@ import { useState } from "react";
 
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
-import { Progress } from "../../components/ui/progress";
 import { MoneyValue } from "../../components/ui/money-value";
 import type { InvestmentOverview, InvestmentView } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
@@ -52,13 +51,8 @@ export function InvestmentHero({
   const [showOverflowPeriods, setShowOverflowPeriods] = useState(false);
 
   const wealth = overview?.totals.wealth ?? 0;
-  const goalTarget = overview?.goal.target ?? 0;
-  const goalProgress = overview?.goal.progress_percent ?? 0;
-  const goalRemaining = overview?.goal.remaining ?? 0;
   const cashBalance = overview?.totals.cash_balance ?? 0;
   const withdrawalTotal = overview?.totals.withdrawal_total ?? 0;
-
-  const hasGoal = goalTarget > 0;
 
   const isOverflowActive = VIEW_OPTIONS_OVERFLOW.some((o) => o.value === view);
 
@@ -236,20 +230,6 @@ export function InvestmentHero({
               formatCurrency(wealth)
             )}
           </p>
-
-          {/* Meta progress inline */}
-          {hasGoal && (
-            <div className="mt-1 flex items-center gap-3">
-              <Progress
-                value={Math.min(goalProgress, 100)}
-                className="h-1.5 w-40 rounded-full bg-slate-100"
-              />
-              <span className="text-[12px] font-bold text-slate-400">
-                {goalProgress.toFixed(0)}% da meta &middot;{" "}
-                <span className="text-slate-500">{formatCurrency(goalRemaining)} restante</span>
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Secondary metrics */}

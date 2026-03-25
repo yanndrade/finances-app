@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Smartphone,
+  Target,
   Wifi,
 } from "lucide-react";
 import { toString as toQrSvgString } from "qrcode";
@@ -25,6 +26,10 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Separator } from "../../components/ui/separator";
 import {
+  DEFAULT_INVESTMENT_GOAL_PERCENT,
+  normalizeInvestmentGoalPercent,
+} from "../../lib/investment-goal-settings";
+import {
   normalizeThemeColor,
   THEME_PRESET_OPTIONS,
 } from "../../lib/theme";
@@ -33,10 +38,12 @@ type SettingsViewProps = {
   isSubmitting: boolean;
   themeColor: string;
   darkMode: boolean;
+  investmentGoalPercent: number;
   onExportBackup: () => void;
   onResetApplicationData: () => Promise<void>;
   onThemeColorChange: (color: string) => void;
   onDarkModeChange: (isDark: boolean) => void;
+  onInvestmentGoalPercentChange: (percent: number) => void;
   securityState: SecurityState | null;
   desktopAutostartEnabled: boolean;
   desktopAutostartLoading: boolean;
@@ -72,10 +79,12 @@ export function SettingsView({
   isSubmitting,
   themeColor,
   darkMode,
+  investmentGoalPercent,
   onExportBackup,
   onResetApplicationData,
   onThemeColorChange,
   onDarkModeChange,
+  onInvestmentGoalPercentChange,
   securityState,
   desktopAutostartEnabled,
   desktopAutostartLoading,
@@ -113,6 +122,9 @@ export function SettingsView({
   const [isGeneratingPairToken, setIsGeneratingPairToken] = useState(false);
   const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
   const [pairingQrDataUrl, setPairingQrDataUrl] = useState<string | null>(null);
+  const [investmentGoalPercentInput, setInvestmentGoalPercentInput] = useState(
+    String(investmentGoalPercent),
+  );
   const normalizedThemeColor = normalizeThemeColor(themeColor);
   const isDesktopUpdateBusy =
     desktopUpdateChecking ||
@@ -132,6 +144,10 @@ export function SettingsView({
           : desktopUpdateVersion
             ? `Versao atual: ${desktopUpdateVersion}`
             : "Verifique se existe uma nova versao disponivel.";
+
+  useEffect(() => {
+    setInvestmentGoalPercentInput(String(investmentGoalPercent));
+  }, [investmentGoalPercent]);
 
   useEffect(() => {
     let active = true;
@@ -269,6 +285,19 @@ export function SettingsView({
     }
   }
 
+  function handleSaveInvestmentGoalPercent() {
+    const normalizedPercent = normalizeInvestmentGoalPercent(
+      investmentGoalPercentInput,
+    );
+    setInvestmentGoalPercentInput(String(normalizedPercent));
+    onInvestmentGoalPercentChange(normalizedPercent);
+  }
+
+  function handleResetInvestmentGoalPercent() {
+    setInvestmentGoalPercentInput(String(DEFAULT_INVESTMENT_GOAL_PERCENT));
+    onInvestmentGoalPercentChange(DEFAULT_INVESTMENT_GOAL_PERCENT);
+  }
+
   return (
     <div className="screen-stack settings-screen mx-auto max-w-[680px]">
       <div className="settings-panel-stack">
@@ -402,6 +431,77 @@ export function SettingsView({
                   onChange={(event) => onThemeColorChange(event.target.value)}
                   placeholder="#831bb0"
                 />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <Separator />
+
+        <section className="settings-section" aria-labelledby="settings-investment-goal-heading">
+          <header className="settings-section__header">
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <h3
+                id="settings-investment-goal-heading"
+                className="settings-section__title"
+              >
+                Meta de investimento
+              </h3>
+            </div>
+            <p className="settings-section__description">
+              Define o percentual da receita mensal usado na meta da Visao geral.
+            </p>
+          </header>
+          <div className="settings-section__body">
+            <div className="settings-action-item settings-action-item--stacked">
+              <div>
+                <p className="settings-action-item__label">Percentual da meta mensal</p>
+                <p className="settings-action-item__hint">
+                  Valor local deste dispositivo. Padrao: {DEFAULT_INVESTMENT_GOAL_PERCENT}%.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <label
+                    className="mb-1 block text-xs font-medium text-muted-foreground"
+                    htmlFor="investment-goal-percent"
+                  >
+                    Percentual da receita
+                  </label>
+                  <Input
+                    id="investment-goal-percent"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    inputMode="numeric"
+                    value={investmentGoalPercentInput}
+                    onChange={(event) => setInvestmentGoalPercentInput(event.target.value)}
+                    onBlur={handleSaveInvestmentGoalPercent}
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleSaveInvestmentGoalPercent}
+                    disabled={isSubmitting}
+                  >
+                    Salvar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetInvestmentGoalPercent}
+                    disabled={isSubmitting}
+                  >
+                    Restaurar 10%
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

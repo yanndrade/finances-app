@@ -9,7 +9,6 @@ import {
   CardTitle,
 } from "../../components/ui/card";
 import { MoneyValue } from "../../components/ui/money-value";
-import { formatCurrency } from "../../lib/format";
 import type { DashboardSummary, InvestmentOverview } from "../../lib/api";
 import type { UiDensity } from "../../lib/ui-density";
 import type { QuickAddPreset } from "../../components/quick-add-composer";
@@ -31,16 +30,8 @@ export function InvestmentGoal({
   uiDensity,
   onOpenQuickAdd,
 }: InvestmentGoalProps) {
-  const investmentMeta =
-    investmentOverview?.goal.target ?? dashboard.total_income * 0.1;
-  const realizedInvestment =
-    investmentOverview?.goal.realized ??
-    dashboard.spending_by_category.find(
-      (category) =>
-        category.category_id === "investment" ||
-        category.category_id === "investimentos",
-    )?.total ??
-    0;
+  const investmentMeta = investmentOverview?.goal.target ?? 0;
+  const realizedInvestment = investmentOverview?.goal.realized ?? 0;
 
   const metaProgress =
     investmentMeta > 0

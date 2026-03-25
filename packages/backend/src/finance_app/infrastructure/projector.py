@@ -1452,6 +1452,7 @@ class Projector:
         view: str,
         occurred_from: str,
         occurred_to: str,
+        goal_percent: int = 10,
     ) -> dict[str, object]:
         with self._lock:
             self.bootstrap()
@@ -1610,7 +1611,10 @@ class Projector:
             occurred_from=occurred_from,
             occurred_to=occurred_to,
         )
-        target = investment_goal_target(monthly_income_total=monthly_income_total)
+        target = investment_goal_target(
+            monthly_income_total=monthly_income_total,
+            goal_percent=goal_percent,
+        )
         realized = contribution_total + dividend_total
 
         return {
@@ -1631,7 +1635,7 @@ class Projector:
                 "realized": realized,
                 "remaining": max(target - realized, 0),
                 "progress_percent": (
-                    100
+                    0
                     if target <= 0
                     else min(int(round((realized * 100) / target)), 100)
                 ),

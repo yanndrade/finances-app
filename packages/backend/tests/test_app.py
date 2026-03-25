@@ -4356,7 +4356,7 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
             "target": 0,
             "realized": 35_00,
             "remaining": 0,
-            "progress_percent": 100,
+            "progress_percent": 0,
         },
         "series": {
             "wealth_evolution": [
@@ -4391,6 +4391,79 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
     assert dashboard_response.json()["budget_alerts"] == []
     assert accounts_response.status_code == 200
     assert accounts_response.json()[0]["current_balance"] == 68_00
+
+
+def test_investment_overview_goal_percent_uses_requested_percentage_and_zero_income_month(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_income(
+        client,
+        {
+            "id": "income-1",
+            "occurred_at": "2026-03-05T12:00:00Z",
+            "amount": 100_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "salary",
+            "description": "Salary",
+        },
+    )
+
+    default_goal_response = client.get(
+        "/api/investments/overview",
+        params={
+            "view": "monthly",
+            "from": "2026-03-01T00:00:00Z",
+            "to": "2026-03-31T23:59:59Z",
+        },
+    )
+    custom_goal_response = client.get(
+        "/api/investments/overview",
+        params={
+            "view": "monthly",
+            "from": "2026-03-01T00:00:00Z",
+            "to": "2026-03-31T23:59:59Z",
+            "goal_percent": 15,
+        },
+    )
+    zero_income_month_response = client.get(
+        "/api/investments/overview",
+        params={
+            "view": "monthly",
+            "from": "2026-04-01T00:00:00Z",
+            "to": "2026-04-30T23:59:59Z",
+            "goal_percent": 15,
+        },
+    )
+
+    assert default_goal_response.status_code == 200
+    assert default_goal_response.json()["goal"] == {
+        "target": 10_00,
+        "realized": 0,
+        "remaining": 10_00,
+        "progress_percent": 0,
+    }
+    assert custom_goal_response.status_code == 200
+    assert custom_goal_response.json()["goal"] == {
+        "target": 15_00,
+        "realized": 0,
+        "remaining": 15_00,
+        "progress_percent": 0,
+    }
+    assert zero_income_month_response.status_code == 200
+    assert zero_income_month_response.json()["goal"] == {
+        "target": 0,
+        "realized": 0,
+        "remaining": 0,
+        "progress_percent": 0,
+    }
 
 
 def test_investment_endpoints_reject_contribution_from_investment_account(
@@ -4662,6 +4735,12 @@ def _create_card_purchase(client: TestClient, payload: dict[str, str | int]) -> 
 
 def _create_expense(client: TestClient, payload: dict[str, str | int]) -> None:
     response = client.post("/api/expenses", json=payload)
+
+    assert response.status_code == 201
+
+
+def _create_income(client: TestClient, payload: dict[str, str | int]) -> None:
+    response = client.post("/api/incomes", json=payload)
 
     assert response.status_code == 201
 
