@@ -2807,6 +2807,66 @@ def test_movements_history_previews_confirmed_recurring_card_purchase_in_purchas
     assert april_summary_response.json()["counts"]["fixed"] == 1
 
 
+def test_movements_history_previews_only_first_installment_in_purchase_month(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 90_00,
+            "installments_count": 3,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Notebook",
+        },
+    )
+
+    march_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-03", "scope": "installments"},
+    )
+    april_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-04", "scope": "installments"},
+    )
+    may_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-05", "scope": "installments"},
+    )
+
+    assert march_movements_response.status_code == 200
+    assert [item["movement_id"] for item in march_movements_response.json()["items"]] == [
+        "purchase-1:1"
+    ]
+    assert april_movements_response.status_code == 200
+    assert [item["movement_id"] for item in april_movements_response.json()["items"]] == [
+        "purchase-1:1"
+    ]
+    assert may_movements_response.status_code == 200
+    assert [item["movement_id"] for item in may_movements_response.json()["items"]] == [
+        "purchase-1:2"
+    ]
+
+
 def test_dev_reset_endpoint_clears_accounts_transfers_and_card_purchases(
     tmp_path,
 ) -> None:

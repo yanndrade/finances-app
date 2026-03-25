@@ -1103,19 +1103,10 @@ def test_projector_keeps_installment_history_on_purchase_day(
     )
 
     assert [item["movement_id"] for item in march_installments["items"]] == [
-        "purchase-1:3",
-        "purchase-1:2",
-        "purchase-1:1",
+        "purchase-1:1"
     ]
-    assert all(
-        item["posted_at"] == "2026-03-15T12:00:00Z"
-        for item in march_installments["items"]
-    )
-    assert [item["competence_month"] for item in march_installments["items"]] == [
-        "2026-06",
-        "2026-05",
-        "2026-04",
-    ]
+    assert march_installments["items"][0]["posted_at"] == "2026-03-15T12:00:00Z"
+    assert march_installments["items"][0]["competence_month"] == "2026-04"
     assert april_installments["items"][0]["movement_id"] == "purchase-1:1"
     assert april_installments["items"][0]["posted_at"] == "2026-03-15T12:00:00Z"
     assert april_installments["items"][0]["competence_month"] == "2026-04"

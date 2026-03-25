@@ -4860,6 +4860,12 @@ class Projector:
                                 UnifiedMovementRecord.source_event_type.in_(
                                     CARD_PURCHASE_SOURCE_EVENT_TYPES
                                 ),
+                                or_(
+                                    UnifiedMovementRecord.installment_number.is_(
+                                        None
+                                    ),
+                                    UnifiedMovementRecord.installment_number == 1,
+                                ),
                                 UnifiedMovementRecord.posted_at.like(
                                     f"{competence_month}-%"
                                 ),
