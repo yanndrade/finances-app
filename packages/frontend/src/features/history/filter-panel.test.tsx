@@ -32,7 +32,7 @@ const cards: CardSummary[] = [
 describe("FilterPanel", () => {
   it("keeps active filter values visible even when they are legacy or missing from default options", async () => {
     const user = userEvent.setup();
-    const filters: MovementFilters = {
+    const filters = {
       kind: "adjustment",
       origin_type: "imported",
       lifecycle_status: "active",
@@ -44,7 +44,7 @@ describe("FilterPanel", () => {
 
     render(
       <FilterPanel
-        filters={filters}
+        filters={filters as MovementFilters}
         accounts={accounts}
         cards={cards}
         onFiltersChange={() => {}}
