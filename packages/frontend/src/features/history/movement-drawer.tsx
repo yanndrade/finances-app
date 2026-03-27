@@ -31,13 +31,15 @@ import {
   formatCategoryName,
   formatKind,
   formatOriginType,
-  formatLifecycleStatus,
   formatPaymentMethodExpanded,
   formatCompetenceMonth,
 } from "../../lib/format";
 import type { UnifiedMovement, AccountSummary, CardSummary } from "../../lib/api";
 
-import { isCardPurchaseMovement } from "./card-purchase-utils";
+import {
+  formatHistoryMovementLifecycleStatus,
+  isCardPurchaseMovement,
+} from "./card-purchase-utils";
 
 type MovementDrawerProps = {
   movement: UnifiedMovement | null;
@@ -245,7 +247,7 @@ export function MovementDrawer({
                 lifecyclePillClass(lifecycle_status),
               )}
             >
-              {formatLifecycleStatus(lifecycle_status)}
+              {formatHistoryMovementLifecycleStatus(movement)}
             </span>
 
             {isLocked && !isCardPurchase && (

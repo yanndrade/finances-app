@@ -304,6 +304,7 @@ class Projector:
         self,
         session: Session,
     ) -> None:
+        invoice_ids_to_sync: set[str] = set()
         rows = (
             session.query(
                 UnifiedMovementRecord,
@@ -311,10 +312,12 @@ class Projector:
                 CardPurchaseProjectionRecord.reference_month,
                 CardPurchaseProjectionRecord.due_date,
                 CardPurchaseProjectionRecord.installments_count,
+                CardPurchaseProjectionRecord.invoice_id,
                 CardPurchaseInstallmentRecord.reference_month,
                 CardPurchaseInstallmentRecord.due_date,
                 CardPurchaseInstallmentRecord.installment_number,
                 CardPurchaseInstallmentRecord.installments_count,
+                CardPurchaseInstallmentRecord.invoice_id,
             )
             .join(
                 CardPurchaseProjectionRecord,
@@ -340,10 +343,12 @@ class Projector:
             purchase_reference_month,
             purchase_due_date,
             purchase_installments_count,
+            purchase_invoice_id,
             installment_reference_month,
             installment_due_date,
             installment_number,
             installment_row_count,
+            installment_invoice_id,
         ) in rows:
             expected_installments_count = int(
                 installment_row_count or purchase_installments_count or 1
@@ -382,6 +387,16 @@ class Projector:
             movement.edit_policy = "editable"
             movement.installment_number = expected_installment_number
             movement.installment_total = expected_installment_total
+
+            invoice_id = str(installment_invoice_id or purchase_invoice_id or "").strip()
+            if invoice_id:
+                invoice_ids_to_sync.add(invoice_id)
+
+        for invoice_id in invoice_ids_to_sync:
+            self._sync_card_purchase_invoice_lifecycle(
+                session,
+                invoice_id=invoice_id,
+            )
 
     def _repair_recurring_projection_consistency(
         self,
@@ -2898,6 +2913,10 @@ class Projector:
         invoice.remaining_amount += allocation.amount
         invoice.purchase_count += 1
         self._sync_invoice_status(invoice)
+        self._sync_card_purchase_invoice_lifecycle(
+            session,
+            invoice_id=invoice_id,
+        )
 
     def _remove_card_purchase_installments(
         self,
@@ -2919,6 +2938,10 @@ class Projector:
                     session.delete(invoice)
                 else:
                     self._sync_invoice_status(invoice)
+                    self._sync_card_purchase_invoice_lifecycle(
+                        session,
+                        invoice_id=invoice.invoice_id,
+                    )
 
             session.delete(installment)
 
@@ -2961,6 +2984,10 @@ class Projector:
         invoice.paid_amount += paid_amount
         invoice.remaining_amount -= paid_amount
         self._sync_invoice_status(invoice)
+        self._sync_card_purchase_invoice_lifecycle(
+            session,
+            invoice_id=invoice_id,
+        )
 
         session.add(
             TransactionProjectionRecord(
@@ -4647,6 +4674,44 @@ class Projector:
             return
 
         invoice.status = "open"
+
+    def _sync_card_purchase_invoice_lifecycle(
+        self,
+        session: Session,
+        *,
+        invoice_id: str,
+    ) -> None:
+        invoice = session.get(InvoiceProjectionRecord, invoice_id)
+        lifecycle_status = "cleared" if invoice is not None and invoice.status == "paid" else "pending"
+        movements = (
+            session.query(UnifiedMovementRecord)
+            .join(
+                CardPurchaseProjectionRecord,
+                UnifiedMovementRecord.parent_id == CardPurchaseProjectionRecord.purchase_id,
+            )
+            .outerjoin(
+                CardPurchaseInstallmentRecord,
+                UnifiedMovementRecord.movement_id == CardPurchaseInstallmentRecord.installment_id,
+            )
+            .filter(
+                UnifiedMovementRecord.source_event_type.in_(
+                    CARD_PURCHASE_SOURCE_EVENT_TYPES
+                ),
+                or_(
+                    CardPurchaseInstallmentRecord.invoice_id == invoice_id,
+                    and_(
+                        CardPurchaseInstallmentRecord.installment_id.is_(None),
+                        CardPurchaseProjectionRecord.invoice_id == invoice_id,
+                    ),
+                ),
+            )
+            .all()
+        )
+
+        for movement in movements:
+            if movement.lifecycle_status in {"voided", "cancelled"}:
+                continue
+            movement.lifecycle_status = lifecycle_status
 
     # ------------------------------------------------------------------ #
     #  Unified Movement helpers                                            #

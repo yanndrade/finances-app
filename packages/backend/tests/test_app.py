@@ -4743,6 +4743,10 @@ def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -
             "paid_at": "2026-03-20T12:00:00Z",
         },
     )
+    partial_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-04", "scope": "variable"},
+    )
     final_response = client.post(
         "/api/invoices/card-1:2026-04/payments",
         json={
@@ -4755,6 +4759,10 @@ def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -
     invoices_response = client.get("/api/invoices", params={"card": "card-1"})
     accounts_response = client.get("/api/accounts")
     transactions_response = client.get("/api/transactions", params={"account": "acc-2"})
+    final_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-04", "scope": "variable"},
+    )
 
     assert partial_response.status_code == 201
     assert partial_response.json() == {
@@ -4773,6 +4781,10 @@ def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -
     assert final_response.json()["status"] == "paid"
     assert final_response.json()["paid_amount"] == 90_00
     assert final_response.json()["remaining_amount"] == 0
+    assert partial_movements_response.status_code == 200
+    assert partial_movements_response.json()["items"][0]["lifecycle_status"] == "pending"
+    assert final_movements_response.status_code == 200
+    assert final_movements_response.json()["items"][0]["lifecycle_status"] == "cleared"
     assert invoices_response.status_code == 200
     assert invoices_response.json() == [
         {

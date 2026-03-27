@@ -1462,6 +1462,10 @@ def test_projector_applies_invoice_payments_to_invoice_status_and_cash_balance(
     )
 
     applied = projector.run()
+    april_variable_page = projector.list_unified_movements(
+        competence_month="2026-04",
+        scope="variable",
+    )
 
     assert applied == 5
     assert projector.list_invoices(card_id="card-1") == [
@@ -1510,6 +1514,10 @@ def test_projector_applies_invoice_payments_to_invoice_status_and_cash_balance(
             "current_balance": 0,
         }
     ]
+    assert [item["movement_id"] for item in april_variable_page["items"]] == [
+        "purchase-1:1"
+    ]
+    assert april_variable_page["items"][0]["lifecycle_status"] == "cleared"
 
 
 def test_projector_lists_invoice_items_for_a_single_invoice(tmp_path: Path) -> None:
@@ -1897,6 +1905,106 @@ def test_projector_repairs_stale_single_card_purchase_history_classification(
         "purchase-1:1"
     ]
     assert installments_page["items"] == []
+
+
+def test_projector_repairs_stale_paid_invoice_card_purchase_lifecycle(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-15T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-15T12:00:00Z",
+                "amount": 100_00,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Sorvete",
+                "installments_count": 1,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="InvoicePaid",
+            timestamp="2026-03-20T12:00:00Z",
+            payload={
+                "id": "payment-1",
+                "invoice_id": "card-1:2026-04",
+                "card_id": "card-1",
+                "amount": 100_00,
+                "account_id": "acc-1",
+                "paid_at": "2026-03-20T12:00:00Z",
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+
+    with projector._session_factory.begin() as session:
+        movement = session.get(
+            projector_module.UnifiedMovementRecord,
+            "purchase-1:1",
+        )
+        assert movement is not None
+        movement.lifecycle_status = "pending"
+
+    repaired_projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    april_variable_page = repaired_projector.list_unified_movements(
+        competence_month="2026-04",
+        scope="variable",
+    )
+
+    assert [item["movement_id"] for item in april_variable_page["items"]] == [
+        "purchase-1:1"
+    ]
+    assert april_variable_page["items"][0]["lifecycle_status"] == "cleared"
 
 
 def test_projector_updates_voids_and_filters_transactions(tmp_path: Path) -> None:

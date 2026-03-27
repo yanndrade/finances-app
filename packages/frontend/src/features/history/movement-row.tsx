@@ -3,7 +3,6 @@ import {
   formatCompetenceMonth,
   formatCurrency,
   formatDate,
-  formatLifecycleStatus,
   formatOriginType,
   formatPaymentMethodExpanded,
 } from "../../lib/format";
@@ -14,7 +13,10 @@ import type {
 } from "../../lib/api";
 import { cn } from "../../lib/utils";
 
-import { isCardPurchaseMovement } from "./card-purchase-utils";
+import {
+  formatHistoryMovementLifecycleStatus,
+  isCardPurchaseMovement,
+} from "./card-purchase-utils";
 
 type MovementRowProps = {
   movement: UnifiedMovement;
@@ -298,9 +300,9 @@ export function MovementRow({
               </span>
             )}
 
-          {lifecycle_status !== "cleared" && (
+          {(lifecycle_status !== "cleared" || isCardPurchaseMovement(movement)) && (
             <Badge className={cn("text-[13px]", lifecycleBadgeClass(lifecycle_status))}>
-              {formatLifecycleStatus(lifecycle_status)}
+              {formatHistoryMovementLifecycleStatus(movement)}
             </Badge>
           )}
         </div>
