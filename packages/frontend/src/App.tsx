@@ -1197,6 +1197,7 @@ export function App() {
           <ReimbursementsView
             surface={surface}
             accounts={accounts}
+            cards={cards}
             month={selectedMonth}
             refreshKey={refreshKey}
             onError={(error) => showErrorToast(error)}

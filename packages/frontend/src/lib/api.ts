@@ -105,6 +105,14 @@ export type PendingReimbursementSummary = {
   received_at: string | null;
   receipt_transaction_id: string | null;
   notes: string | null;
+  source_transaction_id?: string | null;
+  source_title?: string | null;
+  source_description?: string | null;
+  source_card_id?: string | null;
+  source_posted_at?: string | null;
+  source_purchase_date?: string | null;
+  source_installment_number?: number | null;
+  source_installment_total?: number | null;
 };
 
 export type RecurringPaymentMethod = "PIX" | "CASH" | "OTHER" | "CARD";
@@ -1238,11 +1246,13 @@ export async function listReimbursements(params?: {
   status?: string;
   person?: string;
   month?: string;
+  includeSourceDetails?: boolean;
 }): Promise<PendingReimbursementSummary[]> {
   const query = new URLSearchParams();
   if (params?.status) query.set("status", params.status);
   if (params?.person) query.set("person", params.person);
   if (params?.month) query.set("month", params.month);
+  if (params?.includeSourceDetails) query.set("include_source_details", "true");
   const qs = query.toString();
   return requestJson<PendingReimbursementSummary[]>(
     `/api/reimbursements${qs ? `?${qs}` : ""}`,

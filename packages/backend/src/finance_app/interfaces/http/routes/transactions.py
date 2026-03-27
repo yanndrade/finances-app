@@ -323,6 +323,9 @@ def build_transactions_router(
         reimbursement_status: str | None = Query(default=None, alias="status"),
         person_id: str | None = Query(default=None, alias="person"),
         month: str | None = Query(default=None, alias="month"),
+        include_source_details: bool = Query(
+            default=False, alias="include_source_details"
+        ),
     ) -> list[dict[str, str | int | None]]:
         if month is not None and re.fullmatch(r"\d{4}-\d{2}", month) is None:
             raise HTTPException(
@@ -333,6 +336,7 @@ def build_transactions_router(
             status=reimbursement_status,
             person_id=person_id,
             month=month,
+            include_source_details=include_source_details,
         )
 
     @router.get("/api/reimbursements/summary")

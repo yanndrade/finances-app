@@ -45,6 +45,7 @@ class ReimbursementProjector(Protocol):
         status: str | None = None,
         person_id: str | None = None,
         month: str | None = None,
+        include_source_details: bool = False,
     ) -> list[dict[str, str | int | None]]: ...
     def reimbursement_summary(
         self,
@@ -285,12 +286,14 @@ class ReimbursementService:
         status: str | None = None,
         person_id: str | None = None,
         month: str | None = None,
+        include_source_details: bool = False,
     ) -> list[dict[str, str | int | None]]:
         self._sync_projections()
         return self._projector.list_reimbursements(
             status=status,
             person_id=person_id,
             month=month,
+            include_source_details=include_source_details,
         )
 
     def get_summary(

@@ -682,4 +682,21 @@ describe("api timestamp normalization", () => {
 
     await expect(api.requestJson("/api/health")).resolves.toBeUndefined();
   });
+
+  it("requests reimbursement source details when asked", async () => {
+    const fetchMock = vi
+      .fn<(typeof fetch)>()
+      .mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.listReimbursements({
+      month: "2026-03",
+      includeSourceDetails: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/reimbursements?month=2026-03&include_source_details=true",
+    );
+  });
 });

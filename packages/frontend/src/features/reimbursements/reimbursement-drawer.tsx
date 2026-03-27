@@ -12,11 +12,12 @@ import {
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import type { PendingReimbursementSummary } from "../../lib/api";
+import type { CardSummary, PendingReimbursementSummary } from "../../lib/api";
 import { formatCurrency, formatDate } from "../../lib/format";
 
 type ReimbursementDrawerProps = {
   reimbursement: PendingReimbursementSummary | null;
+  cards: CardSummary[];
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   isSubmitting: boolean;
@@ -36,6 +37,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function ReimbursementDrawer({
   reimbursement,
+  cards,
   isOpen,
   onOpenChange,
   isSubmitting,
@@ -55,6 +57,25 @@ export function ReimbursementDrawer({
   const isCanceled = reimbursement.status === "canceled";
   const isReceived = reimbursement.status === "received";
   const canAct = !isCanceled && !isReceived;
+  const cardNameById = new Map(cards.map((card) => [card.card_id, card.name]));
+  const sourceCardName = reimbursement.source_card_id
+    ? cardNameById.get(reimbursement.source_card_id) ?? reimbursement.source_card_id
+    : null;
+  const sourceTitle =
+    reimbursement.source_title ??
+    reimbursement.source_description ??
+    reimbursement.source_transaction_id ??
+    null;
+  const sourceDate =
+    reimbursement.source_purchase_date ?? reimbursement.source_posted_at ?? null;
+  const shouldShowSourceDetails = Boolean(
+    sourceTitle ||
+    reimbursement.source_description ||
+    sourceCardName ||
+    sourceDate ||
+    reimbursement.source_installment_number ||
+    reimbursement.source_installment_total,
+  );
 
   function handleEditStart() {
     if (!reimbursement) return;
@@ -117,6 +138,56 @@ export function ReimbursementDrawer({
               <span className="text-sm font-medium text-emerald-600">Totalmente recebido</span>
             ) : null}
           </div>
+
+          {shouldShowSourceDetails ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Compra relacionada
+                </p>
+                <p className="text-sm font-semibold text-slate-900">
+                  {sourceTitle ?? "Compra relacionada"}
+                </p>
+                {reimbursement.source_description && reimbursement.source_description !== sourceTitle ? (
+                  <p className="text-sm text-slate-600">
+                    {reimbursement.source_description}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                {sourceDate ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-slate-500">
+                      {reimbursement.source_purchase_date ? "Data da compra" : "Lancado no historico"}
+                    </span>
+                    <span className="text-sm font-semibold text-right">
+                      {formatDate(sourceDate)}
+                    </span>
+                  </div>
+                ) : null}
+
+                {sourceCardName ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-slate-500">Cartao</span>
+                    <span className="text-sm font-semibold text-right">
+                      {sourceCardName}
+                    </span>
+                  </div>
+                ) : null}
+
+                {reimbursement.source_installment_number != null &&
+                reimbursement.source_installment_total != null ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-slate-500">Parcela</span>
+                    <span className="text-sm font-semibold text-right">
+                      {reimbursement.source_installment_number}/{reimbursement.source_installment_total}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
           <div className="space-y-3">
             <div className="flex justify-between items-center py-2 border-b border-slate-100">

@@ -1975,6 +1975,56 @@ def test_list_reimbursements_endpoint(tmp_path) -> None:
     assert len(april_response.json()) == 0
 
 
+def test_list_reimbursements_can_include_related_purchase_details(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Bradesco Visa Platinum - Duda",
+            "limit": 5_000_00,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-01T09:00:00Z",
+            "amount": 300_00,
+            "category_id": "other",
+            "card_id": "card-1",
+            "description": "CASA PIO (total 3 parcelas)",
+            "installments_count": 3,
+            "person_id": "dorinha",
+        },
+    )
+
+    response = client.get(
+        "/api/reimbursements",
+        params={"include_source_details": "true"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 3
+    assert payload[0]["transaction_id"] == "purchase-1:3"
+    assert payload[0]["source_transaction_id"] == "purchase-1"
+    assert payload[0]["source_title"] == "CASA PIO (total 3 parcelas)"
+    assert payload[0]["source_description"] == "CASA PIO (total 3 parcelas)"
+    assert payload[0]["source_card_id"] == "card-1"
+    assert payload[0]["source_purchase_date"] == "2026-03-01T09:00:00Z"
+    assert payload[0]["source_installment_number"] == 3
+    assert payload[0]["source_installment_total"] == 3
+
+
 def test_reimbursements_summary_endpoint(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
@@ -2033,11 +2083,11 @@ def test_update_reimbursement_expected_at_and_notes(tmp_path) -> None:
     # Set expected_at and notes
     update_response = client.patch(
         "/api/reimbursements/tx-1",
-        json={"expected_at": "2026-03-20", "notes": "Agreed to pay by end of month"},
+        json={"expected_at": "2026-04-20", "notes": "Agreed to pay by end of month"},
     )
     assert update_response.status_code == 200
     result = update_response.json()
-    assert result["expected_at"] == "2026-03-20"
+    assert result["expected_at"] == "2026-04-20"
     assert result["notes"] == "Agreed to pay by end of month"
     assert result["status"] == "pending"
 
@@ -2047,7 +2097,7 @@ def test_update_reimbursement_expected_at_and_notes(tmp_path) -> None:
     reimbursement = next(
         r for r in list_response.json() if r["transaction_id"] == "tx-1"
     )
-    assert reimbursement["expected_at"] == "2026-03-20"
+    assert reimbursement["expected_at"] == "2026-04-20"
     assert reimbursement["notes"] == "Agreed to pay by end of month"
 
 

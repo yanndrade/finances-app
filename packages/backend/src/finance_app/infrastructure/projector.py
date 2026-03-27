@@ -1278,6 +1278,7 @@ class Projector:
         status: str | None = None,
         person_id: str | None = None,
         month: str | None = None,
+        include_source_details: bool = False,
     ) -> list[dict[str, str | int | None]]:
         with self._lock:
             self.bootstrap()
@@ -1309,6 +1310,26 @@ class Projector:
                     ReimbursementProjectionRecord.occurred_at.desc(),
                     ReimbursementProjectionRecord.transaction_id.desc(),
                 ).all()
+                movement_by_id: dict[str, UnifiedMovementRecord] = {}
+                installment_by_id: dict[str, CardPurchaseInstallmentRecord] = {}
+                if include_source_details and rows:
+                    reimbursement_ids = [row.transaction_id for row in rows]
+                    movement_by_id = {
+                        row.movement_id: row
+                        for row in session.query(UnifiedMovementRecord)
+                        .filter(UnifiedMovementRecord.movement_id.in_(reimbursement_ids))
+                        .all()
+                    }
+                    installment_by_id = {
+                        row.installment_id: row
+                        for row in session.query(CardPurchaseInstallmentRecord)
+                        .filter(
+                            CardPurchaseInstallmentRecord.installment_id.in_(
+                                reimbursement_ids
+                            )
+                        )
+                        .all()
+                    }
 
         today_str = date.today().isoformat()
         result = []
@@ -1320,6 +1341,8 @@ class Projector:
                 and row.expected_at < today_str
             ):
                 computed_status = "overdue"
+            source_movement = movement_by_id.get(row.transaction_id)
+            source_installment = installment_by_id.get(row.transaction_id)
             result.append(
                 ReimbursementProjection(
                     transaction_id=row.transaction_id,
@@ -1333,6 +1356,46 @@ class Projector:
                     received_at=row.received_at,
                     receipt_transaction_id=row.receipt_transaction_id,
                     notes=row.notes,
+                    source_transaction_id=(
+                        row.source_transaction_id if include_source_details else None
+                    ),
+                    source_title=(
+                        source_movement.title if source_movement is not None else None
+                    ),
+                    source_description=(
+                        source_movement.description
+                        if source_movement is not None
+                        else None
+                    ),
+                    source_card_id=(
+                        source_movement.card_id
+                        if source_movement is not None
+                        else (
+                            source_installment.card_id
+                            if source_installment is not None
+                            else None
+                        )
+                    ),
+                    source_posted_at=(
+                        source_movement.posted_at
+                        if source_movement is not None
+                        else None
+                    ),
+                    source_purchase_date=(
+                        source_installment.purchase_date
+                        if source_installment is not None
+                        else None
+                    ),
+                    source_installment_number=(
+                        source_movement.installment_number
+                        if source_movement is not None
+                        else None
+                    ),
+                    source_installment_total=(
+                        source_movement.installment_total
+                        if source_movement is not None
+                        else None
+                    ),
                 ).to_dict()
             )
         return result

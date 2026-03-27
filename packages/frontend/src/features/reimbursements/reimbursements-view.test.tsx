@@ -42,6 +42,19 @@ const accounts: api.AccountSummary[] = [
   },
 ];
 
+const cards: api.CardSummary[] = [
+  {
+    card_id: "card-1",
+    name: "Bradesco Visa Platinum - Duda",
+    limit: 0,
+    closing_day: 10,
+    due_day: 20,
+    payment_account_id: "acc-1",
+    is_active: true,
+    future_installment_total: 0,
+  },
+];
+
 const reimbursements: api.PendingReimbursementSummary[] = [
   {
     transaction_id: "tx-1",
@@ -55,6 +68,13 @@ const reimbursements: api.PendingReimbursementSummary[] = [
     received_at: null,
     receipt_transaction_id: null,
     notes: null,
+    source_transaction_id: "purchase-1",
+    source_title: "CASA PIO (total 3 parcelas)",
+    source_description: "CASA PIO (total 3 parcelas)",
+    source_card_id: "card-1",
+    source_purchase_date: "2026-03-01T09:00:00Z",
+    source_installment_number: 1,
+    source_installment_total: 3,
   },
 ];
 
@@ -91,6 +111,7 @@ describe("ReimbursementsView", () => {
       <ReimbursementsView
         surface="mobile"
         accounts={accounts}
+        cards={cards}
         month="2026-03"
       />,
     );
@@ -113,6 +134,7 @@ describe("ReimbursementsView", () => {
       <ReimbursementsView
         surface="desktop"
         accounts={accounts}
+        cards={cards}
         month="2026-03"
       />,
     );
@@ -124,5 +146,27 @@ describe("ReimbursementsView", () => {
 
     expect(await screen.findByRole("button", { name: /^editar$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^cancelar$/i })).toBeInTheDocument();
+  });
+
+  it("shows related purchase details inside the reimbursement drawer", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ReimbursementsView
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+      />,
+    );
+
+    expect(await screen.findByText("Joao")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /joao/i }));
+
+    expect(await screen.findByText(/compra relacionada/i)).toBeInTheDocument();
+    expect(screen.getByText(/casa pio/i)).toBeInTheDocument();
+    expect(screen.getByText(/bradesco visa platinum - duda/i)).toBeInTheDocument();
+    expect(screen.getByText("1/3")).toBeInTheDocument();
+    expect(screen.getByText(/01\/03\/2026/i)).toBeInTheDocument();
   });
 });

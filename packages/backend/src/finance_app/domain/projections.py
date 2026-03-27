@@ -227,9 +227,17 @@ class ReimbursementProjection:
     received_at: str | None
     receipt_transaction_id: str | None
     notes: str | None
+    source_transaction_id: str | None = None
+    source_title: str | None = None
+    source_description: str | None = None
+    source_card_id: str | None = None
+    source_posted_at: str | None = None
+    source_purchase_date: str | None = None
+    source_installment_number: int | None = None
+    source_installment_total: int | None = None
 
     def to_dict(self) -> dict[str, str | int | None]:
-        return {
+        data: dict[str, str | int | None] = {
             "transaction_id": self.transaction_id,
             "person_id": self.person_id,
             "amount": self.amount,
@@ -242,6 +250,23 @@ class ReimbursementProjection:
             "receipt_transaction_id": self.receipt_transaction_id,
             "notes": self.notes,
         }
+        if self.source_transaction_id is not None:
+            data["source_transaction_id"] = self.source_transaction_id
+        if self.source_title is not None:
+            data["source_title"] = self.source_title
+        if self.source_description is not None:
+            data["source_description"] = self.source_description
+        if self.source_card_id is not None:
+            data["source_card_id"] = self.source_card_id
+        if self.source_posted_at is not None:
+            data["source_posted_at"] = self.source_posted_at
+        if self.source_purchase_date is not None:
+            data["source_purchase_date"] = self.source_purchase_date
+        if self.source_installment_number is not None:
+            data["source_installment_number"] = self.source_installment_number
+        if self.source_installment_total is not None:
+            data["source_installment_total"] = self.source_installment_total
+        return data
 
 
 @dataclass(frozen=True)

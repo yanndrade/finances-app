@@ -7,6 +7,7 @@ import {
   markReimbursementReceived,
   updateReimbursement,
   type AccountSummary,
+  type CardSummary,
   type PendingReimbursementSummary,
   type ReimbursementSummary,
 } from "../../lib/api";
@@ -19,6 +20,7 @@ import { ReceivePaymentDialog } from "./receive-payment-dialog";
 type ReimbursementsViewProps = {
   surface?: "desktop" | "mobile";
   accounts: AccountSummary[];
+  cards: CardSummary[];
   month: string;
   refreshKey?: number;
   onError?: (error: unknown) => void;
@@ -37,6 +39,7 @@ const EMPTY_SUMMARY: ReimbursementSummary = {
 export function ReimbursementsView({
   surface = "desktop",
   accounts,
+  cards,
   month,
   refreshKey,
   onError,
@@ -56,7 +59,9 @@ export function ReimbursementsView({
 
   async function reload() {
     await Promise.all([
-      listReimbursements({ month }).then(setReimbursements).catch(() => setReimbursements([])),
+      listReimbursements({ month, includeSourceDetails: true })
+        .then(setReimbursements)
+        .catch(() => setReimbursements([])),
       getReimbursementsSummary({ month }).then(setSummary).catch(() => setSummary(EMPTY_SUMMARY)),
     ]);
   }
@@ -64,7 +69,7 @@ export function ReimbursementsView({
   useEffect(() => {
     let cancelled = false;
     setIsListLoading(true);
-    listReimbursements({ month }).then(
+    listReimbursements({ month, includeSourceDetails: true }).then(
       (data) => { if (!cancelled) setReimbursements(data); },
       (err) => {
         if (!cancelled) {
@@ -109,9 +114,17 @@ export function ReimbursementsView({
     try {
       const updated = await updateReimbursement(id, { expectedAt, notes });
       setReimbursements((previous) =>
-        previous.map((item) => (item.transaction_id === id ? updated : item)),
+        previous.map((item) => (
+          item.transaction_id === id
+            ? { ...item, ...updated }
+            : item
+        )),
       );
-      setSelectedReimbursement(updated);
+      setSelectedReimbursement((previous) => (
+        previous && previous.transaction_id === id
+          ? { ...previous, ...updated }
+          : updated
+      ));
     } catch (error) {
       onError?.(error);
     } finally {
@@ -166,6 +179,7 @@ export function ReimbursementsView({
 
       <ReimbursementDrawer
         reimbursement={selectedReimbursement}
+        cards={cards}
         isOpen={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
         isSubmitting={isSubmitting}
