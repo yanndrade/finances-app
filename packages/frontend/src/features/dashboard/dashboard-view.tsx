@@ -146,7 +146,7 @@ function MobileDashboardHome({
   if (dashboard === null) {
     return (
       <div className="p-6 text-center bg-white rounded-3xl shadow-sm">
-        <p className="text-slate-500 font-medium">Nao foi possivel carregar o dashboard.</p>
+        <p className="text-slate-500 font-medium">Não foi possível carregar o dashboard.</p>
       </div>
     );
   }

@@ -6,6 +6,8 @@ from typing import Protocol
 
 
 class MovementProjector(Protocol):
+    def run(self) -> int: ...
+
     def list_unified_movements(
         self,
         *,
@@ -58,6 +60,7 @@ class MovementService:
         page: int = 1,
         page_size: int = 50,
     ) -> dict[str, object]:
+        self._sync_projections()
         return self._projector.list_unified_movements(
             competence_month=competence_month,
             kind=kind,
@@ -82,6 +85,10 @@ class MovementService:
         *,
         competence_month: str,
     ) -> dict[str, object]:
+        self._sync_projections()
         return self._projector.get_movements_summary(
             competence_month=competence_month,
         )
+
+    def _sync_projections(self) -> None:
+        self._projector.run()

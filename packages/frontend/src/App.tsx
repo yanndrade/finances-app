@@ -750,7 +750,7 @@ export function App() {
   async function handleVoidCardPurchase(purchaseId: string): Promise<void> {
     await runMutation(
       () => voidCardPurchase(purchaseId),
-      "Compra no cartÃ£o estornada com sucesso.",
+      "Compra no cartão estornada com sucesso.",
     );
   }
 
