@@ -441,10 +441,10 @@ export function App() {
       if (result.isAvailable && options?.showAvailableToast) {
         showToast(
           "success",
-          `Atualizacao ${result.update.availableVersion ?? ""} disponivel.`,
+          `Atualização ${result.update.availableVersion ?? ""} disponível.`,
         );
       } else if (!result.isAvailable && options?.showUpToDateToast) {
-        showToast("success", "Voce ja esta na versao mais recente.");
+        showToast("success", "Você já está na versão mais recente.");
       }
     } catch (error) {
       showErrorToast(error);
@@ -606,7 +606,7 @@ export function App() {
   async function handleTransferSubmit(payload: TransferPayload): Promise<void> {
     if (payload.fromAccountId === payload.toAccountId) {
       showToast("error", "Selecione contas diferentes para a transferência.");
-      throw new Error("Selecione contas diferentes para a transferencia.");
+      throw new Error("Selecione contas diferentes para a transferência.");
     }
 
     const wasSuccessful = await runMutation(
@@ -743,7 +743,7 @@ export function App() {
   ): Promise<void> {
     await runMutation(
       () => updateCardPurchase(purchaseId, payload),
-      "Compra no cartao atualizada com sucesso.",
+      "Compra no cartão atualizada com sucesso.",
     );
   }
 
@@ -965,7 +965,7 @@ export function App() {
       });
       showToast(
         "success",
-        "Atualizacao instalada. O app pode fechar para concluir a instalacao.",
+        "Atualização instalada. O app pode fechar para concluir a instalação.",
       );
     } catch (error) {
       showErrorToast(error);
@@ -1451,7 +1451,7 @@ function MobileLanWarningScreen({
           </h1>
 
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Nao conseguimos acessar os dados desta sessao. Conecte o celular na
+            Não conseguimos acessar os dados desta sessão. Conecte o celular na
             mesma rede Wi-Fi do computador para continuar.
           </p>
 

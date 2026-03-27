@@ -240,6 +240,32 @@ describe("api timestamp normalization", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/card-purchases?card=card-1");
   });
 
+  it("sends the has_counterparty flag when fetching movements", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 50,
+          pages: 1,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.fetchMovements({
+      competence_month: "2026-03",
+      scope: "variable",
+      has_counterparty: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/movements?competence_month=2026-03&has_counterparty=true&scope=variable",
+    );
+  });
+
   it("sends the editable fields when updating a card purchase", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(

@@ -38,7 +38,7 @@ export function PendingItem({
 
   const sourceName =
     pending.payment_method === "CARD"
-      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartao"
+      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartão"
       : accountNameById.get(pending.account_id ?? "") ??
         pending.account_id ??
         "Conta";
@@ -86,7 +86,7 @@ export function PendingItem({
                 className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                 onClick={onViewHistory}
               >
-                Ver no historico
+                Ver no histórico
               </button>
             </>
           ) : (

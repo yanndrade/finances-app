@@ -51,7 +51,7 @@ export function DetailDrawer({
 
   const sourceName =
     pending.payment_method === "CARD"
-      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartao"
+      ? cardNameById.get(pending.card_id ?? "") ?? pending.card_id ?? "Cartão"
       : accountNameById.get(pending.account_id ?? "") ??
         pending.account_id ??
         "Conta";
@@ -63,7 +63,7 @@ export function DetailDrawer({
           <DrawerHeader>
             <DrawerTitle className="text-xl">{pending.name}</DrawerTitle>
             <DrawerDescription>
-              Detalhes da pendencia gerada neste mes
+              Detalhes da pendência gerada neste mês
             </DrawerDescription>
           </DrawerHeader>
 
@@ -140,7 +140,7 @@ export function DetailDrawer({
                   </Button>
                 ) : null}
                 <Button onClick={onViewHistory} variant="outline" className="w-full">
-                  Ver no historico
+                  Ver no histórico
                 </Button>
               </div>
             ) : (

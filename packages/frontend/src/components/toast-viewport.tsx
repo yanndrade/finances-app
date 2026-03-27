@@ -76,7 +76,7 @@ export function ToastViewport({ toast, onDismiss }: ToastViewportProps) {
             </button>
           ) : null}
           <button
-            aria-label="Fechar notificacao"
+            aria-label="Fechar notificação"
             className="app-toast__dismiss"
             onClick={onDismiss}
             type="button"

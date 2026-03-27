@@ -167,20 +167,20 @@ export function ReimbursementDrawer({
             {isEditing ? (
               <div className="flex flex-col gap-1.5 py-2 border-b border-slate-100">
                 <Label htmlFor="notes" className="text-sm text-slate-500">
-                  Observacoes
+                  Observações
                 </Label>
                 <Input
                   id="notes"
                   type="text"
                   value={editedNotes}
                   onChange={(event) => setEditedNotes(event.target.value)}
-                  placeholder="Adicione uma observacao..."
+                  placeholder="Adicione uma observação..."
                   className="h-8 text-sm"
                 />
               </div>
             ) : reimbursement.notes ? (
               <div className="flex flex-col gap-1 py-2 border-b border-slate-100">
-                <span className="text-sm text-slate-500">Observacoes</span>
+                <span className="text-sm text-slate-500">Observações</span>
                 <span className="text-sm">{reimbursement.notes}</span>
               </div>
             ) : null}
@@ -193,7 +193,7 @@ export function ReimbursementDrawer({
                 <span className="text-sm font-semibold">Cancelar reembolso?</span>
               </div>
               <p className="text-xs text-red-600">
-                Esta acao nao pode ser desfeita. O reembolso sera marcado como cancelado.
+                Esta ação não pode ser desfeita. O reembolso será marcado como cancelado.
               </p>
               <div className="flex gap-2">
                 <Button
@@ -222,7 +222,7 @@ export function ReimbursementDrawer({
           {isEditing ? (
             <div className="flex gap-2 w-full">
               <Button onClick={handleEditSave} disabled={isSubmitting} className="flex-1">
-                Salvar alteracoes
+                Salvar alterações
               </Button>
               <Button variant="outline" onClick={handleEditCancel} disabled={isSubmitting}>
                 Cancelar

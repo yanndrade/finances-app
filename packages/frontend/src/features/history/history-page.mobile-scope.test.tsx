@@ -465,7 +465,7 @@ describe("HistoryPage mobile scope behavior", () => {
     await user.type(within(dialog).getByLabelText(/^parcelas$/i), "4");
     await user.clear(within(dialog).getByLabelText(/^pessoa$/i));
     await user.type(within(dialog).getByLabelText(/^pessoa$/i), "cliente");
-    await user.selectOptions(within(dialog).getByLabelText(/cartao da compra/i), "card-2");
+    await user.selectOptions(within(dialog).getByLabelText(/cartão da compra/i), "card-2");
     await user.click(within(dialog).getByRole("button", { name: /salvar altera/i }));
 
     expect(onUpdateCardPurchase).toHaveBeenCalledWith("purchase-1", {

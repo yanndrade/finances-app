@@ -70,7 +70,7 @@ type SettingsViewProps = {
 };
 
 const PRODUCTIVITY_SHORTCUTS = [
-  { keys: "Ctrl+N", description: "Abre o modal de lancamento" },
+  { keys: "Ctrl+N", description: "Abre o modal de lançamento" },
   { keys: "Ctrl+K", description: "Abre a command palette" },
   { keys: "Tab / Shift+Tab", description: "Navega entre campos do modal" },
 ] as const;
@@ -132,18 +132,18 @@ export function SettingsView({
     isInstallingUpdate ||
     desktopUpdateInstallState !== "idle";
   const desktopUpdateSummary = !desktopUpdateSupported
-    ? "Disponivel apenas no app desktop instalado."
+    ? "Disponível apenas no app desktop instalado."
     : desktopUpdateInstallState === "downloading"
       ? desktopUpdateProgressPercent === null
-        ? "Baixando atualizacao..."
-        : `Baixando atualizacao... ${desktopUpdateProgressPercent}%`
+        ? "Baixando atualização..."
+        : `Baixando atualização... ${desktopUpdateProgressPercent}%`
       : desktopUpdateInstallState === "installing"
-        ? "Instalando atualizacao..."
+        ? "Instalando atualização..."
         : desktopUpdateAvailableVersion
-          ? `Versao ${desktopUpdateAvailableVersion} disponivel. Atual: ${desktopUpdateVersion ?? "-"}`
+          ? `Versão ${desktopUpdateAvailableVersion} disponível. Atual: ${desktopUpdateVersion ?? "-"}`
           : desktopUpdateVersion
-            ? `Versao atual: ${desktopUpdateVersion}`
-            : "Verifique se existe uma nova versao disponivel.";
+            ? `Versão atual: ${desktopUpdateVersion}`
+            : "Verifique se existe uma nova versão disponível.";
 
   useEffect(() => {
     setInvestmentGoalPercentInput(String(investmentGoalPercent));
@@ -319,7 +319,7 @@ export function SettingsView({
                 <div>
                   <p className="settings-action-item__label">Exportar backup</p>
                   <p className="settings-action-item__hint">
-                    Inclui contas, cartoes, transacoes e faturas.
+                    Inclui contas, cartões, transações e faturas.
                   </p>
                 </div>
                 <Button
@@ -349,7 +349,7 @@ export function SettingsView({
               </h3>
             </div>
             <p className="settings-section__description">
-              Escolha a cor principal da aplicacao e salve a preferencia neste dispositivo.
+              Escolha a cor principal da aplicação e salve a preferência neste dispositivo.
             </p>
           </header>
           <div className="settings-section__body">
@@ -518,7 +518,7 @@ export function SettingsView({
               </h3>
             </div>
             <p className="settings-section__description">
-              Atalhos de teclado disponiveis na aplicacao.
+              Atalhos de teclado disponíveis na aplicação.
             </p>
           </header>
           <div className="settings-section__body">
@@ -544,7 +544,7 @@ export function SettingsView({
               </h3>
             </div>
             <p className="settings-section__description">
-              Controle de inicializacao automatica e atualizacoes do app.
+              Controle de inicialização automática e atualizações do app.
             </p>
           </header>
           <div className="settings-section__body space-y-3">
@@ -571,7 +571,7 @@ export function SettingsView({
 
             <div className="settings-action-item">
               <div>
-                <p className="settings-action-item__label">Atualizacoes do aplicativo</p>
+                <p className="settings-action-item__label">Atualizações do aplicativo</p>
                 <p className="settings-action-item__hint">{desktopUpdateSummary}</p>
               </div>
               <div className="flex shrink-0 gap-2">
@@ -611,7 +611,7 @@ export function SettingsView({
             {desktopUpdateAvailableVersion ? (
               <div className="rounded-xl border border-border/60 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Atualizacao pronta
+                  Atualização pronta
                 </p>
                 <p className="mt-1 text-sm text-foreground">
                   Nova versao: {desktopUpdateAvailableVersion}
@@ -619,7 +619,7 @@ export function SettingsView({
                 <p className="text-xs text-muted-foreground">
                   {desktopUpdatePublishedAt
                     ? `Publicada em ${new Date(desktopUpdatePublishedAt).toLocaleString()}`
-                    : "Data de publicacao indisponivel"}
+                    : "Data de publicação indisponível"}
                 </p>
                 {desktopUpdateNotes ? (
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
@@ -782,7 +782,7 @@ export function SettingsView({
               </h3>
             </div>
             <p className="settings-section__description">
-              Defina uma senha para bloquear e desbloquear a aplicacao.
+              Defina uma senha para bloquear e desbloquear a aplicação.
             </p>
           </header>
           <div className="settings-section__body space-y-3">
@@ -868,7 +868,7 @@ export function SettingsView({
               </h3>
             </div>
             <p className="settings-section__description">
-              Acoes irreversiveis que afetam os dados da aplicacao.
+              Ações irreversíveis que afetam os dados da aplicação.
             </p>
           </header>
           <div className="settings-section__body">

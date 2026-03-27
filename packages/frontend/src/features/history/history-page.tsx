@@ -195,7 +195,7 @@ export function HistoryPage({
           setLoadError(
             error instanceof Error
               ? error.message
-              : "Nao foi possivel carregar as movimentacoes.",
+              : "Não foi possível carregar as movimentações.",
           );
         }
       } finally {
@@ -280,6 +280,7 @@ export function HistoryPage({
       category_id: filters.category_id,
       payment_method: filters.payment_method,
       counterparty: filters.counterparty,
+      has_counterparty: filters.has_counterparty,
     });
     setCurrentPage(1);
   }
@@ -311,7 +312,7 @@ export function HistoryPage({
           setEditingCardPurchase(nextForm);
           setEditingMovement(null);
         } else {
-          onError?.(new Error("Nao foi possivel localizar a compra no cartao."));
+          onError?.(new Error("Não foi possível localizar a compra no cartão."));
         }
       } catch (error) {
         onError?.(error);
@@ -403,7 +404,7 @@ export function HistoryPage({
     <section
       className={cn("flex flex-col gap-4", className)}
       role="region"
-      aria-label="Historico e filtros"
+      aria-label="Histórico e filtros"
     >
       <HistoryHeader
         searchText={searchText}
@@ -452,7 +453,7 @@ export function HistoryPage({
             Data
           </span>
           <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground flex-1">
-            Movimentacao
+            Movimentação
           </span>
           <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground w-24 shrink-0 hidden sm:block">
             Origem
@@ -507,7 +508,7 @@ export function HistoryPage({
           <div className="flex flex-col gap-2 px-4 py-2.5 border-t border-border/50 bg-surface-paper/50 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs text-muted-foreground">
               Mostrando {movementPage.items.length} de {movementPage.total}{" "}
-              movimentacoes
+              movimentações
             </span>
             <div className="flex items-center justify-between gap-3 sm:justify-end">
               <span className="text-xs text-muted-foreground">
@@ -568,10 +569,10 @@ export function HistoryPage({
       >
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Editar lancamento</DialogTitle>
+            <DialogTitle>Editar lançamento</DialogTitle>
             <DialogDescription>
-              Ajuste os dados do lancamento e salve para reprojetar saldo e
-              historico.
+              Ajuste os dados do lançamento e salve para reprojetar saldo e
+              histórico.
             </DialogDescription>
           </DialogHeader>
 
@@ -633,13 +634,13 @@ export function HistoryPage({
                       )
                     }
                   >
-                    <option value="expense">Saida</option>
+                    <option value="expense">Saída</option>
                     <option value="income">Entrada</option>
                   </select>
                 </label>
 
                 <label className="space-y-2 text-sm font-medium text-foreground">
-                  Metodo
+                  Método
                   <select
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     value={editingMovement.paymentMethod}
@@ -755,7 +756,7 @@ export function HistoryPage({
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
-                  Salvar alteracoes
+                  Salvar alterações
                 </Button>
               </DialogFooter>
             </form>
@@ -773,7 +774,7 @@ export function HistoryPage({
       >
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Editar compra no cartao</DialogTitle>
+            <DialogTitle>Editar compra no cartão</DialogTitle>
             <DialogDescription>
               Ajuste a compra para reprojetar parcelas, faturas e reembolsos
               relacionados.
@@ -822,7 +823,7 @@ export function HistoryPage({
                 </label>
 
                 <label className="space-y-2 text-sm font-medium text-foreground">
-                  Cartao da compra
+                  Cartão da compra
                   <select
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     value={editingCardPurchase.cardId}
@@ -939,7 +940,7 @@ export function HistoryPage({
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
-                  Salvar alteracoes
+                  Salvar alterações
                 </Button>
               </DialogFooter>
             </form>

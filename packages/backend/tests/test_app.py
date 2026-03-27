@@ -2807,6 +2807,80 @@ def test_movements_history_previews_confirmed_recurring_card_purchase_in_purchas
     assert april_summary_response.json()["counts"]["fixed"] == 1
 
 
+def test_movements_history_can_filter_items_with_person_for_reimbursement_tracking(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Almoco cliente",
+            "person_id": "cliente",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-2",
+            "purchase_date": "2026-03-18T12:00:00Z",
+            "amount": 50_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Almoco proprio",
+        },
+    )
+
+    with_person_response = client.get(
+        "/api/movements",
+        params={
+            "competence_month": "2026-03",
+            "scope": "variable",
+            "has_counterparty": "true",
+        },
+    )
+    without_person_response = client.get(
+        "/api/movements",
+        params={
+            "competence_month": "2026-03",
+            "scope": "variable",
+            "has_counterparty": "false",
+        },
+    )
+
+    assert with_person_response.status_code == 200
+    assert [item["movement_id"] for item in with_person_response.json()["items"]] == [
+        "purchase-1:1"
+    ]
+    assert with_person_response.json()["items"][0]["counterparty"] == "cliente"
+
+    assert without_person_response.status_code == 200
+    assert [item["movement_id"] for item in without_person_response.json()["items"]] == [
+        "purchase-2:1"
+    ]
+    assert without_person_response.json()["items"][0]["counterparty"] is None
+
+
 def test_movements_history_previews_only_first_installment_in_purchase_month(
     tmp_path,
 ) -> None:

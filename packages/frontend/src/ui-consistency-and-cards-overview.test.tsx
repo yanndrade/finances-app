@@ -309,7 +309,7 @@ describe("UI consistency and cards overview", () => {
     expect(
       await screen.findByPlaceholderText(/buscar/i, undefined, { timeout: 10_000 }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/histÃ³rico e filtros/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/histórico e filtros/i)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /ctrl/i }));
     expect(await screen.findByRole("dialog", undefined, { timeout: 10_000 })).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();

@@ -55,10 +55,29 @@ describe("FilterPanel", () => {
 
     expect(screen.getByRole("combobox", { name: "Tipo" })).toHaveTextContent("Ajuste");
     expect(screen.getByRole("combobox", { name: "Origem" })).toHaveTextContent("Importado");
-    expect(screen.getByRole("combobox", { name: "Situacao" })).toHaveTextContent("Compensada");
-    expect(screen.getByRole("combobox", { name: "Metodo" })).toHaveTextContent("Cartao");
+    expect(screen.getByRole("combobox", { name: "Situação" })).toHaveTextContent("Compensada");
+    expect(screen.getByRole("combobox", { name: "Método" })).toHaveTextContent("Cartão");
     expect(screen.getByRole("combobox", { name: "Conta" })).toHaveTextContent("acc-legacy");
-    expect(screen.getByRole("combobox", { name: "Cartao" })).toHaveTextContent("card-legacy");
+    expect(screen.getByRole("combobox", { name: "Cartão" })).toHaveTextContent("card-legacy");
     expect(screen.getByRole("combobox", { name: "Categoria" })).toHaveTextContent("Custom Category");
+  });
+
+  it("shows the pessoa reimbursement filter when active", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FilterPanel
+        filters={{ has_counterparty: true }}
+        accounts={accounts}
+        cards={cards}
+        onFiltersChange={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /filtros avancados/i }));
+
+    expect(screen.getByRole("combobox", { name: "Pessoa" })).toHaveTextContent(
+      "Com pessoa / reembolso",
+    );
   });
 });

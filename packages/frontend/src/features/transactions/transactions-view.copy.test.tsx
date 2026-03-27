@@ -310,7 +310,7 @@ describe("TransactionsView copy", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: /^editar$/i }));
-    await userEvent.selectOptions(screen.getByLabelText(/cartao da compra/i), "card-2");
+    await userEvent.selectOptions(screen.getByLabelText(/cartão da compra/i), "card-2");
     await userEvent.click(screen.getByRole("button", { name: /salvar altera/i }));
 
     expect(onUpdateCardPurchase).toHaveBeenCalledWith("purchase-1", {

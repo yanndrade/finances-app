@@ -189,15 +189,15 @@ function MobileDashboardHome({
             className="h-9 rounded-xl"
             onClick={() => onNavigate("transactions")}
           >
-            Ver historico
+            Ver histórico
           </Button>
         </div>
       </section>
 
       <section className="grid grid-cols-2 gap-2">
         <MiniMetric title="Entradas" value={dashboard.total_income} />
-        <MiniMetric title="Saidas" value={dashboard.total_expense} />
-        <MiniMetric title="Livre mes" value={dashboard.free_to_spend} />
+        <MiniMetric title="Saídas" value={dashboard.total_expense} />
+        <MiniMetric title="Livre no mês" value={dashboard.free_to_spend} />
         <MiniMetric title="Faturas" value={dashboard.invoices_due_total} />
       </section>
 
@@ -219,7 +219,7 @@ function MobileDashboardHome({
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-black uppercase tracking-[0.14em] text-slate-500">
-            Ultimas transacoes
+            Últimas transações
           </h3>
           <button
             type="button"
@@ -236,7 +236,7 @@ function MobileDashboardHome({
         </div>
         {recentTransactions.length === 0 ? (
           <p className="text-sm text-slate-500">
-            Nenhuma movimentacao no periodo.
+            Nenhuma movimentação no período.
           </p>
         ) : (
           <div className="space-y-2">

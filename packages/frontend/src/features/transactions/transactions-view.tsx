@@ -651,7 +651,7 @@ export function TransactionsView({
           <label>
             Cartão
             <select
-              aria-label="Cartao do filtro"
+              aria-label="Cartão do filtro"
               onChange={(event) =>
                 setFilterForm((current) => ({
                   ...current,
@@ -921,7 +921,7 @@ export function TransactionsView({
             <label>
               Novo cartão
               <select
-                aria-label="Cartao da compra"
+                aria-label="Cartão da compra"
                 onChange={(event) =>
                   setCardPurchaseEditForm((current) =>
                     current === null
@@ -1368,7 +1368,7 @@ function resolveLedgerFallback(
   if (transaction.type === "expense" && transaction.category_id === "invoice_payment") {
     return endpoint === "source"
       ? resolveAccountName(transaction.account_id, accounts)
-      : "Passivo de cartao";
+      : "Passivo de cartão";
   }
 
   if (transaction.type === "expense") {

@@ -662,6 +662,7 @@ export type MovementFilters = {
   category_id?: string;
   payment_method?: string;
   counterparty?: string;
+  has_counterparty?: boolean;
   text?: string;
   scope?: MovementScope;
   sort_by?:
@@ -1379,6 +1380,9 @@ export async function fetchMovements(
   if (filters?.payment_method)
     params.set("payment_method", filters.payment_method);
   if (filters?.counterparty) params.set("counterparty", filters.counterparty);
+  if (typeof filters?.has_counterparty === "boolean") {
+    params.set("has_counterparty", String(filters.has_counterparty));
+  }
   if (filters?.text) params.set("text", filters.text);
   if (filters?.scope && filters.scope !== "all")
     params.set("scope", filters.scope);

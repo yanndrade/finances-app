@@ -3936,7 +3936,7 @@ class Projector:
             description,
             reimbursement_person_id,
         ) in rows:
-            label = description or "Compra no cartao"
+            label = description or "Compra no cartão"
             if installment_row.installments_count > 1:
                 label = (
                     f"{label} - Parcela "
@@ -4812,6 +4812,7 @@ class Projector:
         category_id: str | None = None,
         payment_method: str | None = None,
         counterparty: str | None = None,
+        has_counterparty: bool | None = None,
         text: str | None = None,
         scope: str | None = None,
         needs_review: bool | None = None,
@@ -4901,6 +4902,18 @@ class Projector:
                 if counterparty is not None:
                     query = query.filter(
                         UnifiedMovementRecord.counterparty == counterparty
+                    )
+                if has_counterparty is True:
+                    query = query.filter(
+                        UnifiedMovementRecord.counterparty.is_not(None),
+                        UnifiedMovementRecord.counterparty != "",
+                    )
+                elif has_counterparty is False:
+                    query = query.filter(
+                        or_(
+                            UnifiedMovementRecord.counterparty.is_(None),
+                            UnifiedMovementRecord.counterparty == "",
+                        )
                     )
                 if text is not None:
                     text_pattern = f"%{text.lower()}%"

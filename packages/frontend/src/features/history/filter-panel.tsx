@@ -37,17 +37,20 @@ type SelectOption = {
 };
 
 const ALL_OPTION_VALUE = "__all__";
+const WITH_COUNTERPARTY_OPTION_VALUE = "__with_counterparty__";
+const WITHOUT_COUNTERPARTY_OPTION_VALUE = "__without_counterparty__";
 
 function activeFilterCount(filters: MovementFilters): number {
   return [
-    filters.kind,
-    filters.origin_type,
-    filters.lifecycle_status,
-    filters.account_id,
-    filters.card_id,
-    filters.category_id,
-    filters.payment_method,
-    filters.counterparty,
+    filters.kind !== undefined,
+    filters.origin_type !== undefined,
+    filters.lifecycle_status !== undefined,
+    filters.account_id !== undefined,
+    filters.card_id !== undefined,
+    filters.category_id !== undefined,
+    filters.payment_method !== undefined,
+    filters.counterparty !== undefined,
+    filters.has_counterparty !== undefined,
   ].filter(Boolean).length;
 }
 
@@ -133,8 +136,16 @@ export function FilterPanel({
       category_id: undefined,
       payment_method: undefined,
       counterparty: undefined,
+      has_counterparty: undefined,
     });
   }
+
+  const personFilterValue =
+    filters.has_counterparty === true
+      ? WITH_COUNTERPARTY_OPTION_VALUE
+      : filters.has_counterparty === false
+        ? WITHOUT_COUNTERPARTY_OPTION_VALUE
+        : "";
 
   const categoryOptions = getCategoryOptions().map((option) => ({
     value: option.value,
@@ -153,8 +164,8 @@ export function FilterPanel({
     filters.kind ?? "",
     [
       { value: "income", label: "Entrada" },
-      { value: "expense", label: "Saida" },
-      { value: "transfer", label: "Transferencia" },
+      { value: "expense", label: "Saída" },
+      { value: "transfer", label: "Transferência" },
       { value: "investment", label: "Investimento" },
       { value: "reimbursement", label: "Reembolso" },
       { value: "adjustment", label: "Ajuste" },
@@ -168,8 +179,8 @@ export function FilterPanel({
       { value: "manual", label: "Manual" },
       { value: "recurring", label: "Recorrente" },
       { value: "installment", label: "Parcelado" },
-      { value: "card_purchase", label: "Compra no cartao" },
-      { value: "transfer", label: "Transferencia" },
+      { value: "card_purchase", label: "Compra no cartão" },
+      { value: "transfer", label: "Transferência" },
       { value: "investment", label: "Investimento" },
       { value: "reimbursement", label: "Reembolso" },
       { value: "imported", label: "Importado" },
@@ -186,7 +197,7 @@ export function FilterPanel({
       { value: "cancelled", label: "Cancelada" },
       { value: "voided", label: "Estornada" },
       { value: "active", label: "Compensada" },
-      { value: "readonly", label: "Automatica" },
+      { value: "readonly", label: "Automática" },
     ],
     formatLifecycleStatus,
   );
@@ -200,11 +211,11 @@ export function FilterPanel({
       { value: "CREDIT_CASH", label: "Credito a vista" },
       { value: "CREDIT_INSTALLMENT", label: "Credito parcelado" },
       { value: "BOLETO", label: "Boleto" },
-      { value: "AUTO_DEBIT", label: "Debito automatico" },
-      { value: "TRANSFER", label: "Transferencia" },
+      { value: "AUTO_DEBIT", label: "Débito automático" },
+      { value: "TRANSFER", label: "Transferência" },
       { value: "BALANCE", label: "Saldo" },
       { value: "OTHER", label: "Outro" },
-      { value: "CARD", label: "Cartao" },
+      { value: "CARD", label: "Cartão" },
       { value: "INVOICE", label: "Fatura" },
     ],
     formatPaymentMethodExpanded,
@@ -303,7 +314,7 @@ export function FilterPanel({
           />
 
           <SelectField
-            label="Situacao"
+            label="Situação"
             value={filters.lifecycle_status ?? ""}
             options={lifecycleOptions}
             onChange={(value) =>
@@ -315,7 +326,7 @@ export function FilterPanel({
           />
 
           <SelectField
-            label="Metodo"
+            label="Método"
             value={filters.payment_method ?? ""}
             options={paymentMethodOptions}
             onChange={(value) => update({ payment_method: value || undefined })}
@@ -329,7 +340,7 @@ export function FilterPanel({
           />
 
           <SelectField
-            label="Cartao"
+            label="Cartão"
             value={filters.card_id ?? ""}
             options={resolvedCardOptions}
             onChange={(value) => update({ card_id: value || undefined })}
@@ -340,6 +351,31 @@ export function FilterPanel({
             value={filters.category_id ?? ""}
             options={resolvedCategoryOptions}
             onChange={(value) => update({ category_id: value || undefined })}
+          />
+
+          <SelectField
+            label="Pessoa"
+            value={personFilterValue}
+            options={[
+              {
+                value: WITH_COUNTERPARTY_OPTION_VALUE,
+                label: "Com pessoa / reembolso",
+              },
+              {
+                value: WITHOUT_COUNTERPARTY_OPTION_VALUE,
+                label: "Sem pessoa",
+              },
+            ]}
+            onChange={(value) =>
+              update({
+                has_counterparty:
+                  value === WITH_COUNTERPARTY_OPTION_VALUE
+                    ? true
+                    : value === WITHOUT_COUNTERPARTY_OPTION_VALUE
+                      ? false
+                      : undefined,
+              })
+            }
           />
         </div>
       )}

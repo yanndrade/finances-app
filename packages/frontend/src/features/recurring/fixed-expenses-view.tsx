@@ -136,9 +136,9 @@ export function FixedExpensesView({
             {pendingExpenses.length === 0 ? (
               <EmptyState
                 className="py-12"
-                description="Nenhuma ocorrencia gerada para este mes."
+                description="Nenhuma ocorrência gerada para este mês."
                 icon={CalendarClock}
-                title="Sem pendencias"
+                title="Sem pendências"
               />
             ) : (
               <div className="space-y-6">

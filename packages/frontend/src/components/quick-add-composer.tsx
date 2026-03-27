@@ -453,7 +453,7 @@ export function QuickAddComposer({
     }
 
     if (entryType === "expense" && expensePaymentMode === "CARD") {
-      const cardResult = z.string().min(1, "Selecione um cartao.").safeParse(cardId);
+      const cardResult = z.string().min(1, "Selecione um cartão.").safeParse(cardId);
       const installmentsCount = parseInt(installments, 10);
       const installmentsResult = z
         .number()
