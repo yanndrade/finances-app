@@ -3499,6 +3499,95 @@ def test_card_purchase_endpoint_can_fully_update_purchase_and_reproject_installm
     ]
 
 
+def test_card_purchase_endpoint_can_add_person_and_create_reimbursement_on_edit(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-02T12:00:00Z",
+            "amount": 90_00,
+            "installments_count": 1,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Lunch",
+        },
+    )
+
+    response = client.patch(
+        "/api/card-purchases/purchase-1",
+        json={"person_id": "cliente"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["purchase_id"] == "purchase-1"
+
+    movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-03", "scope": "variable"},
+    )
+    assert movements_response.status_code == 200
+    assert movements_response.json()["items"] == [
+        {
+            "movement_id": "purchase-1:1",
+            "kind": "expense",
+            "origin_type": "card_purchase",
+            "title": "Lunch",
+            "description": "Lunch",
+            "amount": 90_00,
+            "posted_at": "2026-03-02T12:00:00Z",
+            "competence_month": "2026-03",
+            "account_id": "acc-1",
+            "card_id": "card-1",
+            "payment_method": "CREDIT_CASH",
+            "category_id": "food",
+            "counterparty": "cliente",
+            "lifecycle_status": "pending",
+            "edit_policy": "editable",
+            "parent_id": "purchase-1",
+            "group_id": None,
+            "transfer_direction": None,
+            "installment_number": None,
+            "installment_total": None,
+            "source_event_type": "CardPurchaseUpdated",
+            "needs_review": False,
+        }
+    ]
+    assert client.get("/api/reimbursements").json() == [
+        {
+            "transaction_id": "purchase-1:1",
+            "person_id": "cliente",
+            "amount": 90_00,
+            "amount_received": 0,
+            "status": "pending",
+            "account_id": "acc-1",
+            "occurred_at": "2026-03-10T00:00:00Z",
+            "expected_at": None,
+            "received_at": None,
+            "receipt_transaction_id": None,
+            "notes": None,
+        }
+    ]
+
+
 def test_card_purchase_endpoint_can_void_purchase_and_remove_future_commitments(
     tmp_path,
 ) -> None:

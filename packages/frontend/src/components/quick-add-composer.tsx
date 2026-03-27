@@ -914,7 +914,7 @@ export function QuickAddComposer({
                 <Input
                   id="quick-add-person-card"
                   className="h-11 border-transparent bg-muted/50 focus-visible:bg-background"
-                  placeholder="Opcional â€” para rastrear reembolsos"
+                  placeholder="Opcional — para rastrear reembolsos"
                   maxLength={100}
                   value={personId}
                   onChange={(event) => setPersonId(event.target.value)}

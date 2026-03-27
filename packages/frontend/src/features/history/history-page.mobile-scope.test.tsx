@@ -479,6 +479,91 @@ describe("HistoryPage mobile scope behavior", () => {
     });
   });
 
+  it("allows updating only the related person on a card purchase", async () => {
+    const user = userEvent.setup();
+    const onUpdateCardPurchase = vi
+      .fn<(purchaseId: string, payload: api.CardPurchaseUpdatePayload) => Promise<void>>()
+      .mockResolvedValue();
+
+    vi.mocked(api.fetchMovements).mockResolvedValue({
+      items: [
+        {
+          movement_id: "purchase-1:1",
+          kind: "expense",
+          origin_type: "card_purchase",
+          title: "Lunch",
+          description: "Lunch",
+          amount: 90_00,
+          posted_at: "2026-03-02T12:00:00Z",
+          competence_month: "2026-03",
+          account_id: "acc-1",
+          card_id: "card-1",
+          payment_method: "CREDIT_CASH",
+          category_id: "food",
+          counterparty: null,
+          lifecycle_status: "pending",
+          edit_policy: "locked",
+          parent_id: "purchase-1",
+          group_id: null,
+          transfer_direction: null,
+          installment_number: null,
+          installment_total: null,
+          source_event_type: "CardPurchaseCreated",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      pages: 1,
+    });
+    vi.mocked(api.fetchCardPurchases).mockResolvedValue([
+      {
+        purchase_id: "purchase-1",
+        purchase_date: "2026-03-02T12:00:00Z",
+        amount: 90_00,
+        category_id: "food",
+        card_id: "card-1",
+        description: "Lunch",
+        installments_count: 1,
+        invoice_id: "card-1:2026-03",
+        reference_month: "2026-03",
+        closing_date: "2026-03-10",
+        due_date: "2026-03-20",
+      },
+    ]);
+
+    render(
+      <HistoryPage
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+        onUpdateCardPurchase={onUpdateCardPurchase}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /lunch/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /lunch/i }));
+    await user.click(screen.getByRole("button", { name: /^editar$/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText(/^pessoa$/i), "cliente");
+    await user.click(within(dialog).getByRole("button", { name: /salvar altera/i }));
+
+    expect(onUpdateCardPurchase).toHaveBeenCalledWith("purchase-1", {
+      purchaseDate: "2026-03-02T12:00:00Z",
+      amountInCents: 90_00,
+      installmentsCount: 1,
+      categoryId: "food",
+      cardId: "card-1",
+      description: "Lunch",
+      personId: "cliente",
+    });
+  });
+
   it("voids a card purchase from the history drawer", async () => {
     const user = userEvent.setup();
     const onVoidCardPurchase = vi
