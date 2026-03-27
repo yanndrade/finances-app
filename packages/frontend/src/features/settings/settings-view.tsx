@@ -33,6 +33,7 @@ import {
   normalizeThemeColor,
   THEME_PRESET_OPTIONS,
 } from "../../lib/theme";
+import { formatDateTime } from "../../lib/format";
 
 type SettingsViewProps = {
   isSubmitting: boolean;
@@ -71,7 +72,7 @@ type SettingsViewProps = {
 
 const PRODUCTIVITY_SHORTCUTS = [
   { keys: "Ctrl+N", description: "Abre o modal de lançamento" },
-  { keys: "Ctrl+K", description: "Abre a command palette" },
+  { keys: "Ctrl+K", description: "Abre a paleta de comandos" },
   { keys: "Tab / Shift+Tab", description: "Navega entre campos do modal" },
 ] as const;
 
@@ -132,7 +133,7 @@ export function SettingsView({
     isInstallingUpdate ||
     desktopUpdateInstallState !== "idle";
   const desktopUpdateSummary = !desktopUpdateSupported
-    ? "Disponível apenas no app desktop instalado."
+    ? "Disponível apenas no aplicativo desktop instalado."
     : desktopUpdateInstallState === "downloading"
       ? desktopUpdateProgressPercent === null
         ? "Baixando atualização..."
@@ -544,7 +545,7 @@ export function SettingsView({
               </h3>
             </div>
             <p className="settings-section__description">
-              Controle de inicialização automática e atualizações do app.
+              Controle de inicialização automática e atualizações do aplicativo.
             </p>
           </header>
           <div className="settings-section__body space-y-3">
@@ -618,7 +619,7 @@ export function SettingsView({
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {desktopUpdatePublishedAt
-                    ? `Publicada em ${new Date(desktopUpdatePublishedAt).toLocaleString()}`
+                    ? `Publicada em ${formatDateTime(desktopUpdatePublishedAt)}`
                     : "Data de publicação indisponível"}
                 </p>
                 {desktopUpdateNotes ? (
@@ -718,7 +719,7 @@ export function SettingsView({
                       {lanPairingSession.pairing_url}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Expira em: {new Date(lanPairingSession.expires_at).toLocaleString()}
+                      Expira em: {formatDateTime(lanPairingSession.expires_at)}
                     </p>
                   </div>
                 </div>
@@ -745,7 +746,7 @@ export function SettingsView({
                         <p className="truncate text-xs text-muted-foreground">
                           Último acesso:{" "}
                           {device.last_seen_at
-                            ? new Date(device.last_seen_at).toLocaleString()
+                            ? formatDateTime(device.last_seen_at)
                             : "nunca"}
                           {device.last_seen_ip ? ` - ${device.last_seen_ip}` : ""}
                         </p>

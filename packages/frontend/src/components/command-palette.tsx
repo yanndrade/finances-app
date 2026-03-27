@@ -90,7 +90,7 @@ const NAVIGATION_COMMANDS: Array<{
 }> = [
   {
     label: "Visão geral",
-    hint: "Dashboard acionável",
+    hint: "Painel acionável",
     value: "visão geral dashboard",
     view: "dashboard",
     icon: Home,

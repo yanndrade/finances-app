@@ -965,7 +965,7 @@ export function App() {
       });
       showToast(
         "success",
-        "Atualização instalada. O app pode fechar para concluir a instalação.",
+        "Atualização instalada. O aplicativo pode fechar para concluir a instalação.",
       );
     } catch (error) {
       showErrorToast(error);
