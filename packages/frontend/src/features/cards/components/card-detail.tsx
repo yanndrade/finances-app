@@ -15,7 +15,13 @@ import type {
 import { formatCurrency } from "../../../lib/format";
 import type { QuickAddPreset } from "../../../components/quick-add-composer";
 import { cn } from "../../../lib/utils";
-import { getDisplayedInvoiceAmount, MetricPanel, MiniMetric, renderInvoiceStatusBadge } from "./shared";
+import {
+  getDisplayedInvoiceAmount,
+  getInvoiceCycleDates,
+  MetricPanel,
+  MiniMetric,
+  renderInvoiceStatusBadge,
+} from "./shared";
 
 type QuickAddOpenOptions = {
   invoiceId?: string;
@@ -97,6 +103,7 @@ export function CardDetail({
   const displayedInvoiceAmount = getDisplayedInvoiceAmount(invoice);
   const progress = invoice.total_amount > 0 ? (invoice.paid_amount / invoice.total_amount) * 100 : 0;
   const isPaidFull = progress >= 100;
+  const { closingDate, dueDate } = getInvoiceCycleDates(invoice, card);
 
   const committedLimit = invoice.remaining_amount + (card.future_installment_total ?? 0);
   const availableLimit = Math.max(card.limit - committedLimit, 0);
@@ -141,7 +148,7 @@ export function CardDetail({
                   <span className="text-3xl font-black tracking-tighter text-slate-900 truncate tabular-nums">
                     {formatCurrency(displayedInvoiceAmount)}
                   </span>
-                  {renderInvoiceStatusBadge(invoice)}
+                  {renderInvoiceStatusBadge(invoice, card)}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -201,13 +208,13 @@ export function CardDetail({
                   icon={<Calendar className="h-4 w-4" />}
                   label="Fechamento"
                   tone="neutral"
-                  value={invoice.closing_date}
+                  value={closingDate}
                 />
                 <MetricPanel
                   icon={<Clock className="h-4 w-4" />}
                   label="Vencimento"
                   tone="danger"
-                  value={invoice.due_date}
+                  value={dueDate}
                 />
                 {/* Progress: text when 100%, bar when partial */}
                 {isPaidFull ? (

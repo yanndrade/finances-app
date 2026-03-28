@@ -48,7 +48,7 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
             <div className="w-40 shrink-0">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate text-sm font-bold text-foreground">{card.name}</span>
-                {currentInvoice && renderInvoiceStatusBadge(currentInvoice)}
+                {currentInvoice && renderInvoiceStatusBadge(currentInvoice, card)}
               </div>
               <p className="mt-0.5 text-[13px] text-muted-foreground">
                 Fecha {card.closing_day} · Vence {card.due_day}

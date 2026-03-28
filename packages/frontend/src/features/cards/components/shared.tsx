@@ -8,6 +8,46 @@ import { formatCurrency } from "../../../lib/format";
 import { cn } from "../../../lib/utils";
 import type { UiDensity } from "../../../lib/ui-density";
 
+function shiftMonth(year: number, month: number, delta: number) {
+  const totalMonths = year * 12 + (month - 1) + delta;
+  return {
+    year: Math.floor(totalMonths / 12),
+    month: (totalMonths % 12) + 1,
+  };
+}
+
+function buildCycleDate(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+export function getInvoiceCycleDates(invoice: InvoiceSummary, card?: CardSummary) {
+  if (!card) {
+    return {
+      closingDate: invoice.closing_date,
+      dueDate: invoice.due_date,
+    };
+  }
+
+  const [yearPart, monthPart] = invoice.reference_month.split("-");
+  const year = Number(yearPart);
+  const month = Number(monthPart);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return {
+      closingDate: invoice.closing_date,
+      dueDate: invoice.due_date,
+    };
+  }
+
+  const closingDate = buildCycleDate(year, month, card.closing_day);
+  const dueTarget = card.due_day < card.closing_day ? shiftMonth(year, month, 1) : { year, month };
+
+  return {
+    closingDate,
+    dueDate: buildCycleDate(dueTarget.year, dueTarget.month, card.due_day),
+  };
+}
+
 export function SummaryStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 space-y-1">
@@ -93,19 +133,19 @@ export function renderStatusBadge(status: string) {
   }
 }
 
-function getInvoiceBadgeStatus(invoice: InvoiceSummary) {
+function getInvoiceBadgeStatus(invoice: InvoiceSummary, card?: CardSummary) {
   if (invoice.status !== "open") {
     return invoice.status;
   }
 
   const today = startOfDay(new Date());
-  const closingDate = startOfDay(parseISO(invoice.closing_date));
+  const { closingDate } = getInvoiceCycleDates(invoice, card);
 
-  return isAfter(today, closingDate) ? "closed" : "open";
+  return isAfter(today, startOfDay(parseISO(closingDate))) ? "closed" : "open";
 }
 
-export function renderInvoiceStatusBadge(invoice: InvoiceSummary) {
-  const badgeStatus = getInvoiceBadgeStatus(invoice);
+export function renderInvoiceStatusBadge(invoice: InvoiceSummary, card?: CardSummary) {
+  const badgeStatus = getInvoiceBadgeStatus(invoice, card);
 
   if (badgeStatus === "closed") {
     return (

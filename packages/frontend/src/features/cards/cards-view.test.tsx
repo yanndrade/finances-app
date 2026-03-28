@@ -181,7 +181,7 @@ describe("CardsView", () => {
 
     expect(screen.getByText("Fechada")).toBeInTheDocument();
 
-    act(() => {
+    await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /detalhes/i }));
     });
     await act(async () => {
@@ -195,6 +195,12 @@ describe("CardsView", () => {
     vi.setSystemTime(new Date(2026, 2, 24, 12, 0, 0));
 
     renderCardsView({
+      cards: [
+        {
+          ...defaultCards[0],
+          closing_day: 24,
+        },
+      ],
       invoices: [
         {
           ...defaultInvoices[0],
@@ -215,6 +221,12 @@ describe("CardsView", () => {
     vi.setSystemTime(new Date(2026, 2, 25, 12, 0, 0));
 
     renderCardsView({
+      cards: [
+        {
+          ...defaultCards[0],
+          closing_day: 26,
+        },
+      ],
       invoices: [
         {
           ...defaultInvoices[0],
@@ -228,6 +240,41 @@ describe("CardsView", () => {
 
     expect(screen.getByText("Aberta")).toBeInTheDocument();
     expect(screen.queryByText("Fechada")).not.toBeInTheDocument();
+  });
+
+  it("uses the current card cycle after changing the closing day", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 28, 12, 0, 0));
+
+    renderCardsView({
+      cards: [
+        {
+          ...defaultCards[0],
+          closing_day: 28,
+        },
+      ],
+      invoices: [
+        {
+          ...defaultInvoices[0],
+          status: "open",
+          paid_amount: 0,
+          remaining_amount: 90_00,
+          total_amount: 90_00,
+          closing_date: "2026-03-27",
+          due_date: "2026-03-20",
+        },
+      ],
+    });
+
+    expect(screen.getByText("Aberta")).toBeInTheDocument();
+    expect(screen.queryByText("Fechada")).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /detalhes/i }));
+    });
+
+    expect(screen.getByText("2026-03-28")).toBeInTheDocument();
+    expect(screen.getByText("2026-04-20")).toBeInTheDocument();
   });
 
   it("keeps Parcial after the closing date", () => {
