@@ -4851,9 +4851,13 @@ class Projector:
     def _remove_unified_movements_by_parent(
         self, session: Session, *, parent_id: str
     ) -> None:
-        session.query(UnifiedMovementRecord).filter(
-            UnifiedMovementRecord.parent_id == parent_id
-        ).delete(synchronize_session=False)
+        rows = (
+            session.query(UnifiedMovementRecord)
+            .filter(UnifiedMovementRecord.parent_id == parent_id)
+            .all()
+        )
+        for row in rows:
+            session.delete(row)
 
     def _remove_unified_movement(
         self,

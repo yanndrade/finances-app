@@ -3578,6 +3578,87 @@ def test_projector_repairs_legacy_confirmed_recurring_card_projection_on_bootstr
     assert fixed_page["items"][0]["edit_policy"] == "inherited"
 
 
+def test_remove_unified_movements_by_parent_keeps_session_consistent_when_rows_are_loaded(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardCreated",
+            timestamp="2026-03-02T12:00:01Z",
+            payload={
+                "id": "card-1",
+                "name": "Nubank",
+                "limit": 150_000,
+                "closing_day": 10,
+                "due_day": 20,
+                "payment_account_id": "acc-1",
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="CardPurchaseCreated",
+            timestamp="2026-03-15T12:00:00Z",
+            payload={
+                "id": "purchase-1",
+                "purchase_date": "2026-03-15T12:00:00Z",
+                "amount": 100_00,
+                "category_id": "food",
+                "card_id": "card-1",
+                "description": "Sorvete",
+                "installments_count": 1,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+
+    with projector._session_factory.begin() as session:
+        rows = (
+            session.query(projector_module.UnifiedMovementRecord)
+            .filter(projector_module.UnifiedMovementRecord.parent_id == "purchase-1")
+            .all()
+        )
+        assert len(rows) == 1
+        rows[0].title = "Mutated before delete"
+
+        projector._remove_unified_movements_by_parent(
+            session,
+            parent_id="purchase-1",
+        )
+
+    assert projector.list_unified_movements(
+        competence_month="2026-03",
+        scope="variable",
+    )["items"] == []
+
+
 def test_projector_keeps_dashboard_totals_unbounded_when_preview_is_limited(
     tmp_path: Path,
 ) -> None:
