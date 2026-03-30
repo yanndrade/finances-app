@@ -43,7 +43,7 @@ CARD_PURCHASE_SOURCE_EVENT_TYPES = (
     "CardPurchaseCreated",
     "CardPurchaseUpdated",
 )
-CURRENT_PROJECTION_SCHEMA_VERSION = 2
+CURRENT_PROJECTION_SCHEMA_VERSION = 3
 
 
 class ProjectionBase(DeclarativeBase):
