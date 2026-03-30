@@ -470,6 +470,10 @@ export function AccountsView({
               setEditForm((current) => ({ ...current, initialBalance: value }))
             }
           />
+          <p className="field-hint">
+            Ajuste este valor apenas para corrigir o saldo de abertura da conta.
+            O saldo atual será recalculado pela diferença.
+          </p>
           <label className="checkbox-field">
             <input
               checked={editForm.isActive}

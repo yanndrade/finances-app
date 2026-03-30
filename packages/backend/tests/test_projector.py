@@ -244,6 +244,227 @@ def test_projector_updates_accounts_and_balance_state(tmp_path: Path) -> None:
     ]
 
 
+def test_projector_adjusts_current_balance_by_initial_balance_delta(tmp_path: Path) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="IncomeCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "income-1",
+                "occurred_at": "2026-03-02T12:01:00Z",
+                "type": "income",
+                "amount": 50_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "salary",
+                "description": "Salary",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="AccountUpdated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Emergency Fund",
+                "type": "savings",
+                "initial_balance": 300_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    applied = projector.run()
+
+    assert applied == 3
+    assert projector.list_accounts() == [
+        {
+            "account_id": "acc-1",
+            "name": "Emergency Fund",
+            "type": "savings",
+            "initial_balance": 300_00,
+            "is_active": True,
+        }
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 350_00,
+        }
+    ]
+
+
+def test_projector_rebuild_repairs_legacy_account_balance_after_initial_balance_edit(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="IncomeCreated",
+            timestamp="2026-03-02T12:01:00Z",
+            payload={
+                "id": "income-1",
+                "occurred_at": "2026-03-02T12:01:00Z",
+                "type": "income",
+                "amount": 50_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "salary",
+                "description": "Salary",
+                "person_id": None,
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="AccountUpdated",
+            timestamp="2026-03-02T12:02:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 300_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+
+    legacy_projection_url = f"sqlite:///{(tmp_path / 'app.db').as_posix()}"
+    legacy_engine = get_engine(legacy_projection_url)
+    with legacy_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE accounts (
+                    account_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    initial_balance INTEGER NOT NULL,
+                    is_active BOOLEAN NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE balance_state (
+                    account_id TEXT PRIMARY KEY,
+                    current_balance INTEGER NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE event_cursor (
+                    singleton_id INTEGER PRIMARY KEY,
+                    last_applied_event_id INTEGER NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO accounts (account_id, name, type, initial_balance, is_active)
+                VALUES ('acc-1', 'Main Wallet', 'wallet', 30000, 1)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO balance_state (account_id, current_balance)
+                VALUES ('acc-1', 30000)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO event_cursor (singleton_id, last_applied_event_id)
+                VALUES (1, 3)
+                """
+            )
+        )
+
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=legacy_projection_url,
+    )
+
+    applied = projector.run()
+
+    assert applied == 3
+    assert projector.get_last_applied_event_id() == 3
+    assert projector.list_accounts() == [
+        {
+            "account_id": "acc-1",
+            "name": "Main Wallet",
+            "type": "wallet",
+            "initial_balance": 300_00,
+            "is_active": True,
+        }
+    ]
+    assert projector.list_balance_states() == [
+        {
+            "account_id": "acc-1",
+            "current_balance": 350_00,
+        }
+    ]
+
+
 def test_projector_rebuilds_legacy_projection_schema_on_upgrade(tmp_path: Path) -> None:
     event_store = EventStore(
         database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",

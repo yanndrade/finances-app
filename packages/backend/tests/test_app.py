@@ -696,6 +696,59 @@ def test_accounts_endpoints_support_create_list_and_update(tmp_path) -> None:
     }
 
 
+def test_account_update_adjusts_current_balance_by_initial_balance_delta(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_income(
+        client,
+        {
+            "id": "income-1",
+            "occurred_at": "2026-03-02T12:01:00Z",
+            "amount": 50_00,
+            "account_id": "acc-1",
+            "payment_method": "PIX",
+            "category_id": "salary",
+            "description": "Salary",
+        },
+    )
+
+    update_response = client.patch(
+        "/api/accounts/acc-1",
+        json={
+            "initial_balance": 300_00,
+        },
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json() == {
+        "account_id": "acc-1",
+        "name": "Main Wallet",
+        "type": "wallet",
+        "initial_balance": 300_00,
+        "is_active": True,
+        "current_balance": 350_00,
+    }
+
+    list_response = client.get("/api/accounts")
+
+    assert list_response.status_code == 200
+    assert list_response.json() == [
+        {
+            "account_id": "acc-1",
+            "name": "Main Wallet",
+            "type": "wallet",
+            "initial_balance": 300_00,
+            "is_active": True,
+            "current_balance": 350_00,
+        }
+    ]
+
+
 def test_accounts_endpoints_reject_deactivating_last_active_account(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",

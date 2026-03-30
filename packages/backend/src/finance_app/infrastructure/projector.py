@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from threading import RLock
 
-from sqlalchemy import Boolean, Integer, String, and_, func, inspect, or_
+from sqlalchemy import Boolean, Integer, String, and_, func, inspect, or_, select
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -43,6 +43,7 @@ CARD_PURCHASE_SOURCE_EVENT_TYPES = (
     "CardPurchaseCreated",
     "CardPurchaseUpdated",
 )
+CURRENT_PROJECTION_SCHEMA_VERSION = 2
 
 
 class ProjectionBase(DeclarativeBase):
@@ -55,6 +56,15 @@ class EventCursorRecord(ProjectionBase):
     singleton_id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     last_applied_event_id: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
+    )
+
+
+class ProjectionMetaRecord(ProjectionBase):
+    __tablename__ = "projection_meta"
+
+    singleton_id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    schema_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=CURRENT_PROJECTION_SCHEMA_VERSION
     )
 
 
@@ -290,6 +300,17 @@ class Projector:
 
             ProjectionBase.metadata.create_all(self._engine)
             with self._session_factory.begin() as session:
+                projection_meta = session.get(ProjectionMetaRecord, 1)
+                if projection_meta is None:
+                    session.add(
+                        ProjectionMetaRecord(
+                            singleton_id=1,
+                            schema_version=CURRENT_PROJECTION_SCHEMA_VERSION,
+                        )
+                    )
+                elif projection_meta.schema_version != CURRENT_PROJECTION_SCHEMA_VERSION:
+                    projection_meta.schema_version = CURRENT_PROJECTION_SCHEMA_VERSION
+
                 cursor = session.get(EventCursorRecord, 1)
                 if cursor is None:
                     session.add(
@@ -2347,9 +2368,12 @@ class Projector:
         if existing is None:
             return
 
+        previous_initial_balance = existing.initial_balance
+        new_initial_balance = int(payload["initial_balance"])
+
         existing.name = str(payload["name"])
         existing.type = str(payload["type"])
-        existing.initial_balance = int(payload["initial_balance"])
+        existing.initial_balance = new_initial_balance
         existing.is_active = bool(payload.get("is_active", True))
 
         balance = session.get(BalanceStateRecord, account_id)
@@ -2357,12 +2381,12 @@ class Projector:
             session.add(
                 BalanceStateRecord(
                     account_id=account_id,
-                    current_balance=int(payload["initial_balance"]),
+                    current_balance=new_initial_balance,
                 )
             )
             return
 
-        balance.current_balance = int(payload["initial_balance"])
+        balance.current_balance += new_initial_balance - previous_initial_balance
 
     def _apply_card_created(
         self,
@@ -4313,6 +4337,24 @@ class Projector:
 
         if "accounts" not in table_names:
             return False
+
+        if "projection_meta" not in table_names:
+            return True
+
+        projection_meta_columns = self._safe_column_names(inspector, "projection_meta")
+        if projection_meta_columns is None:
+            return True
+        if projection_meta_columns != {"singleton_id", "schema_version"}:
+            return True
+
+        with self._engine.connect() as connection:
+            schema_version = connection.execute(
+                select(ProjectionMetaRecord.schema_version).where(
+                    ProjectionMetaRecord.singleton_id == 1
+                )
+            ).scalar_one_or_none()
+        if schema_version != CURRENT_PROJECTION_SCHEMA_VERSION:
+            return True
 
         account_columns = self._safe_column_names(inspector, "accounts")
         if account_columns is None:

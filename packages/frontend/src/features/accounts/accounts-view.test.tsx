@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { AccountSummary } from "../../lib/api";
@@ -45,6 +45,7 @@ function renderAccountsView(
 
   return {
     onSetAccountActive,
+    onUpdateAccount,
   };
 }
 
@@ -79,6 +80,38 @@ describe("AccountsView", () => {
     expect(confirmMock).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(onSetAccountActive).toHaveBeenCalledWith(defaultAccounts[1], true);
+    });
+  });
+
+  it("submits edited initial balance and shows recalculation guidance", async () => {
+    const user = userEvent.setup();
+    const { onUpdateAccount } = renderAccountsView();
+
+    const accountRow = screen.getByText("Conta principal").closest("tr");
+    expect(accountRow).not.toBeNull();
+    await user.click(
+      within(accountRow as HTMLTableRowElement).getByRole("button", {
+        name: /^editar$/i,
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: /editar conta/i });
+    expect(
+      within(dialog).getByText(/saldo atual será recalculado pela diferença/i),
+    ).toBeInTheDocument();
+
+    const balanceInput = within(dialog).getByDisplayValue("1.000,00");
+    await user.clear(balanceInput);
+    await user.type(balanceInput, "30000");
+    await user.click(within(dialog).getByRole("button", { name: /salvar conta/i }));
+
+    await waitFor(() => {
+      expect(onUpdateAccount).toHaveBeenCalledWith("acc-1", {
+        name: "Conta principal",
+        type: "checking",
+        initialBalanceInCents: 30000,
+        isActive: true,
+      });
     });
   });
 });
