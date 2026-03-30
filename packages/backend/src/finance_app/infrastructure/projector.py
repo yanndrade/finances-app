@@ -44,6 +44,7 @@ CARD_PURCHASE_SOURCE_EVENT_TYPES = (
     "CardPurchaseUpdated",
 )
 CURRENT_PROJECTION_SCHEMA_VERSION = 3
+COMPATIBLE_PROJECTION_SCHEMA_VERSIONS = {2, 3}
 
 
 class ProjectionBase(DeclarativeBase):
@@ -4353,7 +4354,7 @@ class Projector:
                     ProjectionMetaRecord.singleton_id == 1
                 )
             ).scalar_one_or_none()
-        if schema_version != CURRENT_PROJECTION_SCHEMA_VERSION:
+        if schema_version not in COMPATIBLE_PROJECTION_SCHEMA_VERSIONS:
             return True
 
         account_columns = self._safe_column_names(inspector, "accounts")
