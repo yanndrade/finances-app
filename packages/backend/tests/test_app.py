@@ -2984,6 +2984,54 @@ def test_movements_history_can_filter_items_with_person_for_reimbursement_tracki
     assert without_person_response.json()["items"][0]["counterparty"] is None
 
 
+def test_movements_history_can_filter_card_purchase_by_purchase_id_text(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Almoco cliente",
+            "person_id": "cliente",
+        },
+    )
+
+    response = client.get(
+        "/api/movements",
+        params={
+            "competence_month": "2026-03",
+            "card_id": "card-1",
+            "text": "purchase-1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [item["movement_id"] for item in response.json()["items"]] == [
+        "purchase-1:1"
+    ]
+
+
 def test_movements_history_previews_only_first_installment_in_purchase_month(
     tmp_path,
 ) -> None:
@@ -3042,6 +3090,95 @@ def test_movements_history_previews_only_first_installment_in_purchase_month(
     assert [item["movement_id"] for item in may_movements_response.json()["items"]] == [
         "purchase-1:2"
     ]
+
+
+def test_card_purchase_update_keeps_paid_invoice_fully_settled_when_financials_are_unchanged(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 200_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 24,
+            "due_day": 5,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-08T12:00:00Z",
+            "amount": 90_00,
+            "installments_count": 2,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Fone",
+            "person_id": "Alice",
+        },
+    )
+    pay_response = client.post(
+        "/api/invoices/card-1:2026-03/payments",
+        json={
+            "id": "payment-1",
+            "amount": 45_00,
+            "account_id": "acc-1",
+            "paid_at": "2026-03-20T12:00:00Z",
+        },
+    )
+
+    update_response = client.patch(
+        "/api/card-purchases/purchase-1",
+        json={
+            "purchase_date": "2026-03-08T12:00:00Z",
+            "amount": 90_00,
+            "installments_count": 2,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Fone",
+            "person_id": "Bob",
+        },
+    )
+    invoices_response = client.get("/api/invoices", params={"card": "card-1"})
+    accounts_response = client.get("/api/accounts")
+
+    assert pay_response.status_code == 201
+    assert update_response.status_code == 200
+    assert invoices_response.status_code == 200
+    march_invoice = next(
+        invoice
+        for invoice in invoices_response.json()
+        if invoice["invoice_id"] == "card-1:2026-03"
+    )
+    assert march_invoice == {
+        "invoice_id": "card-1:2026-03",
+        "card_id": "card-1",
+        "reference_month": "2026-03",
+        "closing_date": "2026-03-24",
+        "due_date": "2026-04-05",
+        "total_amount": 45_00,
+        "paid_amount": 45_00,
+        "remaining_amount": 0,
+        "purchase_count": 1,
+        "status": "paid",
+    }
+    assert accounts_response.status_code == 200
+    assert (
+        next(
+            account
+            for account in accounts_response.json()
+            if account["account_id"] == "acc-1"
+        )["current_balance"]
+        == 155_00
+    )
 
 
 def test_dev_reset_endpoint_clears_accounts_transfers_and_card_purchases(
@@ -4809,6 +4946,7 @@ def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -
             "paid_at": "2026-03-20T12:05:00Z",
         },
     )
+    invoice_payments_response = client.get("/api/invoices/card-1:2026-04/payments")
     invoices_response = client.get("/api/invoices", params={"card": "card-1"})
     accounts_response = client.get("/api/accounts")
     transactions_response = client.get("/api/transactions", params={"account": "acc-2"})
@@ -4838,6 +4976,25 @@ def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -
     assert partial_movements_response.json()["items"][0]["lifecycle_status"] == "pending"
     assert final_movements_response.status_code == 200
     assert final_movements_response.json()["items"][0]["lifecycle_status"] == "cleared"
+    assert invoice_payments_response.status_code == 200
+    assert invoice_payments_response.json() == [
+        {
+            "payment_id": "payment-2",
+            "invoice_id": "card-1:2026-04",
+            "card_id": "card-1",
+            "account_id": "acc-2",
+            "amount": 60_00,
+            "paid_at": "2026-03-20T12:05:00Z",
+        },
+        {
+            "payment_id": "payment-1",
+            "invoice_id": "card-1:2026-04",
+            "card_id": "card-1",
+            "account_id": "acc-2",
+            "amount": 30_00,
+            "paid_at": "2026-03-20T12:00:00Z",
+        },
+    ]
     assert invoices_response.status_code == 200
     assert invoices_response.json() == [
         {
@@ -4971,6 +5128,116 @@ def test_invoice_payment_endpoint_allows_amount_above_remaining_balance_and_clos
             "person_id": None,
             "status": "active",
         }
+    ]
+
+
+def test_invoice_payment_update_endpoint_moves_payment_between_accounts(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Savings", "savings", 50_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 40_00,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Mouse",
+        },
+    )
+    create_payment_response = client.post(
+        "/api/invoices/card-1:2026-04/payments",
+        json={
+            "id": "payment-1",
+            "amount": 40_00,
+            "account_id": "acc-1",
+            "paid_at": "2026-03-20T12:00:00Z",
+        },
+    )
+    assert create_payment_response.status_code == 201
+
+    update_payment_response = client.patch(
+        "/api/invoice-payments/payment-1",
+        json={
+            "account_id": "acc-2",
+        },
+    )
+    invoice_payments_response = client.get("/api/invoices/card-1:2026-04/payments")
+    acc_1_transactions_response = client.get("/api/transactions", params={"account": "acc-1"})
+    acc_2_transactions_response = client.get("/api/transactions", params={"account": "acc-2"})
+    accounts_response = client.get("/api/accounts")
+
+    assert update_payment_response.status_code == 200
+    assert update_payment_response.json() == {
+        "payment_id": "payment-1",
+        "invoice_id": "card-1:2026-04",
+        "card_id": "card-1",
+        "account_id": "acc-2",
+        "amount": 40_00,
+        "paid_at": "2026-03-20T12:00:00Z",
+    }
+    assert invoice_payments_response.status_code == 200
+    assert invoice_payments_response.json() == [
+        {
+            "payment_id": "payment-1",
+            "invoice_id": "card-1:2026-04",
+            "card_id": "card-1",
+            "account_id": "acc-2",
+            "amount": 40_00,
+            "paid_at": "2026-03-20T12:00:00Z",
+        }
+    ]
+    assert acc_1_transactions_response.status_code == 200
+    assert acc_1_transactions_response.json() == []
+    assert acc_2_transactions_response.status_code == 200
+    assert acc_2_transactions_response.json() == [
+        {
+            "transaction_id": "payment-1:invoice-payment",
+            "occurred_at": "2026-03-20T12:00:00Z",
+            "type": "expense",
+            "amount": 40_00,
+            "account_id": "acc-2",
+            "payment_method": "OTHER",
+            "category_id": "invoice_payment",
+            "description": "Pagamento de fatura card-1:2026-04",
+            "person_id": None,
+            "status": "active",
+        }
+    ]
+    assert accounts_response.status_code == 200
+    assert accounts_response.json() == [
+        {
+            "account_id": "acc-1",
+            "name": "Main Wallet",
+            "type": "wallet",
+            "initial_balance": 100_00,
+            "is_active": True,
+            "current_balance": 100_00,
+        },
+        {
+            "account_id": "acc-2",
+            "name": "Savings",
+            "type": "savings",
+            "initial_balance": 50_00,
+            "is_active": True,
+            "current_balance": 10_00,
+        },
     ]
 
 

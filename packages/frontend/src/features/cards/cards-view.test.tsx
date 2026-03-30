@@ -79,6 +79,8 @@ function renderCardsView(overrides: Partial<ComponentProps<typeof CardsView>> = 
   const onOpenSettings = overrides.onOpenSettings ?? vi.fn();
   const onSetCardActive = overrides.onSetCardActive ?? vi.fn(() => Promise.resolve());
   const onUpdateCard = overrides.onUpdateCard ?? vi.fn(() => Promise.resolve());
+  const onUpdateInvoicePayment =
+    overrides.onUpdateInvoicePayment ?? vi.fn(() => Promise.resolve());
 
   render(
     <CardsView
@@ -94,6 +96,7 @@ function renderCardsView(overrides: Partial<ComponentProps<typeof CardsView>> = 
       onOpenSettings={onOpenSettings}
       onSetCardActive={onSetCardActive}
       onUpdateCard={onUpdateCard}
+      onUpdateInvoicePayment={onUpdateInvoicePayment}
       uiDensity={overrides.uiDensity ?? "compact"}
     />,
   );
@@ -104,6 +107,7 @@ function renderCardsView(overrides: Partial<ComponentProps<typeof CardsView>> = 
     onOpenQuickAdd,
     onSetCardActive,
     onUpdateCard,
+    onUpdateInvoicePayment,
   };
 }
 
@@ -111,6 +115,7 @@ describe("CardsView", () => {
   beforeEach(() => {
     installDialogEnvironment();
     vi.spyOn(api, "fetchCardInstallments").mockResolvedValue([]);
+    vi.spyOn(api, "fetchInvoicePayments").mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -347,6 +352,75 @@ describe("CardsView", () => {
 
     expect(onOpenQuickAdd).toHaveBeenCalledWith("transfer_invoice_payment", {
       invoiceId: "card-1:2026-03",
+    });
+  });
+
+  it("shows invoice payment history with the source account inside card detail", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchInvoicePayments).mockResolvedValue([
+      {
+        payment_id: "payment-2",
+        invoice_id: "card-1:2026-03",
+        card_id: "card-1",
+        account_id: "acc-1",
+        amount: 20_00,
+        paid_at: "2026-03-18T12:00:00Z",
+      },
+      {
+        payment_id: "payment-1",
+        invoice_id: "card-1:2026-03",
+        card_id: "card-1",
+        account_id: "acc-1",
+        amount: 10_00,
+        paid_at: "2026-03-15T09:30:00Z",
+      },
+    ]);
+
+    renderCardsView();
+
+    await user.click(screen.getByRole("button", { name: /detalhes/i }));
+
+    expect(await screen.findByText(/pagamentos da fatura/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/conta principal/i)).toHaveLength(2);
+    expect(screen.getAllByText("R$ 20,00").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("R$ 10,00")).toBeInTheDocument();
+  });
+
+  it("allows adjusting the source account of an invoice payment", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchInvoicePayments).mockResolvedValue([
+      {
+        payment_id: "payment-1",
+        invoice_id: "card-1:2026-03",
+        card_id: "card-1",
+        account_id: "acc-1",
+        amount: 20_00,
+        paid_at: "2026-03-18T12:00:00Z",
+      },
+    ]);
+    const { onUpdateInvoicePayment } = renderCardsView({
+      accounts: [
+        ...defaultAccounts,
+        {
+          account_id: "acc-2",
+          name: "Poupanca",
+          type: "savings",
+          initial_balance: 0,
+          is_active: true,
+          current_balance: 0,
+        },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: /detalhes/i }));
+    await screen.findByText(/pagamentos da fatura/i);
+    await user.click(screen.getByRole("button", { name: /ajustar conta/i }));
+    await user.click(screen.getByLabelText(/conta de origem do pagamento/i));
+    await user.click(await screen.findByText("Poupanca"));
+    await user.click(screen.getByRole("button", { name: /salvar/i }));
+
+    expect(onUpdateInvoicePayment).toHaveBeenCalledWith("payment-1", {
+      accountId: "acc-2",
     });
   });
 

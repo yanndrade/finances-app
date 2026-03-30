@@ -15,6 +15,10 @@ class InvoiceNotFoundError(InvoicePaymentServiceError):
     pass
 
 
+class InvoicePaymentNotFoundError(InvoicePaymentServiceError):
+    pass
+
+
 class InvoicePaymentAlreadyExistsError(InvoicePaymentServiceError):
     pass
 
@@ -31,6 +35,15 @@ class InvoicePaymentProjector(Protocol):
         self,
         *,
         card_id: str | None = None,
+    ) -> list[dict[str, str | int]]: ...
+    def get_invoice_payment(
+        self,
+        payment_id: str,
+    ) -> dict[str, str | int] | None: ...
+    def list_invoice_payments(
+        self,
+        *,
+        invoice_id: str,
     ) -> list[dict[str, str | int]]: ...
 
 
@@ -98,6 +111,48 @@ class InvoicePaymentService:
             raise InvoiceNotFoundError(f"Invoice '{invoice_id}' was not found.")
         return invoice
 
+    def list_payments(self, invoice_id: str) -> list[dict[str, str | int]]:
+        self._sync_projections()
+        invoice = self._find_invoice(invoice_id)
+        if invoice is None:
+            raise InvoiceNotFoundError(f"Invoice '{invoice_id}' was not found.")
+        return self._projector.list_invoice_payments(invoice_id=invoice_id)
+
+    def update_payment(
+        self,
+        *,
+        payment_id: str,
+        account_id: str,
+    ) -> dict[str, str | int]:
+        self._sync_projections()
+        payment = self._projector.get_invoice_payment(payment_id)
+        if payment is None:
+            raise InvoicePaymentNotFoundError(
+                f"Invoice payment '{payment_id}' was not found."
+            )
+
+        account = self._account_reader.get_account(account_id)
+        self._validate_account(account_id=account_id, account=account)
+
+        current_account_id = str(payment["account_id"])
+        if current_account_id == account_id:
+            return payment
+
+        self._append_event(
+            "InvoicePaymentUpdated",
+            {
+                "id": payment_id,
+                "account_id": account_id,
+            },
+        )
+
+        updated_payment = self._projector.get_invoice_payment(payment_id)
+        if updated_payment is None:
+            raise InvoicePaymentNotFoundError(
+                f"Invoice payment '{payment_id}' was not found."
+            )
+        return updated_payment
+
     def _validate_payload(
         self,
         *,
@@ -118,12 +173,24 @@ class InvoicePaymentService:
                 "paid_at must be a UTC ISO 8601 timestamp."
             ) from exc
 
-        if not bool(account["is_active"]):
-            raise InvoicePaymentServiceError("account_id must reference an active account.")
+        self._validate_account(account_id=account_id, account=account)
 
         remaining_amount = int(invoice["remaining_amount"])
         if remaining_amount <= 0:
             raise InvoicePaymentServiceError("Invoice is already paid.")
+
+    def _validate_account(
+        self,
+        *,
+        account_id: str,
+        account: dict[str, str | int | bool],
+    ) -> None:
+        if not account_id.strip():
+            raise InvoicePaymentServiceError("account_id is required.")
+        if not bool(account["is_active"]):
+            raise InvoicePaymentServiceError(
+                "account_id must reference an active account."
+            )
 
     def _payment_exists(self, payment_id: str) -> bool:
         for event in self._event_store.list_events_after(0):

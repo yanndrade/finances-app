@@ -102,6 +102,26 @@ class InvoiceProjection:
 
 
 @dataclass(frozen=True)
+class InvoicePaymentProjection:
+    payment_id: str
+    invoice_id: str
+    card_id: str
+    account_id: str
+    amount: int
+    paid_at: str
+
+    def to_dict(self) -> dict[str, str | int]:
+        return {
+            "payment_id": self.payment_id,
+            "invoice_id": self.invoice_id,
+            "card_id": self.card_id,
+            "account_id": self.account_id,
+            "amount": self.amount,
+            "paid_at": self.paid_at,
+        }
+
+
+@dataclass(frozen=True)
 class InvoiceItemProjection:
     invoice_item_id: str
     invoice_id: str

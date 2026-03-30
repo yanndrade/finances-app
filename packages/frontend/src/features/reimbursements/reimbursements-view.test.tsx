@@ -169,4 +169,32 @@ describe("ReimbursementsView", () => {
     expect(screen.getByText("1/3")).toBeInTheDocument();
     expect(screen.getByText(/01\/03\/2026/i)).toBeInTheDocument();
   });
+
+  it("opens the history filtered to the related purchase", async () => {
+    const user = userEvent.setup();
+    const onOpenLedgerFiltered = vi.fn();
+
+    render(
+      <ReimbursementsView
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-04"
+        onOpenLedgerFiltered={onOpenLedgerFiltered}
+      />,
+    );
+
+    expect(await screen.findByText("Joao")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /joao/i }));
+    await user.click(screen.getByRole("button", { name: /abrir no historico/i }));
+
+    expect(onOpenLedgerFiltered).toHaveBeenCalledWith(
+      {
+        period: "month",
+        text: "purchase-1",
+        card: "card-1",
+      },
+      "2026-03",
+    );
+  });
 });

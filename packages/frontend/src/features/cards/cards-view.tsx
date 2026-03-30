@@ -7,6 +7,7 @@ import {
   type CardPayload,
   type CardSummary,
   type CardUpdatePayload,
+  type InvoicePaymentUpdatePayload,
   type InvoiceSummary,
   type TransactionFilters,
   fetchCardInstallments,
@@ -21,6 +22,7 @@ import { CardDetail } from "./components/card-detail";
 import { ManageCardsSheet } from "./components/manage-cards-sheet";
 import { CreateCardDialog, EditCardDialog } from "./components/card-form-dialog";
 import { useInvoiceItems } from "./use-invoice-items";
+import { useInvoicePayments } from "./use-invoice-payments";
 
 type QuickAddOpenOptions = {
   invoiceId?: string;
@@ -39,6 +41,10 @@ type CardsViewProps = {
   onCreateCard: (payload: CardPayload) => Promise<void>;
   onSetCardActive: (card: CardSummary, isActive: boolean) => Promise<void>;
   onUpdateCard: (cardId: string, payload: CardUpdatePayload) => Promise<void>;
+  onUpdateInvoicePayment: (
+    paymentId: string,
+    payload: InvoicePaymentUpdatePayload,
+  ) => Promise<void>;
   uiDensity: UiDensity;
 };
 
@@ -55,6 +61,7 @@ export function CardsView({
   onCreateCard,
   onSetCardActive,
   onUpdateCard,
+  onUpdateInvoicePayment,
   uiDensity,
 }: CardsViewProps) {
   const isMobileSurface = surface === "mobile";
@@ -75,6 +82,13 @@ export function CardsView({
     loadInvoiceItems: fetchAndSetInvoiceItems,
     clearInvoiceItemsState,
   } = useInvoiceItems();
+  const {
+    invoicePayments,
+    isLoadingPayments,
+    loadError: invoicePaymentsError,
+    loadInvoicePayments: fetchAndSetInvoicePayments,
+    clearInvoicePaymentsState,
+  } = useInvoicePayments();
 
   const referenceMonth = selectedMonth;
   const isAggregateView = selectedScope === ALL_CARDS_SCOPE;
@@ -112,11 +126,24 @@ export function CardsView({
       .filter((inv) => inv.card_id === selectedScope && inv.reference_month < referenceMonth)
       .sort((a, b) => b.reference_month.localeCompare(a.reference_month));
   }, [invoices, isAggregateView, selectedScope, referenceMonth]);
-
   // Clear invoice items when switching scope or going back to aggregate
   useEffect(() => {
     clearInvoiceItemsState();
-  }, [selectedScope, clearInvoiceItemsState]);
+  }, [selectedScope, detailCurrentInvoice, clearInvoiceItemsState]);
+
+  useEffect(() => {
+    if (isAggregateView || !detailCurrentInvoice) {
+      clearInvoicePaymentsState();
+      return;
+    }
+
+    void fetchAndSetInvoicePayments(detailCurrentInvoice.invoice_id);
+  }, [
+    clearInvoicePaymentsState,
+    detailCurrentInvoice,
+    fetchAndSetInvoicePayments,
+    isAggregateView,
+  ]);
 
   useEffect(() => {
     if (isAggregateView) {
@@ -217,6 +244,7 @@ export function CardsView({
       ) : (
         selectedCard && (
           <CardDetail
+            accounts={accounts}
             card={selectedCard}
             invoice={detailCurrentInvoice}
             previousInvoices={detailPreviousInvoices}
@@ -225,11 +253,16 @@ export function CardsView({
             invoiceItems={invoiceItems}
             isLoadingItems={isLoadingItems}
             invoiceItemsError={invoiceItemsError}
+            invoicePayments={invoicePayments}
+            isLoadingPayments={isLoadingPayments}
+            invoicePaymentsError={invoicePaymentsError}
             onBack={() => setSelectedScope(ALL_CARDS_SCOPE)}
             onLoadInvoiceItems={fetchAndSetInvoiceItems}
             onOpenLedgerFiltered={onOpenLedgerFiltered}
             onOpenQuickAdd={onOpenQuickAdd}
             onSelectInvoice={jumpToInvoice}
+            onUpdateInvoicePayment={onUpdateInvoicePayment}
+            isSubmitting={isSubmitting}
           />
         )
       )}

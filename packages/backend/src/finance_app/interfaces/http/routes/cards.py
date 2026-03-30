@@ -20,6 +20,7 @@ from finance_app.application.cards import (
 from finance_app.application.invoice_payments import (
     InvoiceNotFoundError,
     InvoicePaymentAlreadyExistsError,
+    InvoicePaymentNotFoundError,
     InvoicePaymentService,
     InvoicePaymentServiceError,
 )
@@ -71,6 +72,10 @@ class CreateInvoicePaymentRequest(BaseModel):
     amount: int = Field(gt=0)
     account_id: str = Field(min_length=1)
     paid_at: str
+
+
+class UpdateInvoicePaymentRequest(BaseModel):
+    account_id: str = Field(min_length=1)
 
 
 def build_cards_router(
@@ -278,6 +283,23 @@ def build_cards_router(
                 detail=str(exc),
             ) from exc
 
+    @router.get("/api/invoices/{invoice_id}/payments")
+    def list_invoice_payments(
+        invoice_id: str,
+    ) -> list[dict[str, str | int]]:
+        try:
+            return invoice_payment_service.list_payments(invoice_id)
+        except InvoiceNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except InvoicePaymentServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
     @router.post("/api/invoices/{invoice_id}/payments", status_code=status.HTTP_201_CREATED)
     def create_invoice_payment(
         invoice_id: str,
@@ -304,6 +326,32 @@ def build_cards_router(
         except InvoicePaymentAlreadyExistsError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+        except InvoicePaymentServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.patch("/api/invoice-payments/{payment_id}")
+    def update_invoice_payment(
+        payment_id: str,
+        payload: UpdateInvoicePaymentRequest,
+    ) -> dict[str, str | int]:
+        try:
+            return invoice_payment_service.update_payment(
+                payment_id=payment_id,
+                account_id=payload.account_id,
+            )
+        except AccountNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except InvoicePaymentNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(exc),
             ) from exc
         except InvoicePaymentServiceError as exc:

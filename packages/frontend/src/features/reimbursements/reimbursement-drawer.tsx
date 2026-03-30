@@ -24,6 +24,7 @@ type ReimbursementDrawerProps = {
   onUpdate: (id: string, expectedAt: string | null, notes: string | null) => Promise<void>;
   onCancel: (id: string) => Promise<void>;
   onRegisterPayment: () => void;
+  onOpenRelatedPurchase?: (reimbursement: PendingReimbursementSummary) => void;
   allowSecondaryActions?: boolean;
 };
 
@@ -44,6 +45,7 @@ export function ReimbursementDrawer({
   onUpdate,
   onCancel,
   onRegisterPayment,
+  onOpenRelatedPurchase,
   allowSecondaryActions = true,
 }: ReimbursementDrawerProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -75,6 +77,14 @@ export function ReimbursementDrawer({
     sourceDate ||
     reimbursement.source_installment_number ||
     reimbursement.source_installment_total,
+  );
+  const canOpenRelatedPurchase = Boolean(
+    onOpenRelatedPurchase &&
+    (
+      reimbursement.source_transaction_id ||
+      reimbursement.source_title ||
+      reimbursement.source_description
+    ),
   );
 
   function handleEditStart() {
@@ -140,53 +150,115 @@ export function ReimbursementDrawer({
           </div>
 
           {shouldShowSourceDetails ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Compra relacionada
-                </p>
-                <p className="text-sm font-semibold text-slate-900">
-                  {sourceTitle ?? "Compra relacionada"}
-                </p>
-                {reimbursement.source_description && reimbursement.source_description !== sourceTitle ? (
-                  <p className="text-sm text-slate-600">
-                    {reimbursement.source_description}
+            canOpenRelatedPurchase ? (
+              <button
+                type="button"
+                onClick={() => onOpenRelatedPurchase?.(reimbursement)}
+                className="group w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Compra relacionada
+                      </p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {sourceTitle ?? "Compra relacionada"}
+                      </p>
+                      {reimbursement.source_description && reimbursement.source_description !== sourceTitle ? (
+                        <p className="text-sm text-slate-600">
+                          {reimbursement.source_description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-slate-500 transition-colors group-hover:text-slate-700">
+                      Abrir no historico
+                      <ExternalLink className="h-3 w-3" />
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {sourceDate ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-slate-500">
+                          {reimbursement.source_purchase_date ? "Data da compra" : "Lancado no historico"}
+                        </span>
+                        <span className="text-sm font-semibold text-right">
+                          {formatDate(sourceDate)}
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {sourceCardName ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-slate-500">Cartao</span>
+                        <span className="text-sm font-semibold text-right">
+                          {sourceCardName}
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {reimbursement.source_installment_number != null &&
+                    reimbursement.source_installment_total != null ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-slate-500">Parcela</span>
+                        <span className="text-sm font-semibold text-right">
+                          {reimbursement.source_installment_number}/{reimbursement.source_installment_total}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </button>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Compra relacionada
                   </p>
-                ) : null}
+                  <p className="text-sm font-semibold text-slate-900">
+                    {sourceTitle ?? "Compra relacionada"}
+                  </p>
+                  {reimbursement.source_description && reimbursement.source_description !== sourceTitle ? (
+                    <p className="text-sm text-slate-600">
+                      {reimbursement.source_description}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="space-y-2">
+                  {sourceDate ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-slate-500">
+                        {reimbursement.source_purchase_date ? "Data da compra" : "Lancado no historico"}
+                      </span>
+                      <span className="text-sm font-semibold text-right">
+                        {formatDate(sourceDate)}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  {sourceCardName ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-slate-500">Cartao</span>
+                      <span className="text-sm font-semibold text-right">
+                        {sourceCardName}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  {reimbursement.source_installment_number != null &&
+                  reimbursement.source_installment_total != null ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-slate-500">Parcela</span>
+                      <span className="text-sm font-semibold text-right">
+                        {reimbursement.source_installment_number}/{reimbursement.source_installment_total}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
               </div>
-
-              <div className="space-y-2">
-                {sourceDate ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-500">
-                      {reimbursement.source_purchase_date ? "Data da compra" : "Lancado no historico"}
-                    </span>
-                    <span className="text-sm font-semibold text-right">
-                      {formatDate(sourceDate)}
-                    </span>
-                  </div>
-                ) : null}
-
-                {sourceCardName ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-500">Cartao</span>
-                    <span className="text-sm font-semibold text-right">
-                      {sourceCardName}
-                    </span>
-                  </div>
-                ) : null}
-
-                {reimbursement.source_installment_number != null &&
-                reimbursement.source_installment_total != null ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-500">Parcela</span>
-                    <span className="text-sm font-semibold text-right">
-                      {reimbursement.source_installment_number}/{reimbursement.source_installment_total}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
+            )
           ) : null}
 
           <div className="space-y-3">

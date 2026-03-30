@@ -10,6 +10,7 @@ import {
   type CardSummary,
   type PendingReimbursementSummary,
   type ReimbursementSummary,
+  type TransactionFilters,
 } from "../../lib/api";
 
 import { SummaryStrip } from "./summary-strip";
@@ -25,6 +26,7 @@ type ReimbursementsViewProps = {
   refreshKey?: number;
   onError?: (error: unknown) => void;
   onOpenQuickAdd?: () => void;
+  onOpenLedgerFiltered?: (filters: Partial<TransactionFilters>, month?: string) => void;
 };
 
 const EMPTY_SUMMARY: ReimbursementSummary = {
@@ -44,6 +46,7 @@ export function ReimbursementsView({
   refreshKey,
   onError,
   onOpenQuickAdd,
+  onOpenLedgerFiltered,
 }: ReimbursementsViewProps) {
   const isMobileSurface = surface === "mobile";
   const [reimbursements, setReimbursements] = useState<PendingReimbursementSummary[]>([]);
@@ -103,6 +106,34 @@ export function ReimbursementsView({
 
   function handleOpenPaymentDialog() {
     setIsPaymentDialogOpen(true);
+  }
+
+  function handleOpenRelatedPurchase(reimbursement: PendingReimbursementSummary) {
+    if (!onOpenLedgerFiltered) {
+      return;
+    }
+
+    const searchText =
+      reimbursement.source_transaction_id?.trim() ||
+      reimbursement.source_title?.trim() ||
+      reimbursement.source_description?.trim();
+
+    if (!searchText) {
+      return;
+    }
+
+    const sourceMonth = resolveSourceMonth(reimbursement) ?? month;
+    const filters: Partial<TransactionFilters> = {
+      period: "month",
+      text: searchText,
+    };
+
+    if (reimbursement.source_card_id) {
+      filters.card = reimbursement.source_card_id;
+    }
+
+    onOpenLedgerFiltered(filters, sourceMonth);
+    setIsDrawerOpen(false);
   }
 
   async function handleUpdate(
@@ -186,6 +217,7 @@ export function ReimbursementsView({
         onUpdate={handleUpdate}
         onCancel={handleCancel}
         onRegisterPayment={handleOpenPaymentDialog}
+        onOpenRelatedPurchase={handleOpenRelatedPurchase}
         allowSecondaryActions={!isMobileSurface}
       />
 
@@ -199,4 +231,15 @@ export function ReimbursementsView({
       />
     </div>
   );
+}
+
+function resolveSourceMonth(
+  reimbursement: PendingReimbursementSummary,
+): string | null {
+  const value =
+    reimbursement.source_purchase_date ??
+    reimbursement.source_posted_at ??
+    reimbursement.occurred_at;
+  const month = value.slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(month) ? month : null;
 }

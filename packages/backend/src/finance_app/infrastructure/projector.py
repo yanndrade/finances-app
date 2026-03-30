@@ -29,6 +29,7 @@ from finance_app.domain.projections import (
     CardPurchaseProjection,
     InvestmentMovementProjection,
     InvoiceItemProjection,
+    InvoicePaymentProjection,
     InvoiceProjection,
     PendingProjection,
     RecurringRuleProjection,
@@ -43,8 +44,8 @@ CARD_PURCHASE_SOURCE_EVENT_TYPES = (
     "CardPurchaseCreated",
     "CardPurchaseUpdated",
 )
-CURRENT_PROJECTION_SCHEMA_VERSION = 3
-COMPATIBLE_PROJECTION_SCHEMA_VERSIONS = {2, 3}
+CURRENT_PROJECTION_SCHEMA_VERSION = 4
+COMPATIBLE_PROJECTION_SCHEMA_VERSIONS = {4}
 
 
 class ProjectionBase(DeclarativeBase):
@@ -137,6 +138,17 @@ class InvoiceProjectionRecord(ProjectionBase):
     remaining_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     purchase_count: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, default="open")
+
+
+class InvoicePaymentProjectionRecord(ProjectionBase):
+    __tablename__ = "invoice_payments"
+
+    payment_id: Mapped[str] = mapped_column(String, primary_key=True)
+    invoice_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    card_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    account_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    paid_at: Mapped[str] = mapped_column(String, nullable=False, index=True)
 
 
 class BalanceStateRecord(ProjectionBase):
@@ -804,6 +816,57 @@ class Projector:
             ).to_dict()
             for row in rows
         ]
+
+    def list_invoice_payments(
+        self,
+        *,
+        invoice_id: str,
+    ) -> list[dict[str, str | int]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                rows = (
+                    session.query(InvoicePaymentProjectionRecord)
+                    .filter(InvoicePaymentProjectionRecord.invoice_id == invoice_id)
+                    .order_by(
+                        InvoicePaymentProjectionRecord.paid_at.desc(),
+                        InvoicePaymentProjectionRecord.payment_id.desc(),
+                    )
+                    .all()
+                )
+
+        return [
+            InvoicePaymentProjection(
+                payment_id=row.payment_id,
+                invoice_id=row.invoice_id,
+                card_id=row.card_id,
+                account_id=row.account_id,
+                amount=row.amount,
+                paid_at=row.paid_at,
+            ).to_dict()
+            for row in rows
+        ]
+
+    def get_invoice_payment(
+        self,
+        payment_id: str,
+    ) -> dict[str, str | int] | None:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                row = session.get(InvoicePaymentProjectionRecord, payment_id)
+
+        if row is None:
+            return None
+
+        return InvoicePaymentProjection(
+            payment_id=row.payment_id,
+            invoice_id=row.invoice_id,
+            card_id=row.card_id,
+            account_id=row.account_id,
+            amount=row.amount,
+            paid_at=row.paid_at,
+        ).to_dict()
 
     def list_card_installments(
         self,
@@ -2295,6 +2358,10 @@ class Projector:
             self._apply_invoice_paid(session, event.payload)
             return
 
+        if event.type == "InvoicePaymentUpdated":
+            self._apply_invoice_payment_updated(session, event.payload)
+            return
+
         if event.type in {"IncomeCreated", "ExpenseCreated"}:
             self._apply_transaction_created(session, event.payload)
             return
@@ -2935,7 +3002,10 @@ class Projector:
             return
 
         invoice.total_amount += allocation.amount
-        invoice.remaining_amount += allocation.amount
+        invoice.remaining_amount = max(
+            invoice.total_amount - invoice.paid_amount,
+            0,
+        )
         invoice.purchase_count += 1
         self._sync_invoice_status(invoice)
         self._sync_card_purchase_invoice_lifecycle(
@@ -2992,9 +3062,9 @@ class Projector:
         payload: dict[str, object],
     ) -> None:
         payment_id = str(payload["id"])
-        transaction_id = f"{payment_id}:invoice-payment"
-        if session.get(TransactionProjectionRecord, transaction_id) is not None:
+        if session.get(InvoicePaymentProjectionRecord, payment_id) is not None:
             return
+        transaction_id = f"{payment_id}:invoice-payment"
 
         invoice_id = str(payload["invoice_id"])
         invoice = session.get(InvoiceProjectionRecord, invoice_id)
@@ -3014,6 +3084,16 @@ class Projector:
             invoice_id=invoice_id,
         )
 
+        session.add(
+            InvoicePaymentProjectionRecord(
+                payment_id=payment_id,
+                invoice_id=invoice_id,
+                card_id=str(payload["card_id"]),
+                account_id=str(payload["account_id"]),
+                amount=amount,
+                paid_at=str(payload["paid_at"]),
+            )
+        )
         session.add(
             TransactionProjectionRecord(
                 transaction_id=transaction_id,
@@ -3035,6 +3115,40 @@ class Projector:
             account_id=str(payload["account_id"]),
             delta=-amount,
         )
+
+    def _apply_invoice_payment_updated(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        payment_id = str(payload["id"])
+        existing = session.get(InvoicePaymentProjectionRecord, payment_id)
+        if existing is None:
+            return
+
+        new_account_id = str(payload["account_id"])
+        previous_account_id = existing.account_id
+
+        if previous_account_id != new_account_id:
+            self._apply_balance_delta(
+                session,
+                account_id=previous_account_id,
+                delta=existing.amount,
+            )
+            self._apply_balance_delta(
+                session,
+                account_id=new_account_id,
+                delta=-existing.amount,
+            )
+
+        existing.account_id = new_account_id
+
+        transaction = session.get(
+            TransactionProjectionRecord,
+            f"{payment_id}:invoice-payment",
+        )
+        if transaction is not None:
+            transaction.account_id = new_account_id
 
     def _apply_transaction_created(
         self,
@@ -4452,6 +4566,25 @@ class Projector:
         if invoice_columns != expected_invoice_columns:
             return True
 
+        if "invoice_payments" not in table_names:
+            return True
+
+        invoice_payment_columns = self._safe_column_names(
+            inspector, "invoice_payments"
+        )
+        if invoice_payment_columns is None:
+            return True
+        expected_invoice_payment_columns = {
+            "payment_id",
+            "invoice_id",
+            "card_id",
+            "account_id",
+            "amount",
+            "paid_at",
+        }
+        if invoice_payment_columns != expected_invoice_payment_columns:
+            return True
+
         if "transactions" not in table_names:
             return True
 
@@ -5098,6 +5231,12 @@ class Projector:
                             func.lower(UnifiedMovementRecord.description).like(
                                 text_pattern
                             ),
+                            func.lower(UnifiedMovementRecord.movement_id).like(
+                                text_pattern
+                            ),
+                            func.lower(
+                                func.coalesce(UnifiedMovementRecord.parent_id, "")
+                            ).like(text_pattern),
                         )
                     )
                 if needs_review is True:

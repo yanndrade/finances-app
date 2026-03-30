@@ -245,6 +245,15 @@ export type InvoiceSummary = {
   status: string;
 };
 
+export type InvoicePaymentSummary = {
+  payment_id: string;
+  invoice_id: string;
+  card_id: string;
+  account_id: string;
+  amount: number;
+  paid_at: string;
+};
+
 export type InvoiceItemSummary = {
   invoice_item_id: string;
   invoice_id: string;
@@ -348,6 +357,10 @@ export type InvoicePaymentPayload = {
   amountInCents: number;
   accountId: string;
   paidAt: string;
+};
+
+export type InvoicePaymentUpdatePayload = {
+  accountId: string;
 };
 
 export type MarkReimbursementReceivedPayload = {
@@ -859,6 +872,14 @@ export async function fetchInvoiceItems(
   );
 }
 
+export async function fetchInvoicePayments(
+  invoiceId: string,
+): Promise<InvoicePaymentSummary[]> {
+  return requestJson<InvoicePaymentSummary[]>(
+    `/api/invoices/${encodeURIComponent(invoiceId)}/payments`,
+  );
+}
+
 export async function fetchTransactions(
   filters?: Partial<TransactionFilters>,
 ): Promise<TransactionSummary[]> {
@@ -1132,6 +1153,21 @@ export async function payInvoice(
         amount: payload.amountInCents,
         account_id: payload.accountId,
         paid_at: normalizeTimestampForApi(payload.paidAt),
+      }),
+    },
+  );
+}
+
+export async function updateInvoicePayment(
+  paymentId: string,
+  payload: InvoicePaymentUpdatePayload,
+): Promise<InvoicePaymentSummary> {
+  return requestJson<InvoicePaymentSummary>(
+    `/api/invoice-payments/${encodeURIComponent(paymentId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        account_id: payload.accountId,
       }),
     },
   );

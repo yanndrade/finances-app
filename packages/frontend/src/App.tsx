@@ -48,6 +48,7 @@ import {
   updateAccount,
   updateCard,
   updateCardPurchase,
+  updateInvoicePayment,
   updateRecurringRule,
   updateTransaction,
   voidCardPurchase,
@@ -62,6 +63,7 @@ import {
   type CardUpdatePayload,
   type CashTransactionPayload,
   type InvoicePaymentPayload,
+  type InvoicePaymentUpdatePayload,
   type InvestmentMovementPayload,
   type InvestmentView,
   type InvoiceSummary,
@@ -767,6 +769,20 @@ export function App() {
     }
   }
 
+  async function handleUpdateInvoicePayment(
+    paymentId: string,
+    payload: InvoicePaymentUpdatePayload,
+  ): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => updateInvoicePayment(paymentId, payload),
+      "Conta do pagamento atualizada com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("NÃ£o foi possÃ­vel atualizar a conta do pagamento.");
+    }
+  }
+
   async function handleCreateRecurringRule(
     payload: RecurringRulePayload,
   ): Promise<void> {
@@ -1201,6 +1217,7 @@ export function App() {
             month={selectedMonth}
             refreshKey={refreshKey}
             onError={(error) => showErrorToast(error)}
+            onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={() => openQuickAdd("expense")}
           />
         ) : null}
@@ -1250,6 +1267,7 @@ export function App() {
             onCreateCard={handleCreateCard}
             onSetCardActive={handleSetCardActive}
             onUpdateCard={handleUpdateCard}
+            onUpdateInvoicePayment={handleUpdateInvoicePayment}
             uiDensity={uiDensity}
           />
         ) : null}

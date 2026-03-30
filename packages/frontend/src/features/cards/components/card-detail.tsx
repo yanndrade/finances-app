@@ -4,18 +4,37 @@ import { format, parseISO } from "date-fns";
 
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/dialog";
 import { Progress } from "../../../components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
 import type {
+  AccountSummary,
   CardInstallmentSummary,
   CardSummary,
+  InvoicePaymentUpdatePayload,
   InvoiceItemSummary,
+  InvoicePaymentSummary,
   InvoiceSummary,
   TransactionFilters,
 } from "../../../lib/api";
-import { formatCurrency } from "../../../lib/format";
+import { formatCurrency, formatDateTime } from "../../../lib/format";
 import type { QuickAddPreset } from "../../../components/quick-add-composer";
 import { cn } from "../../../lib/utils";
 import {
+  accountName,
   getDisplayedInvoiceAmount,
   getInvoiceCycleDates,
   MetricPanel,
@@ -28,6 +47,7 @@ type QuickAddOpenOptions = {
 };
 
 type CardDetailProps = {
+  accounts: AccountSummary[];
   card: CardSummary;
   invoice: InvoiceSummary | null;
   previousInvoices: InvoiceSummary[];
@@ -36,11 +56,19 @@ type CardDetailProps = {
   invoiceItems: InvoiceItemSummary[];
   isLoadingItems: boolean;
   invoiceItemsError: string | null;
+  invoicePayments: InvoicePaymentSummary[];
+  isLoadingPayments: boolean;
+  invoicePaymentsError: string | null;
+  isSubmitting: boolean;
   onBack: () => void;
   onLoadInvoiceItems: (invoiceId: string) => Promise<void>;
   onOpenLedgerFiltered: (filters: Partial<TransactionFilters>, month?: string) => void;
   onOpenQuickAdd: (preset: QuickAddPreset, options?: QuickAddOpenOptions) => void;
   onSelectInvoice: (invoiceId: string) => void;
+  onUpdateInvoicePayment: (
+    paymentId: string,
+    payload: InvoicePaymentUpdatePayload,
+  ) => Promise<void>;
 };
 
 // Group future installments by reference_month
@@ -55,6 +83,7 @@ function groupInstallmentsByMonth(installments: CardInstallmentSummary[]) {
 }
 
 export function CardDetail({
+  accounts,
   card,
   invoice,
   previousInvoices,
@@ -63,14 +92,21 @@ export function CardDetail({
   invoiceItems,
   isLoadingItems,
   invoiceItemsError,
+  invoicePayments,
+  isLoadingPayments,
+  invoicePaymentsError,
+  isSubmitting,
   onBack,
   onLoadInvoiceItems,
   onOpenLedgerFiltered,
   onOpenQuickAdd,
   onSelectInvoice,
+  onUpdateInvoicePayment,
 }: CardDetailProps) {
   const [itemsOpen, setItemsOpen] = useState(false);
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [editingPayment, setEditingPayment] = useState<InvoicePaymentSummary | null>(null);
+  const [editingPaymentAccountId, setEditingPaymentAccountId] = useState("");
 
   function toggleMonth(month: string) {
     setExpandedMonths((prev) => {
@@ -87,6 +123,26 @@ export function CardDetail({
       await onLoadInvoiceItems(invoice.invoice_id);
     }
     setItemsOpen((v) => !v);
+  }
+
+  function handleStartEditPayment(payment: InvoicePaymentSummary) {
+    setEditingPayment(payment);
+    setEditingPaymentAccountId(payment.account_id);
+  }
+
+  function handleCloseEditPayment() {
+    setEditingPayment(null);
+    setEditingPaymentAccountId("");
+  }
+
+  async function handleSubmitPaymentAccountUpdate() {
+    if (editingPayment === null) return;
+    if (!editingPaymentAccountId.trim()) return;
+
+    await onUpdateInvoicePayment(editingPayment.payment_id, {
+      accountId: editingPaymentAccountId,
+    });
+    handleCloseEditPayment();
   }
 
   if (!invoice) {
@@ -112,6 +168,7 @@ export function CardDetail({
 
   const installmentGroups = groupInstallmentsByMonth(futureInstallments);
   const itemsTotal = invoiceItems.reduce((s, i) => s + i.amount, 0);
+  const paymentsTotal = invoicePayments.reduce((sum, payment) => sum + payment.amount, 0);
 
   return (
     <div className="space-y-5">
@@ -301,6 +358,73 @@ export function CardDetail({
               </CardContent>
             </Card>
           )}
+
+          <Card className="rounded-[2rem] border border-slate-100 bg-white shadow-sm overflow-hidden">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[12px] font-black uppercase tracking-widest text-slate-400">
+                    Pagamentos da fatura
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-slate-500">
+                    {invoicePayments.length > 0
+                      ? `${invoicePayments.length} pagamento${invoicePayments.length !== 1 ? "s" : ""} · ${formatCurrency(paymentsTotal)}`
+                      : "Veja de qual conta saiu cada pagamento desta fatura."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                {isLoadingPayments ? (
+                  <p className="py-6 text-center text-[12px] font-black uppercase tracking-[0.2em] text-slate-300">
+                    Carregando pagamentos...
+                  </p>
+                ) : invoicePaymentsError ? (
+                  <p className="text-sm font-bold text-rose-600">{invoicePaymentsError}</p>
+                ) : invoicePayments.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5">
+                    <p className="text-sm font-bold text-slate-500">Nenhum pagamento registrado nesta fatura ainda.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {invoicePayments.map((payment) => (
+                      <div
+                        key={payment.payment_id}
+                        className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-slate-900">
+                            {accountName(payment.account_id, accounts)}
+                          </p>
+                          <p className="text-[12px] font-bold text-slate-400">
+                            {formatDateTime(payment.paid_at)}
+                          </p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <p className="text-sm font-black text-slate-900 tabular-nums">
+                            {formatCurrency(payment.amount)}
+                          </p>
+                          <p className="text-[12px] font-bold text-slate-400">{payment.account_id}</p>
+                        </div>
+                        <div className="sm:self-stretch sm:flex sm:items-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleStartEditPayment(payment)}
+                            disabled={isSubmitting}
+                            className="h-8 rounded-lg px-3 text-[12px] font-black uppercase tracking-widest text-slate-500 hover:bg-white hover:text-slate-900"
+                          >
+                            Ajustar conta
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* ── Sidebar (col-span-4) ── */}
@@ -426,6 +550,62 @@ export function CardDetail({
           )}
         </div>
       </div>
+
+      <Dialog open={editingPayment !== null} onOpenChange={(open) => !open && handleCloseEditPayment()}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Ajustar conta do pagamento</DialogTitle>
+            <DialogDescription>
+              Troque a conta de origem deste pagamento. O saldo volta para a conta antiga e sai da nova automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {editingPayment ? (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-black text-slate-900">{formatCurrency(editingPayment.amount)}</p>
+                <p className="text-[12px] font-bold text-slate-400">{formatDateTime(editingPayment.paid_at)}</p>
+              </div>
+            ) : null}
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Conta de origem</label>
+              <Select value={editingPaymentAccountId} onValueChange={setEditingPaymentAccountId}>
+                <SelectTrigger aria-label="Conta de origem do pagamento" className="h-11 rounded-xl border-slate-200 text-left shadow-none">
+                  <SelectValue placeholder="Selecione uma conta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts
+                    .filter((account) => account.is_active)
+                    .map((account) => (
+                      <SelectItem key={account.account_id} value={account.account_id}>
+                        {account.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleCloseEditPayment} disabled={isSubmitting}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleSubmitPaymentAccountUpdate()}
+              disabled={
+                isSubmitting ||
+                editingPayment === null ||
+                !editingPaymentAccountId.trim() ||
+                editingPaymentAccountId === editingPayment.account_id
+              }
+            >
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
