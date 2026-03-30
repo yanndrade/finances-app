@@ -124,10 +124,6 @@ class InvoicePaymentService:
         remaining_amount = int(invoice["remaining_amount"])
         if remaining_amount <= 0:
             raise InvoicePaymentServiceError("Invoice is already paid.")
-        if amount > remaining_amount:
-            raise InvoicePaymentServiceError(
-                "amount cannot exceed the invoice remaining balance."
-            )
 
     def _payment_exists(self, payment_id: str) -> bool:
         for event in self._event_store.list_events_after(0):

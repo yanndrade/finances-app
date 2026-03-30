@@ -151,6 +151,29 @@ describe("CardsView", () => {
     expect(screen.queryByText("R$ 90,00")).not.toBeInTheDocument();
   });
 
+  it("does not render 100% progress while a partial invoice still has cents open", async () => {
+    const user = userEvent.setup();
+    renderCardsView({
+      invoices: [
+        {
+          ...defaultInvoices[0],
+          total_amount: 156_64,
+          paid_amount: 156_07,
+          remaining_amount: 57,
+          purchase_count: 5,
+          status: "partial",
+        },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: /detalhes/i }));
+
+    expect(screen.getByText(/em aberto/i).closest("div")).toHaveTextContent("R$ 0,57");
+    expect(screen.getByText("99%")).toBeInTheDocument();
+    expect(screen.queryByText("100%")).not.toBeInTheDocument();
+    expect(screen.queryByText(/pago integralmente/i)).not.toBeInTheDocument();
+  });
+
   it("shows Fechada for open invoices after the closing date", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 2, 25, 12, 0, 0));

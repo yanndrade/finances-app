@@ -3001,12 +3001,12 @@ class Projector:
             return
 
         amount = int(payload["amount"])
-        paid_amount = min(amount, invoice.remaining_amount)
-        if paid_amount <= 0:
+        settled_amount = min(amount, invoice.remaining_amount)
+        if settled_amount <= 0:
             return
 
-        invoice.paid_amount += paid_amount
-        invoice.remaining_amount -= paid_amount
+        invoice.paid_amount += settled_amount
+        invoice.remaining_amount -= settled_amount
         self._sync_invoice_status(invoice)
         self._sync_card_purchase_invoice_lifecycle(
             session,
@@ -3018,7 +3018,7 @@ class Projector:
                 transaction_id=transaction_id,
                 occurred_at=str(payload["paid_at"]),
                 type="expense",
-                amount=paid_amount,
+                amount=amount,
                 account_id=str(payload["account_id"]),
                 payment_method="OTHER",
                 category_id="invoice_payment",
@@ -3032,7 +3032,7 @@ class Projector:
         self._apply_balance_delta(
             session,
             account_id=str(payload["account_id"]),
-            delta=-paid_amount,
+            delta=-amount,
         )
 
     def _apply_transaction_created(

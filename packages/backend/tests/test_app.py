@@ -4891,6 +4891,89 @@ def test_invoice_payment_endpoint_supports_partial_and_full_payments(tmp_path) -
     ]
 
 
+def test_invoice_payment_endpoint_allows_amount_above_remaining_balance_and_closes_invoice(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 200_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 10,
+            "due_day": 20,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-15T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "electronics",
+            "card_id": "card-1",
+            "description": "Headphones",
+        },
+    )
+
+    response = client.post(
+        "/api/invoices/card-1:2026-04/payments",
+        json={
+            "id": "payment-1",
+            "amount": 90_57,
+            "account_id": "acc-1",
+            "paid_at": "2026-03-20T12:00:00Z",
+        },
+    )
+    accounts_response = client.get("/api/accounts")
+    transactions_response = client.get("/api/transactions", params={"account": "acc-1"})
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "invoice_id": "card-1:2026-04",
+        "card_id": "card-1",
+        "reference_month": "2026-04",
+        "closing_date": "2026-04-10",
+        "due_date": "2026-04-20",
+        "total_amount": 90_00,
+        "paid_amount": 90_00,
+        "remaining_amount": 0,
+        "purchase_count": 1,
+        "status": "paid",
+    }
+    assert accounts_response.status_code == 200
+    assert (
+        next(
+            account
+            for account in accounts_response.json()
+            if account["account_id"] == "acc-1"
+        )["current_balance"]
+        == 109_43
+    )
+    assert transactions_response.status_code == 200
+    assert transactions_response.json() == [
+        {
+            "transaction_id": "payment-1:invoice-payment",
+            "occurred_at": "2026-03-20T12:00:00Z",
+            "type": "expense",
+            "amount": 90_57,
+            "account_id": "acc-1",
+            "payment_method": "OTHER",
+            "category_id": "invoice_payment",
+            "description": "Pagamento de fatura card-1:2026-04",
+            "person_id": None,
+            "status": "active",
+        }
+    ]
+
+
 def test_invoice_items_endpoint_lists_only_requested_invoice_rows(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",

@@ -101,8 +101,9 @@ export function CardDetail({
   }
 
   const displayedInvoiceAmount = getDisplayedInvoiceAmount(invoice);
-  const progress = invoice.total_amount > 0 ? (invoice.paid_amount / invoice.total_amount) * 100 : 0;
-  const isPaidFull = progress >= 100;
+  const progress = invoice.total_amount > 0 ? Math.min((invoice.paid_amount / invoice.total_amount) * 100, 100) : 0;
+  const isPaidFull = invoice.remaining_amount <= 0;
+  const progressLabel = isPaidFull ? 100 : Math.min(Math.round(progress), 99);
   const { closingDate, dueDate } = getInvoiceCycleDates(invoice, card);
 
   const committedLimit = invoice.remaining_amount + (card.future_installment_total ?? 0);
@@ -228,7 +229,7 @@ export function CardDetail({
                     <div className="flex items-center gap-2 pt-1">
                       <Progress value={progress} className="h-1.5 flex-1 rounded-full bg-slate-100" />
                       <span className="text-[12px] font-black text-slate-500 tabular-nums">
-                        {Math.round(progress)}%
+                        {progressLabel}%
                       </span>
                     </div>
                   </div>
