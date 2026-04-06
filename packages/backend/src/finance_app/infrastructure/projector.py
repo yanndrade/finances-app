@@ -339,6 +339,136 @@ class Projector:
         session: Session,
     ) -> None:
         invoice_ids_to_sync: set[str] = set()
+        installments_by_purchase: dict[str, list[CardPurchaseInstallmentRecord]] = {}
+        for installment in (
+            session.query(CardPurchaseInstallmentRecord)
+            .order_by(CardPurchaseInstallmentRecord.installment_id.asc())
+            .all()
+        ):
+            installments_by_purchase.setdefault(installment.purchase_id, []).append(
+                installment
+            )
+
+        purchases = (
+            session.query(CardPurchaseProjectionRecord)
+            .order_by(CardPurchaseProjectionRecord.purchase_id.asc())
+            .all()
+        )
+        for purchase in purchases:
+            card = session.get(CardProjectionRecord, purchase.card_id)
+            if card is None:
+                continue
+
+            linked_pending = self._pending_from_transaction_id(
+                session,
+                transaction_id=purchase.purchase_id,
+            )
+            person_id = self._card_purchase_person_id(
+                session,
+                purchase_id=purchase.purchase_id,
+            )
+            installments = installments_by_purchase.get(purchase.purchase_id, [])
+            fallback_installment = CardPurchaseInstallmentRecord(
+                installment_id=f"{purchase.purchase_id}:1",
+                purchase_id=purchase.purchase_id,
+                card_id=purchase.card_id,
+                purchase_date=purchase.purchase_date,
+                category_id=purchase.category_id,
+                installment_number=1,
+                installments_count=purchase.installments_count,
+                amount=purchase.amount,
+                invoice_id=purchase.invoice_id,
+                reference_month=purchase.reference_month,
+                closing_date=purchase.closing_date,
+                due_date=purchase.due_date,
+            )
+            expected_installments = installments or [fallback_installment]
+
+            for installment in expected_installments:
+                movement = session.get(
+                    UnifiedMovementRecord,
+                    installment.installment_id,
+                )
+                if movement is None:
+                    installments_count = int(
+                        installment.installments_count or purchase.installments_count or 1
+                    )
+                    origin_type = (
+                        "recurring"
+                        if linked_pending is not None
+                        else (
+                            "installment"
+                            if installments_count > 1
+                            else "card_purchase"
+                        )
+                    )
+                    payment_method = (
+                        "CREDIT_INSTALLMENT"
+                        if installments_count > 1
+                        else "CREDIT_CASH"
+                    )
+                    posted_at, competence_month = (
+                        self._resolve_card_purchase_unified_timing(
+                            purchase_date=purchase.purchase_date,
+                            installments_count=installments_count,
+                            reference_month=installment.reference_month,
+                            due_date=installment.due_date,
+                        )
+                    )
+                    invoice = session.get(
+                        InvoiceProjectionRecord,
+                        installment.invoice_id,
+                    )
+                    lifecycle_status = (
+                        "cleared"
+                        if invoice is not None and invoice.status == "paid"
+                        else "pending"
+                    )
+                    self._upsert_unified_movement(
+                        session,
+                        movement_id=installment.installment_id,
+                        kind="expense",
+                        origin_type=origin_type,
+                        title=(
+                            linked_pending.name
+                            if linked_pending is not None
+                            else (purchase.description or purchase.category_id)
+                        ),
+                        description=(
+                            linked_pending.description
+                            if linked_pending is not None
+                            else purchase.description
+                        ),
+                        amount=installment.amount,
+                        posted_at=posted_at,
+                        competence_month=competence_month,
+                        account_id=card.payment_account_id,
+                        card_id=purchase.card_id,
+                        payment_method=payment_method,
+                        category_id=purchase.category_id,
+                        counterparty=person_id,
+                        lifecycle_status=lifecycle_status,
+                        edit_policy=(
+                            "inherited" if linked_pending is not None else "editable"
+                        ),
+                        parent_id=purchase.purchase_id,
+                        group_id=linked_pending.rule_id if linked_pending is not None else None,
+                        transfer_direction=None,
+                        installment_number=(
+                            installment.installment_number
+                            if installments_count > 1
+                            else None
+                        ),
+                        installment_total=(
+                            installments_count if installments_count > 1 else None
+                        ),
+                        source_event_type="CardPurchaseUpdated",
+                    )
+
+                invoice_id = str(installment.invoice_id or "").strip()
+                if invoice_id:
+                    invoice_ids_to_sync.add(invoice_id)
+
         rows = (
             session.query(
                 UnifiedMovementRecord,
@@ -2731,6 +2861,7 @@ class Projector:
         )
         # Remove stale unified movements before recreating
         self._remove_unified_movements_by_parent(session, parent_id=purchase_id)
+        session.flush()
 
         _upd_method = (
             "CREDIT_INSTALLMENT" if new_installments_count > 1 else "CREDIT_CASH"
@@ -4931,6 +5062,11 @@ class Projector:
         reimbursement_source_tx_id: str | None = None,
     ) -> None:
         existing = session.get(UnifiedMovementRecord, movement_id)
+        if existing is not None and (
+            existing in session.deleted or inspect(existing).deleted
+        ):
+            session.expunge(existing)
+            existing = None
         if existing is None:
             session.add(
                 UnifiedMovementRecord(

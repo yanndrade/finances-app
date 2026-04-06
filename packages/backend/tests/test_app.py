@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
 
 from finance_app.application.health import HealthCheckUseCase
 from finance_app.cli import main
@@ -3736,6 +3737,165 @@ def test_card_purchase_endpoint_can_fully_update_purchase_and_reproject_installm
             "receipt_transaction_id": None,
             "notes": None,
         },
+    ]
+
+
+def test_card_purchase_date_update_keeps_item_visible_in_history_when_invoice_cycle_changes(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 5,
+            "due_day": 15,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-06T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Lunch",
+        },
+    )
+
+    response = client.patch(
+        "/api/card-purchases/purchase-1",
+        json={"purchase_date": "2026-03-05T12:00:00Z"},
+    )
+    march_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-03", "scope": "variable"},
+    )
+    april_movements_response = client.get(
+        "/api/movements",
+        params={"competence_month": "2026-04", "scope": "variable"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["reference_month"] == "2026-03"
+    assert response.json()["invoice_id"] == "card-1:2026-03"
+    assert march_movements_response.status_code == 200
+    assert march_movements_response.json()["items"] == [
+        {
+            "movement_id": "purchase-1:1",
+            "kind": "expense",
+            "origin_type": "card_purchase",
+            "title": "Lunch",
+            "description": "Lunch",
+            "amount": 90_00,
+            "posted_at": "2026-03-05T12:00:00Z",
+            "competence_month": "2026-03",
+            "account_id": "acc-1",
+            "card_id": "card-1",
+            "payment_method": "CREDIT_CASH",
+            "category_id": "food",
+            "counterparty": None,
+            "lifecycle_status": "pending",
+            "edit_policy": "editable",
+            "parent_id": "purchase-1",
+            "group_id": None,
+            "transfer_direction": None,
+            "installment_number": None,
+            "installment_total": None,
+            "source_event_type": "CardPurchaseUpdated",
+            "needs_review": False,
+        }
+    ]
+    assert april_movements_response.status_code == 200
+    assert april_movements_response.json()["items"] == []
+
+
+def test_startup_repair_recreates_missing_card_purchase_history_item(
+    tmp_path,
+) -> None:
+    database_url = f"sqlite:///{(tmp_path / 'app.db').as_posix()}"
+    event_database_url = f"sqlite:///{(tmp_path / 'events.db').as_posix()}"
+    app = create_app(
+        database_url=database_url,
+        event_database_url=event_database_url,
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+    _create_card(
+        client,
+        {
+            "id": "card-1",
+            "name": "Nubank",
+            "limit": 150_000,
+            "closing_day": 5,
+            "due_day": 15,
+            "payment_account_id": "acc-1",
+        },
+    )
+    _create_card_purchase(
+        client,
+        {
+            "id": "purchase-1",
+            "purchase_date": "2026-03-05T12:00:00Z",
+            "amount": 90_00,
+            "category_id": "food",
+            "card_id": "card-1",
+            "description": "Lunch",
+        },
+    )
+
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM unified_movements WHERE movement_id = :movement_id"),
+            {"movement_id": "purchase-1:1"},
+        )
+
+    repaired_app = create_app(
+        database_url=database_url,
+        event_database_url=event_database_url,
+    )
+    repaired_client = TestClient(repaired_app)
+    movements_response = repaired_client.get(
+        "/api/movements",
+        params={"competence_month": "2026-03", "scope": "variable"},
+    )
+
+    assert movements_response.status_code == 200
+    assert movements_response.json()["items"] == [
+        {
+            "movement_id": "purchase-1:1",
+            "kind": "expense",
+            "origin_type": "card_purchase",
+            "title": "Lunch",
+            "description": "Lunch",
+            "amount": 90_00,
+            "posted_at": "2026-03-05T12:00:00Z",
+            "competence_month": "2026-03",
+            "account_id": "acc-1",
+            "card_id": "card-1",
+            "payment_method": "CREDIT_CASH",
+            "category_id": "food",
+            "counterparty": None,
+            "lifecycle_status": "pending",
+            "edit_policy": "editable",
+            "parent_id": "purchase-1",
+            "group_id": None,
+            "transfer_direction": None,
+            "installment_number": None,
+            "installment_total": None,
+            "source_event_type": "CardPurchaseUpdated",
+            "needs_review": False,
+        }
     ]
 
 
