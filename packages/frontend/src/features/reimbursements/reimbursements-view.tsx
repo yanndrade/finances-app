@@ -12,9 +12,11 @@ import {
   type ReimbursementSummary,
   type TransactionFilters,
 } from "../../lib/api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 
 import { SummaryStrip } from "./summary-strip";
 import { ReimbursementList } from "./reimbursement-list";
+import { ReimbursementPersonList } from "./reimbursement-person-list";
 import { ReimbursementDrawer } from "./reimbursement-drawer";
 import { ReceivePaymentDialog } from "./receive-payment-dialog";
 
@@ -54,6 +56,7 @@ export function ReimbursementsView({
   const [isListLoading, setIsListLoading] = useState(false);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [viewMode, setViewMode] = useState<"entries" | "people">("entries");
 
   const [selectedReimbursement, setSelectedReimbursement] =
     useState<PendingReimbursementSummary | null>(null);
@@ -201,12 +204,38 @@ export function ReimbursementsView({
     <div className="space-y-6">
       <SummaryStrip summary={summary} loading={isSummaryLoading} />
 
-      <ReimbursementList
-        reimbursements={reimbursements}
-        loading={isListLoading}
-        onSelectReimbursement={handleSelectReimbursement}
-        onOpenQuickAdd={onOpenQuickAdd}
-      />
+      <Tabs
+        className="space-y-4"
+        value={viewMode}
+        onValueChange={(value) => {
+          if (value === "entries" || value === "people") {
+            setViewMode(value);
+          }
+        }}
+      >
+        <TabsList>
+          <TabsTrigger value="entries">Por lançamentos</TabsTrigger>
+          <TabsTrigger value="people">Por pessoa</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="entries" className="mt-0">
+          <ReimbursementList
+            reimbursements={reimbursements}
+            loading={isListLoading}
+            onSelectReimbursement={handleSelectReimbursement}
+            onOpenQuickAdd={onOpenQuickAdd}
+          />
+        </TabsContent>
+
+        <TabsContent value="people" className="mt-0">
+          <ReimbursementPersonList
+            reimbursements={reimbursements}
+            loading={isListLoading}
+            onSelectReimbursement={handleSelectReimbursement}
+            onOpenQuickAdd={onOpenQuickAdd}
+          />
+        </TabsContent>
+      </Tabs>
 
       <ReimbursementDrawer
         reimbursement={selectedReimbursement}

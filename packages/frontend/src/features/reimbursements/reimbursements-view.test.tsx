@@ -78,6 +78,48 @@ const reimbursements: api.PendingReimbursementSummary[] = [
   },
 ];
 
+const reimbursementsGroupedByPerson: api.PendingReimbursementSummary[] = [
+  {
+    transaction_id: "tx-1",
+    person_id: "Valéria",
+    amount: 10_000,
+    amount_received: 0,
+    status: "pending",
+    account_id: "acc-1",
+    occurred_at: "2026-03-10T10:00:00Z",
+    expected_at: "2026-03-15",
+    received_at: null,
+    receipt_transaction_id: null,
+    notes: null,
+  },
+  {
+    transaction_id: "tx-2",
+    person_id: "valeria mello",
+    amount: 5_000,
+    amount_received: 0,
+    status: "pending",
+    account_id: "acc-1",
+    occurred_at: "2026-03-11T10:00:00Z",
+    expected_at: "2026-03-16",
+    received_at: null,
+    receipt_transaction_id: null,
+    notes: null,
+  },
+  {
+    transaction_id: "tx-3",
+    person_id: "Valéria Mello",
+    amount: 2_000,
+    amount_received: 2_000,
+    status: "received",
+    account_id: "acc-1",
+    occurred_at: "2026-03-12T10:00:00Z",
+    expected_at: "2026-03-17",
+    received_at: "2026-03-12T10:00:00Z",
+    receipt_transaction_id: "tx-3:reimbursement-receipt",
+    notes: null,
+  },
+];
+
 describe("ReimbursementsView", () => {
   beforeEach(() => {
     installDialogEnvironment();
@@ -196,5 +238,43 @@ describe("ReimbursementsView", () => {
       },
       "2026-03",
     );
+  });
+
+  it("supports grouped view by person with aliases and original entries", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listReimbursements).mockResolvedValueOnce(reimbursementsGroupedByPerson);
+    vi.mocked(api.getReimbursementsSummary).mockResolvedValueOnce({
+      total_outstanding: 15_000,
+      received_in_month: 2_000,
+      expiring_soon_count: 2,
+      expiring_soon_total: 15_000,
+      overdue_count: 0,
+      overdue_total: 0,
+    });
+
+    render(
+      <ReimbursementsView
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+      />,
+    );
+
+    expect(await screen.findByRole("tab", { name: /por lançamentos/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /por pessoa/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /por pessoa/i }));
+
+    expect(await screen.findByText("Valéria Mello")).toBeInTheDocument();
+    expect(screen.getByText(/também encontrado como:/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 pendentes, 1 recebido/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 lançamentos/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /valéria mello/i }));
+
+    expect(await screen.findByText("Valéria")).toBeInTheDocument();
+    expect(screen.getByText("valeria mello")).toBeInTheDocument();
+    expect(screen.getAllByText("Valéria Mello").length).toBeGreaterThanOrEqual(1);
   });
 });
