@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Clock, MinusCircle } from "lucide-react";
+import { CheckCircle2, Clock, MinusCircle } from "lucide-react";
 
 import type { PendingReimbursementSummary } from "../../lib/api";
 import { formatCurrency, formatDate } from "../../lib/format";
@@ -14,12 +14,6 @@ const STATUS_CONFIG = {
     icon: Clock,
     colorClass: "text-amber-600 bg-amber-50",
     badgeClass: "bg-amber-100 text-amber-700",
-  },
-  overdue: {
-    label: "Em atraso",
-    icon: AlertCircle,
-    colorClass: "text-red-600 bg-red-50",
-    badgeClass: "bg-red-100 text-red-700",
   },
   partial: {
     label: "Parcial",
@@ -72,7 +66,6 @@ export function ReimbursementRow({ reimbursement, onClick }: ReimbursementRowPro
         </div>
         <p className="text-xs text-slate-400">
           Lançado em {formatDate(reimbursement.occurred_at)}
-          {reimbursement.expected_at ? ` · vence em ${formatDate(reimbursement.expected_at)}` : ""}
         </p>
       </div>
 

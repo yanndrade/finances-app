@@ -39,7 +39,7 @@ The first local desktop security layer is stored in `app.db`.
 The backend package now exposes a runnable CLI entrypoint:
 
 ```powershell
-uv run backend --host 127.0.0.1 --port 48200
+uv run backend --host 127.0.0.1 --port 27654
 ```
 
 Optional environment variables:

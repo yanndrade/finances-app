@@ -16,7 +16,6 @@ type ReimbursementPersonListProps = {
 };
 
 const STATUS_ORDER: PendingReimbursementSummary["status"][] = [
-  "overdue",
   "pending",
   "partial",
   "received",
@@ -116,10 +115,6 @@ function formatStatusSummary(
       continue;
     }
 
-    if (status === "overdue") {
-      parts.push(`${count} em atraso`);
-      continue;
-    }
     if (status === "pending") {
       parts.push(`${count} pendente${count > 1 ? "s" : ""}`);
       continue;

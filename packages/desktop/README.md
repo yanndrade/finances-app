@@ -16,7 +16,7 @@ npm run tauri -- dev
 The desktop runtime starts the backend automatically using:
 
 ```powershell
-uv run backend --host 127.0.0.1 --port 48200
+uv run backend --host 127.0.0.1 --port 27654
 ```
 
 ## Release Packaging (Windows)

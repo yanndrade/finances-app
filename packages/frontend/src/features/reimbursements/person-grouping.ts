@@ -207,7 +207,6 @@ export function groupReimbursementsByPerson(
     const statusCounts: Record<PendingReimbursementSummary["status"], number> = {
       pending: 0,
       partial: 0,
-      overdue: 0,
       received: 0,
       canceled: 0,
     };
@@ -292,8 +291,7 @@ function tokenize(normalizedName: string): string[] {
 function getOutstandingAmount(reimbursement: PendingReimbursementSummary): number {
   if (
     reimbursement.status === "pending" ||
-    reimbursement.status === "partial" ||
-    reimbursement.status === "overdue"
+    reimbursement.status === "partial"
   ) {
     return Math.max(0, reimbursement.amount - (reimbursement.amount_received ?? 0));
   }

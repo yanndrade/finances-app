@@ -36,7 +36,7 @@ use windows_sys::Win32::{
 const MAIN_WINDOW_LABEL: &str = "main";
 const BACKEND_BIND_HOST: &str = "0.0.0.0";
 const BACKEND_HEALTH_HOST: &str = "127.0.0.1";
-const BACKEND_PORT: u16 = 48200;
+const BACKEND_PORT: u16 = 27654;
 const BACKEND_BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 const TRAY_EVENT_QUICK_ADD: &str = "desktop://quick-add";
 const TRAY_EVENT_LOCK: &str = "desktop://lock";

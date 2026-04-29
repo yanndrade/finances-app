@@ -11,7 +11,7 @@ from finance_app.infrastructure.https import ensure_self_signed_certificate
 from finance_app.interfaces.http.app import create_app
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 48200
+DEFAULT_PORT = 27654
 DATABASE_URL_ENV = "FINANCE_APP_DATABASE_URL"
 EVENT_DATABASE_URL_ENV = "FINANCE_APP_EVENT_DATABASE_URL"
 DATABASE_PATH_ENV = "FINANCE_APP_DATABASE_PATH"

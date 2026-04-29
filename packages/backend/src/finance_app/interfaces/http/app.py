@@ -90,7 +90,7 @@ def create_app(
     )
     app = FastAPI(title="finance-app backend")
     app.state.public_scheme = "http"
-    app.state.public_port = 48200
+    app.state.public_port = 27654
     app.state.security_trace_enabled = _read_bool_env(LAN_SECURITY_TRACE_ENV)
     app.add_middleware(
         CORSMiddleware,
@@ -222,7 +222,7 @@ def create_app(
                     "expected_host": effective_public_host,
                     "allow_http_origin": allow_http_origin,
                     "public_scheme": str(getattr(request.app.state, "public_scheme", "http")),
-                    "public_port": int(getattr(request.app.state, "public_port", 48200)),
+                    "public_port": int(getattr(request.app.state, "public_port", 27654)),
                     "subnet_cidr": network.subnet_cidr,
                 },
             )

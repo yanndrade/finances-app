@@ -1516,18 +1516,7 @@ class Projector:
             with self._session_factory() as session:
                 query = session.query(ReimbursementProjectionRecord)
                 if status is not None:
-                    # "overdue" is a computed status: stored as "pending" but past expected_at
-                    if status == "overdue":
-                        today = date.today().isoformat()
-                        query = query.filter(
-                            ReimbursementProjectionRecord.status == "pending",
-                            ReimbursementProjectionRecord.expected_at.isnot(None),
-                            ReimbursementProjectionRecord.expected_at < today,
-                        )
-                    else:
-                        query = query.filter(
-                            ReimbursementProjectionRecord.status == status
-                        )
+                    query = query.filter(ReimbursementProjectionRecord.status == status)
                 if person_id is not None:
                     query = query.filter(
                         ReimbursementProjectionRecord.person_id == person_id
@@ -1642,38 +1631,14 @@ class Projector:
 
                 all_rows = base_query.all()
 
-        today_str = date.today().isoformat()
-        week_ahead = (date.today() + timedelta(days=7)).isoformat()
-
         total_outstanding = 0
         received_in_month = 0
-        expiring_soon_count = 0
-        expiring_soon_total = 0
-        overdue_count = 0
-        overdue_total = 0
 
         for row in all_rows:
             outstanding = row.amount - (row.amount_received or 0)
-            is_overdue = (
-                row.status == "pending"
-                and row.expected_at is not None
-                and row.expected_at < today_str
-            )
-            is_expiring = (
-                row.status == "pending"
-                and row.expected_at is not None
-                and today_str <= row.expected_at <= week_ahead
-                and not is_overdue
-            )
 
             if row.status in ("pending", "partial"):
                 total_outstanding += outstanding
-                if is_overdue:
-                    overdue_count += 1
-                    overdue_total += outstanding
-                elif is_expiring:
-                    expiring_soon_count += 1
-                    expiring_soon_total += outstanding
             elif row.status == "received":
                 if (
                     month is not None
@@ -1687,10 +1652,10 @@ class Projector:
         return {
             "total_outstanding": total_outstanding,
             "received_in_month": received_in_month,
-            "expiring_soon_count": expiring_soon_count,
-            "expiring_soon_total": expiring_soon_total,
-            "overdue_count": overdue_count,
-            "overdue_total": overdue_total,
+            "expiring_soon_count": 0,
+            "expiring_soon_total": 0,
+            "overdue_count": 0,
+            "overdue_total": 0,
         }
 
     def list_investment_movements(
@@ -2517,6 +2482,10 @@ class Projector:
                 event.payload,
                 event_timestamp=event.timestamp,
             )
+            return
+
+        if event.type == "ReimbursementReopened":
+            self._apply_reimbursement_reopened(session, event.payload)
             return
 
         if event.type == "PendingConfirmed":
@@ -3630,6 +3599,19 @@ class Projector:
             receivable.canceled_at = _optional_string(
                 payload.get("canceled_at")
             ) or event_timestamp
+
+    def _apply_reimbursement_reopened(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        transaction_id = str(payload["transaction_id"])
+        receivable = session.get(ReimbursementProjectionRecord, transaction_id)
+        if receivable is None or receivable.status == "received":
+            return
+
+        receivable.status = "partial" if receivable.amount_received > 0 else "pending"
+        receivable.canceled_at = None
 
     def _apply_pending_confirmed(
         self,

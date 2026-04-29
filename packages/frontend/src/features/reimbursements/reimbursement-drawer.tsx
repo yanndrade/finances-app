@@ -30,7 +30,6 @@ type ReimbursementDrawerProps = {
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Pendente",
-  overdue: "Em atraso",
   partial: "Parcial",
   received: "Recebido",
   canceled: "Cancelado",

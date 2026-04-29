@@ -11,15 +11,11 @@ type ReimbursementListProps = {
   onOpenQuickAdd?: () => void;
 };
 
-type GroupKey = "overdue" | "active" | "received" | "canceled";
+type GroupKey = "active" | "received" | "canceled";
 
-const GROUP_ORDER: GroupKey[] = ["overdue", "active", "received", "canceled"];
+const GROUP_ORDER: GroupKey[] = ["active", "received", "canceled"];
 
 const GROUP_META: Record<GroupKey, { label: string; description: string }> = {
-  overdue: {
-    label: "Em atraso",
-    description: "Vencimento passou e ainda não foram recebidos",
-  },
   active: {
     label: "Pendentes / Parciais",
     description: "Aguardando recebimento total",
@@ -35,7 +31,6 @@ const GROUP_META: Record<GroupKey, { label: string; description: string }> = {
 };
 
 function getGroupKey(status: PendingReimbursementSummary["status"]): GroupKey {
-  if (status === "overdue") return "overdue";
   if (status === "pending" || status === "partial") return "active";
   if (status === "received") return "received";
   if (status === "canceled") return "canceled";

@@ -111,14 +111,14 @@ npm run dev
 
 ```powershell
 cd packages/backend
-uv run backend --host 127.0.0.1 --port 48200
+uv run backend --host 127.0.0.1 --port 27654
 ```
 
 Useful backend variants:
 
 ```powershell
 uv run backend --https
-uv run backend --host 0.0.0.0 --port 48200
+uv run backend --host 0.0.0.0 --port 27654
 ```
 
 ### Isolated Desktop

@@ -98,7 +98,7 @@ export type PendingReimbursementSummary = {
   person_id: string;
   amount: number;
   amount_received: number;
-  status: "pending" | "partial" | "received" | "canceled" | "overdue";
+  status: "pending" | "partial" | "received" | "canceled";
   account_id: string;
   occurred_at: string;
   expected_at: string | null;
@@ -737,7 +737,7 @@ function resolveApiBaseUrl(): string {
 
   const location = globalThis.location;
   if (!location) {
-    return "http://127.0.0.1:48200";
+    return "http://127.0.0.1:27654";
   }
 
   const isHttpOrigin =
@@ -751,7 +751,7 @@ function resolveApiBaseUrl(): string {
     return location.origin;
   }
 
-  return "http://127.0.0.1:48200";
+  return "http://127.0.0.1:27654";
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();

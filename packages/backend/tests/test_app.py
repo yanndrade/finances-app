@@ -11,7 +11,7 @@ from finance_app.domain.security import LanNetworkInfo
 import finance_app.interfaces.http.app as http_app
 from finance_app.interfaces.http.app import create_app
 
-LAN_PUBLIC_HOST = "192.168.50.2:48200"
+LAN_PUBLIC_HOST = "192.168.50.2:27654"
 LAN_REMOTE_IP = "192.168.50.20"
 
 
@@ -96,7 +96,7 @@ def test_cli_entrypoint_uses_database_path_environment_variables(
     assert recorded["database_url"] == f"sqlite:///{app_db.as_posix()}"
     assert recorded["event_database_url"] == f"sqlite:///{events_db.as_posix()}"
     assert recorded["host"] == "127.0.0.1"
-    assert recorded["port"] == 48200
+    assert recorded["port"] == 27654
 
 
 def test_cli_entrypoint_enables_https_with_generated_certificate(
@@ -143,7 +143,7 @@ def test_cli_entrypoint_enables_https_with_generated_certificate(
     main(["--https", "--cert-dir", str(tmp_path)])
 
     assert recorded["host"] == "127.0.0.1"
-    assert recorded["port"] == 48200
+    assert recorded["port"] == 27654
     assert recorded["ssl_certfile"] == str(tmp_path / "server.crt")
     assert recorded["ssl_keyfile"] == str(tmp_path / "server.key")
 
@@ -257,7 +257,7 @@ def test_security_lan_endpoints_default_to_disabled_and_localhost_only(
         "pair_token_ttl_seconds": 300,
         "local_ip": "192.168.50.2",
         "subnet_cidr": "192.168.50.0/24",
-        "public_url": "http://192.168.50.2:48200",
+        "public_url": "http://192.168.50.2:27654",
         "public_scheme": "http",
     }
     assert update.status_code == 200
@@ -290,7 +290,7 @@ def test_security_lan_pairing_authenticates_remote_devices(
     pair_token = pair_token_payload["pair_token"]
     assert "qr_image_url" not in pair_token_payload
     assert pair_token_payload["pairing_url"].startswith(
-        "http://192.168.50.2:48200/api/security/pair?pair_token="
+        "http://192.168.50.2:27654/api/security/pair?pair_token="
     )
 
     remote_headers = _build_remote_lan_headers()
@@ -427,7 +427,7 @@ def test_security_lan_rejects_remote_requests_without_valid_context(
         params={"month": "2026-03"},
         headers={
             **remote_headers,
-            "Origin": "https://192.168.50.3:48200",
+            "Origin": "https://192.168.50.3:27654",
         },
     )
     assert blocked_bad_origin.status_code == 403
@@ -2100,16 +2100,21 @@ def test_reimbursements_summary_endpoint(tmp_path) -> None:
             "person_id": "friend",
         },
     )
+    update_response = client.patch(
+        "/api/reimbursements/tx-1",
+        json={"expected_at": "2026-01-01", "notes": None},
+    )
+    assert update_response.status_code == 200
 
     summary_response = client.get("/api/reimbursements/summary")
     assert summary_response.status_code == 200
     summary = summary_response.json()
     assert summary["total_outstanding"] == 30_00
     assert "received_in_month" in summary
-    assert "overdue_count" in summary
-    assert "overdue_total" in summary
-    assert "expiring_soon_count" in summary
-    assert "expiring_soon_total" in summary
+    assert summary["overdue_count"] == 0
+    assert summary["overdue_total"] == 0
+    assert summary["expiring_soon_count"] == 0
+    assert summary["expiring_soon_total"] == 0
 
 
 def test_update_reimbursement_expected_at_and_notes(tmp_path) -> None:
