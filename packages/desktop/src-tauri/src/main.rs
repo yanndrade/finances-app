@@ -78,7 +78,6 @@ impl RuntimeState {
         }
     }
 
-    #[cfg(test)]
     fn new_empty() -> Self {
         Self {
             backend_process: Mutex::new(None),
@@ -196,8 +195,20 @@ fn main() {
             set_autostart_enabled
         ])
         .setup(|app| {
+            if is_backend_ready()? {
+                app.manage(RuntimeState::new_empty());
+                configure_tray(app)?;
+                return Ok(());
+            }
+
             let mut backend_process = spawn_backend_process(&app.handle())?;
             if let Err(error) = wait_for_backend_ready(&mut backend_process) {
+                if is_backend_ready()? {
+                    backend_process.terminate();
+                    app.manage(RuntimeState::new_empty());
+                    configure_tray(app)?;
+                    return Ok(());
+                }
                 backend_process.terminate();
                 return Err(error);
             }
@@ -515,19 +526,19 @@ fn resolve_release_backend_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std:
 fn wait_for_backend_ready(
     backend_process: &mut BackendProcess,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let socket_address: SocketAddr = format!("{BACKEND_HEALTH_HOST}:{BACKEND_PORT}").parse()?;
+    let socket_address = backend_socket_address()?;
     let started_at = Instant::now();
 
     while started_at.elapsed() < BACKEND_BOOTSTRAP_TIMEOUT {
+        if backend_healthcheck(&socket_address) {
+            return Ok(());
+        }
         if let Some(exit_status) = backend_process.try_wait()? {
             return Err(format!(
                 "backend exited before becoming ready (status: {exit_status:?}). Log file: {}",
                 backend_process.startup_log_path().display()
             )
             .into());
-        }
-        if backend_healthcheck(&socket_address) {
-            return Ok(());
         }
         thread::sleep(Duration::from_millis(250));
     }
@@ -537,6 +548,14 @@ fn wait_for_backend_ready(
         backend_process.startup_log_path().display()
     )
     .into())
+}
+
+fn is_backend_ready() -> Result<bool, Box<dyn std::error::Error>> {
+    Ok(backend_healthcheck(&backend_socket_address()?))
+}
+
+fn backend_socket_address() -> Result<SocketAddr, std::net::AddrParseError> {
+    format!("{BACKEND_HEALTH_HOST}:{BACKEND_PORT}").parse()
 }
 
 fn resolve_backend_startup_log_path(data_dir: Option<&Path>) -> PathBuf {
@@ -601,12 +620,18 @@ fn backend_healthcheck(address: &SocketAddr) -> bool {
         return false;
     }
 
-    response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200")
+    is_backend_health_response_ok(&response)
+}
+
+fn is_backend_health_response_ok(response: &str) -> bool {
+    (response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200"))
+        && (response.contains("\"source\":\"application\"")
+            || response.contains("\"source\": \"application\""))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeState, TrayAction};
+    use super::{is_backend_health_response_ok, RuntimeState, TrayAction};
 
     #[test]
     fn tray_action_mapping_works_for_known_ids() {
@@ -623,5 +648,15 @@ mod tests {
         assert!(!state.is_quitting());
         state.mark_quitting();
         assert!(state.is_quitting());
+    }
+
+    #[test]
+    fn backend_health_response_requires_application_marker() {
+        assert!(is_backend_health_response_ok(
+            "HTTP/1.1 200 OK\r\n\r\n{\"status\":\"ok\",\"source\":\"application\"}"
+        ));
+        assert!(!is_backend_health_response_ok(
+            "HTTP/1.1 200 OK\r\n\r\n{\"status\":\"ok\"}"
+        ));
     }
 }
