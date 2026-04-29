@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $frontendPath = Join-Path $repoRoot "packages\frontend"
 $desktopPath = Join-Path $repoRoot "packages\desktop"
-$frontendPort = 5173
+$frontendPort = 43173
 $backendExecutablePath = Join-Path $repoRoot "packages\backend\.venv\Scripts\backend.exe"
 
 if (-not (Test-Path $frontendPath)) {

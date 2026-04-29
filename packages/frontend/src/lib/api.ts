@@ -737,21 +737,21 @@ function resolveApiBaseUrl(): string {
 
   const location = globalThis.location;
   if (!location) {
-    return "http://127.0.0.1:8000";
+    return "http://127.0.0.1:48200";
   }
 
   const isHttpOrigin =
     location.protocol === "http:" || location.protocol === "https:";
   const isLocalDevFrontend =
     (location.hostname === "127.0.0.1" || location.hostname === "localhost") &&
-    location.port === "5173";
+    location.port === "43173";
   const isTauriOrigin = location.hostname === "tauri.localhost";
 
   if (isHttpOrigin && !isLocalDevFrontend && !isTauriOrigin) {
     return location.origin;
   }
 
-  return "http://127.0.0.1:8000";
+  return "http://127.0.0.1:48200";
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();

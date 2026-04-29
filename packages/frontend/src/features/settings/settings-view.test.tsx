@@ -43,7 +43,7 @@ function renderSettingsView(overrides?: Partial<ComponentProps<typeof SettingsVi
         pair_token_ttl_seconds: 300,
         local_ip: "192.168.50.2",
         subnet_cidr: "192.168.50.0/24",
-        public_url: "http://192.168.50.2:8000",
+        public_url: "http://192.168.50.2:48200",
         public_scheme: "http",
       }}
       lanPairingSession={null}
@@ -134,7 +134,7 @@ describe("SettingsView", () => {
         pair_token_ttl_seconds: 300,
         local_ip: "192.168.50.2",
         subnet_cidr: "192.168.50.0/24",
-        public_url: "http://192.168.50.2:8000",
+        public_url: "http://192.168.50.2:48200",
         public_scheme: "http",
       },
     });

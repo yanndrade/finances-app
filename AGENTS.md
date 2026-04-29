@@ -50,7 +50,7 @@ npx vitest run -t "loads the monthly summary"
 
 Notes:
 
-- `vite.config.ts` binds the dev server to `127.0.0.1:5173`.
+- `vite.config.ts` binds the dev server to `127.0.0.1:43173`.
 - `vitest.config.ts` uses `jsdom`, globals, `src/test/setup.ts`, and a `30000` ms timeout.
 
 ### Backend (`packages/backend`)
@@ -62,10 +62,10 @@ All commands assume you are in `packages/backend`.
 uv sync
 
 # Run server
-uv run backend --host 127.0.0.1 --port 8000
+uv run backend --host 127.0.0.1 --port 48200
 
 # Run HTTPS locally with self-signed certs
-uv run backend --host 127.0.0.1 --port 8000 --https
+uv run backend --host 127.0.0.1 --port 48200 --https
 
 # Run all tests
 uv run pytest
@@ -95,8 +95,8 @@ npm run build
 
 Notes:
 
-- In development, the desktop runtime expects the frontend dev server on `http://127.0.0.1:5173`.
-- The Rust host process starts the backend with `uv run backend --host 0.0.0.0 --port 8000`.
+- In development, the desktop runtime expects the frontend dev server on `http://127.0.0.1:43173`.
+- The Rust host process starts the backend with `uv run backend --host 0.0.0.0 --port 48200`.
 
 ### Video (`packages/video`)
 
@@ -225,7 +225,7 @@ npm run render
 
 - The Tauri app is single-instance and uses tray, autostart, and updater plugins.
 - Close requests hide to tray unless the app is actively quitting.
-- Development backend traffic is health-checked on `127.0.0.1:8000`.
+- Development backend traffic is health-checked on `127.0.0.1:48200`.
 - Release builds store `app.db`, `events.db`, and TLS assets under the app local data directory, not the install directory.
 
 ## Shared Package Notes

@@ -306,10 +306,10 @@ def _read_public_scheme(request: Request) -> str:
 
 
 def _read_public_port(request: Request) -> int:
-    value = getattr(request.app.state, "public_port", 8000)
+    value = getattr(request.app.state, "public_port", 48200)
     if isinstance(value, int):
         return value
-    return request.url.port or 8000
+    return request.url.port or 48200
 
 
 def _build_pairing_url(*, request: Request, local_ip: str, pair_token: str) -> str:

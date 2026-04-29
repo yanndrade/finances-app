@@ -96,7 +96,7 @@ From the repo root:
 This script:
 
 - kills stale frontend/Tauri processes
-- starts the frontend on `127.0.0.1:5173`
+- starts the frontend on `127.0.0.1:43173`
 - waits for the dev server to be ready
 - starts `tauri dev` from `packages/desktop`
 
@@ -111,14 +111,14 @@ npm run dev
 
 ```powershell
 cd packages/backend
-uv run backend --host 127.0.0.1 --port 8000
+uv run backend --host 127.0.0.1 --port 48200
 ```
 
 Useful backend variants:
 
 ```powershell
 uv run backend --https
-uv run backend --host 0.0.0.0 --port 8000
+uv run backend --host 0.0.0.0 --port 48200
 ```
 
 ### Isolated Desktop

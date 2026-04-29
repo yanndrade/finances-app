@@ -11,7 +11,7 @@ from finance_app.domain.security import LanNetworkInfo
 import finance_app.interfaces.http.app as http_app
 from finance_app.interfaces.http.app import create_app
 
-LAN_PUBLIC_HOST = "192.168.50.2:8000"
+LAN_PUBLIC_HOST = "192.168.50.2:48200"
 LAN_REMOTE_IP = "192.168.50.20"
 
 
@@ -96,7 +96,7 @@ def test_cli_entrypoint_uses_database_path_environment_variables(
     assert recorded["database_url"] == f"sqlite:///{app_db.as_posix()}"
     assert recorded["event_database_url"] == f"sqlite:///{events_db.as_posix()}"
     assert recorded["host"] == "127.0.0.1"
-    assert recorded["port"] == 8000
+    assert recorded["port"] == 48200
 
 
 def test_cli_entrypoint_enables_https_with_generated_certificate(
@@ -143,7 +143,7 @@ def test_cli_entrypoint_enables_https_with_generated_certificate(
     main(["--https", "--cert-dir", str(tmp_path)])
 
     assert recorded["host"] == "127.0.0.1"
-    assert recorded["port"] == 8000
+    assert recorded["port"] == 48200
     assert recorded["ssl_certfile"] == str(tmp_path / "server.crt")
     assert recorded["ssl_keyfile"] == str(tmp_path / "server.key")
 
@@ -257,7 +257,7 @@ def test_security_lan_endpoints_default_to_disabled_and_localhost_only(
         "pair_token_ttl_seconds": 300,
         "local_ip": "192.168.50.2",
         "subnet_cidr": "192.168.50.0/24",
-        "public_url": "http://192.168.50.2:8000",
+        "public_url": "http://192.168.50.2:48200",
         "public_scheme": "http",
     }
     assert update.status_code == 200
@@ -290,7 +290,7 @@ def test_security_lan_pairing_authenticates_remote_devices(
     pair_token = pair_token_payload["pair_token"]
     assert "qr_image_url" not in pair_token_payload
     assert pair_token_payload["pairing_url"].startswith(
-        "http://192.168.50.2:8000/api/security/pair?pair_token="
+        "http://192.168.50.2:48200/api/security/pair?pair_token="
     )
 
     remote_headers = _build_remote_lan_headers()
@@ -427,7 +427,7 @@ def test_security_lan_rejects_remote_requests_without_valid_context(
         params={"month": "2026-03"},
         headers={
             **remote_headers,
-            "Origin": "https://192.168.50.3:8000",
+            "Origin": "https://192.168.50.3:48200",
         },
     )
     assert blocked_bad_origin.status_code == 403
@@ -2752,13 +2752,13 @@ def test_backend_allows_cors_for_local_frontend_origins(tmp_path) -> None:
     response = client.options(
         "/api/dashboard",
         headers={
-            "Origin": "http://127.0.0.1:5173",
+            "Origin": "http://127.0.0.1:43173",
             "Access-Control-Request-Method": "GET",
         },
     )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:43173"
 
 
 def test_movements_history_previews_card_purchase_in_purchase_month_without_affecting_summary(
