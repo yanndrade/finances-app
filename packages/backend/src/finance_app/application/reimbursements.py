@@ -266,7 +266,7 @@ class ReimbursementService:
             NewEvent(
                 type="ReimbursementCanceled",
                 timestamp=timestamp,
-                payload={"transaction_id": transaction_id},
+                payload={"transaction_id": transaction_id, "canceled_at": timestamp},
                 version=1,
             )
         )

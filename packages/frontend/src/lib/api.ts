@@ -103,6 +103,7 @@ export type PendingReimbursementSummary = {
   occurred_at: string;
   expected_at: string | null;
   received_at: string | null;
+  canceled_at?: string | null;
   receipt_transaction_id: string | null;
   notes: string | null;
   source_transaction_id?: string | null;

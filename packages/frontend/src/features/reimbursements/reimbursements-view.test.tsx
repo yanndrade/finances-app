@@ -212,6 +212,48 @@ describe("ReimbursementsView", () => {
     expect(screen.getByText(/01\/03\/2026/i)).toBeInTheDocument();
   });
 
+  it("shows received and canceled dates inside the reimbursement drawer", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listReimbursements).mockResolvedValueOnce([
+      {
+        ...reimbursements[0],
+        transaction_id: "tx-received",
+        person_id: "Maria",
+        status: "received",
+        amount_received: 12_000,
+        received_at: "2026-03-12T12:00:00Z",
+      },
+      {
+        ...reimbursements[0],
+        transaction_id: "tx-canceled",
+        person_id: "Pedro",
+        status: "canceled",
+        canceled_at: "2026-03-18T12:00:00Z",
+      },
+    ]);
+
+    render(
+      <ReimbursementsView
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+      />,
+    );
+
+    expect(await screen.findByText("Maria")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /maria/i }));
+
+    expect(await screen.findByText("Recebido em")).toBeInTheDocument();
+    expect(screen.getByText(/12\/03\/2026/i)).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: /pedro/i }));
+
+    expect(await screen.findByText("Cancelado em")).toBeInTheDocument();
+    expect(screen.getByText(/18\/03\/2026/i)).toBeInTheDocument();
+  });
+
   it("opens the history filtered to the related purchase", async () => {
     const user = userEvent.setup();
     const onOpenLedgerFiltered = vi.fn();

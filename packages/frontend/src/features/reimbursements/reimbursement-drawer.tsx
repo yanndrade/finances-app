@@ -276,6 +276,24 @@ export function ReimbursementDrawer({
               </span>
             </div>
 
+            {isReceived && reimbursement.received_at ? (
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-sm text-slate-500">Recebido em</span>
+                <span className="text-sm font-semibold text-emerald-700">
+                  {formatDate(reimbursement.received_at)}
+                </span>
+              </div>
+            ) : null}
+
+            {isCanceled && reimbursement.canceled_at ? (
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-sm text-slate-500">Cancelado em</span>
+                <span className="text-sm font-semibold text-slate-700">
+                  {formatDate(reimbursement.canceled_at)}
+                </span>
+              </div>
+            ) : null}
+
             {reimbursement.amount_received > 0 ? (
               <div className="flex justify-between items-center py-2 border-b border-slate-100">
                 <span className="text-sm text-slate-500">Ja recebido</span>

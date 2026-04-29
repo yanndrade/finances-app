@@ -247,6 +247,7 @@ class ReimbursementProjection:
     received_at: str | None
     receipt_transaction_id: str | None
     notes: str | None
+    canceled_at: str | None = None
     source_transaction_id: str | None = None
     source_title: str | None = None
     source_description: str | None = None
@@ -270,6 +271,8 @@ class ReimbursementProjection:
             "receipt_transaction_id": self.receipt_transaction_id,
             "notes": self.notes,
         }
+        if self.canceled_at is not None:
+            data["canceled_at"] = self.canceled_at
         if self.source_transaction_id is not None:
             data["source_transaction_id"] = self.source_transaction_id
         if self.source_title is not None:

@@ -2155,6 +2155,35 @@ def test_update_reimbursement_expected_at_and_notes(tmp_path) -> None:
     assert reimbursement["notes"] == "Agreed to pay by end of month"
 
 
+def test_past_unpaid_reimbursement_stays_pending(tmp_path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-03-02T12:02:00Z",
+            "amount": 20_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+    client.patch("/api/reimbursements/tx-1", json={"expected_at": "2000-01-01"})
+
+    list_response = client.get("/api/reimbursements", params={"month": "2026-03"})
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["status"] == "pending"
+
+
 def test_cancel_reimbursement(tmp_path) -> None:
     app = create_app(
         database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
@@ -2180,6 +2209,7 @@ def test_cancel_reimbursement(tmp_path) -> None:
     cancel_response = client.post("/api/reimbursements/tx-1/cancel")
     assert cancel_response.status_code == 200
     assert cancel_response.json()["status"] == "canceled"
+    assert cancel_response.json()["canceled_at"] is not None
 
     # Canceling again returns 409
     repeat_response = client.post("/api/reimbursements/tx-1/cancel")

@@ -38,7 +38,8 @@ function getGroupKey(status: PendingReimbursementSummary["status"]): GroupKey {
   if (status === "overdue") return "overdue";
   if (status === "pending" || status === "partial") return "active";
   if (status === "received") return "received";
-  return "canceled";
+  if (status === "canceled") return "canceled";
+  return "active";
 }
 
 export function ReimbursementList({

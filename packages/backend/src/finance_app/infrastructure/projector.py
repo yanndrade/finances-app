@@ -196,6 +196,7 @@ class ReimbursementProjectionRecord(ProjectionBase):
         String, nullable=True, index=True
     )
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    canceled_at: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class RecurringRuleProjectionRecord(ProjectionBase):
@@ -1561,16 +1562,9 @@ class Projector:
                         .all()
                     }
 
-        today_str = date.today().isoformat()
         result = []
         for row in rows:
             computed_status = row.status
-            if (
-                row.status == "pending"
-                and row.expected_at is not None
-                and row.expected_at < today_str
-            ):
-                computed_status = "overdue"
             source_movement = movement_by_id.get(row.transaction_id)
             source_installment = installment_by_id.get(row.transaction_id)
             result.append(
@@ -1586,6 +1580,7 @@ class Projector:
                     received_at=row.received_at,
                     receipt_transaction_id=row.receipt_transaction_id,
                     notes=row.notes,
+                    canceled_at=row.canceled_at,
                     source_transaction_id=(
                         row.source_transaction_id if include_source_details else None
                     ),
@@ -2517,7 +2512,11 @@ class Projector:
             return
 
         if event.type == "ReimbursementCanceled":
-            self._apply_reimbursement_canceled(session, event.payload)
+            self._apply_reimbursement_canceled(
+                session,
+                event.payload,
+                event_timestamp=event.timestamp,
+            )
             return
 
         if event.type == "PendingConfirmed":
@@ -3618,6 +3617,8 @@ class Projector:
         self,
         session: Session,
         payload: dict[str, object],
+        *,
+        event_timestamp: str,
     ) -> None:
         transaction_id = str(payload["transaction_id"])
         receivable = session.get(ReimbursementProjectionRecord, transaction_id)
@@ -3626,6 +3627,9 @@ class Projector:
 
         if receivable.status not in ("received",):
             receivable.status = "canceled"
+            receivable.canceled_at = _optional_string(
+                payload.get("canceled_at")
+            ) or event_timestamp
 
     def _apply_pending_confirmed(
         self,
@@ -3828,6 +3832,7 @@ class Projector:
                     occurred_at=occurred_at,
                     received_at=None,
                     receipt_transaction_id=None,
+                    canceled_at=None,
                 )
             )
             return
@@ -3892,6 +3897,7 @@ class Projector:
                         occurred_at=f"{allocation.closing_date}T00:00:00Z",
                         received_at=None,
                         receipt_transaction_id=None,
+                        canceled_at=None,
                     )
                 )
                 continue
@@ -4758,6 +4764,7 @@ class Projector:
             "received_at",
             "receipt_transaction_id",
             "notes",
+            "canceled_at",
         }
         if reimbursement_columns != expected_reimbursement_columns:
             return True

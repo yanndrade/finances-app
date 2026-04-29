@@ -1678,6 +1678,65 @@ def test_projector_tracks_card_purchase_reimbursements_by_installment_month(
     ]
 
 
+def test_projector_recovers_legacy_reimbursement_cancellation_date(
+    tmp_path: Path,
+) -> None:
+    event_store = EventStore(
+        database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    event_store.create_schema()
+    append_event = AppendEventUseCase(event_store)
+    append_event.execute(
+        NewEvent(
+            type="AccountCreated",
+            timestamp="2026-03-02T12:00:00Z",
+            payload={
+                "id": "acc-1",
+                "name": "Main Wallet",
+                "type": "wallet",
+                "initial_balance": 100_00,
+                "is_active": True,
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ExpenseCreated",
+            timestamp="2026-03-03T12:00:00Z",
+            payload={
+                "id": "tx-1",
+                "occurred_at": "2026-03-03T12:00:00Z",
+                "type": "expense",
+                "amount": 20_00,
+                "account_id": "acc-1",
+                "payment_method": "PIX",
+                "category_id": "food",
+                "description": "Lunch",
+                "person_id": "friend",
+                "status": "active",
+            },
+            version=1,
+        )
+    )
+    append_event.execute(
+        NewEvent(
+            type="ReimbursementCanceled",
+            timestamp="2026-03-05T09:30:00Z",
+            payload={"transaction_id": "tx-1"},
+            version=1,
+        )
+    )
+    projector = Projector(
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+        projection_database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+    )
+
+    projector.run()
+
+    assert projector.list_reimbursements()[0]["canceled_at"] == "2026-03-05T09:30:00Z"
+
+
 def test_projector_anchors_card_reimbursement_to_reference_month_not_due_month(
     tmp_path: Path,
 ) -> None:
