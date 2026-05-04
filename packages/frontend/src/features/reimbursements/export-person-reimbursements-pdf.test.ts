@@ -92,7 +92,7 @@ describe("exportPersonReimbursementsPdf", () => {
       }),
     ]);
 
-    const fileName = await exportPersonReimbursementsPdf({
+    const result = await exportPersonReimbursementsPdf({
       group,
       month: "2026-05",
       cards,
@@ -103,8 +103,11 @@ describe("exportPersonReimbursementsPdf", () => {
     const textValues = (pdfMock.doc.text as Mock).mock.calls.flatMap((call) => (
       Array.isArray(call[0]) ? call[0] : [call[0]]
     ));
-    expect(fileName).toBe("reembolsos-valeria-mello-2026-05.pdf");
-    expect(savePdf).toHaveBeenCalledWith(pdfMock.doc, fileName);
+    expect(result).toEqual({
+      fileName: "reembolsos-valeria-mello-2026-05.pdf",
+      reusedExisting: false,
+    });
+    expect(savePdf).toHaveBeenCalledWith(pdfMock.doc, result.fileName);
     expect(textValues).toContain("Reembolsos - Valeria Mello");
     expect(textValues).toEqual(
       expect.arrayContaining([

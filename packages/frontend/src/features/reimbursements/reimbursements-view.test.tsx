@@ -338,7 +338,9 @@ describe("ReimbursementsView", () => {
     );
 
     await user.click(await screen.findByRole("tab", { name: /por pessoa/i }));
-    await user.click(await screen.findByRole("button", { name: /ana maria/i }));
+    const groupTrigger = (await screen.findByText("Ana Maria")).closest("button");
+    expect(groupTrigger).not.toBeNull();
+    await user.click(groupTrigger!);
     await user.click(await screen.findByRole("button", { name: /exportar pdf/i }));
 
     expect(reimbursementPdf.exportPersonReimbursementsPdf).toHaveBeenCalledWith(
@@ -385,7 +387,9 @@ describe("ReimbursementsView", () => {
     expect(screen.getByText(/2 pendentes, 1 recebido/i)).toBeInTheDocument();
     expect(screen.getByText(/3 lançamentos/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /valéria mello/i }));
+    const groupTrigger = screen.getByText("Valéria Mello").closest("button");
+    expect(groupTrigger).not.toBeNull();
+    await user.click(groupTrigger!);
 
     expect(await screen.findByText("Valéria")).toBeInTheDocument();
     expect(screen.getByText("valeria mello")).toBeInTheDocument();

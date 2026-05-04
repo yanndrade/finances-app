@@ -1217,6 +1217,14 @@ export function App() {
             month={selectedMonth}
             refreshKey={refreshKey}
             onError={(error) => showErrorToast(error)}
+            onExported={(result) => {
+              showToast(
+                "success",
+                result.reusedExisting
+                  ? `PDF já existia e foi aberto: ${result.fileName}`
+                  : `PDF exportado: ${result.fileName}`,
+              );
+            }}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={() => openQuickAdd("expense")}
           />

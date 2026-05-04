@@ -179,6 +179,79 @@ fn set_autostart_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn open_existing_reimbursement_pdf(app: AppHandle, file_name: String) -> Result<bool, String> {
+    let file_path = reimbursement_pdf_path(&app, &file_name)?;
+    if !file_path.exists() {
+        return Ok(false);
+    }
+
+    open_file(&file_path)?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn save_reimbursement_pdf(app: AppHandle, file_name: String, bytes: Vec<u8>) -> Result<(), String> {
+    let file_path = reimbursement_pdf_path(&app, &file_name)?;
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    std::fs::write(&file_path, bytes).map_err(|error| error.to_string())?;
+    open_file(&file_path)?;
+    Ok(())
+}
+
+fn reimbursement_pdf_path(app: &AppHandle, file_name: &str) -> Result<PathBuf, String> {
+    if !is_safe_pdf_file_name(file_name) {
+        return Err("Invalid reimbursement PDF file name.".to_string());
+    }
+
+    let base_dir = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|error| error.to_string())?;
+
+    Ok(base_dir.join(file_name))
+}
+
+fn is_safe_pdf_file_name(file_name: &str) -> bool {
+    !file_name.is_empty()
+        && file_name.ends_with(".pdf")
+        && !file_name.contains('/')
+        && !file_name.contains('\\')
+        && !file_name.contains("..")
+}
+
+fn open_file(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(path)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(path)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+}
+
 fn main() {
     let app = match tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -192,7 +265,9 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             get_autostart_enabled,
-            set_autostart_enabled
+            set_autostart_enabled,
+            open_existing_reimbursement_pdf,
+            save_reimbursement_pdf
         ])
         .setup(|app| {
             if is_backend_ready()? {

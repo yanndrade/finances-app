@@ -1,6 +1,7 @@
 import type { jsPDF as JsPdfDocument } from "jspdf";
 
 import type { CardSummary, PendingReimbursementSummary } from "../../lib/api";
+import { isTauriEnvironment } from "../../lib/desktop";
 import { formatCompetenceMonth, formatCurrency, formatDate } from "../../lib/format";
 
 import type { ReimbursementPersonGroup } from "./person-grouping";
@@ -13,6 +14,11 @@ export type ExportPersonReimbursementsPdfParams = {
   cards: CardSummary[];
   generatedAt?: Date;
   savePdf?: PdfSaver;
+};
+
+export type ExportPersonReimbursementsPdfResult = {
+  fileName: string;
+  reusedExisting: boolean;
 };
 
 const STATUS_LABEL: Record<PendingReimbursementSummary["status"], string> = {
@@ -42,11 +48,19 @@ export async function exportPersonReimbursementsPdf({
   month,
   cards,
   generatedAt = new Date(),
-  savePdf = defaultSavePdf,
-}: ExportPersonReimbursementsPdfParams): Promise<string> {
+  savePdf,
+}: ExportPersonReimbursementsPdfParams): Promise<ExportPersonReimbursementsPdfResult> {
+  const fileName = buildReimbursementsPdfFileName(group.canonical_name, month);
+
+  if (!savePdf && isTauriEnvironment()) {
+    const openedExisting = await openExistingDesktopPdf(fileName);
+    if (openedExisting) {
+      return { fileName, reusedExisting: true };
+    }
+  }
+
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-  const fileName = buildReimbursementsPdfFileName(group.canonical_name, month);
   const cardNameById = new Map(cards.map((card) => [card.card_id, card.name]));
   const totalListed = group.items.reduce((total, item) => total + item.amount, 0);
   const totalOutstanding = group.items.reduce(
@@ -84,8 +98,18 @@ export async function exportPersonReimbursementsPdf({
     cursorY += rowHeight;
   }
 
-  savePdf(doc, fileName);
-  return fileName;
+  if (savePdf) {
+    savePdf(doc, fileName);
+    return { fileName, reusedExisting: false };
+  }
+
+  if (isTauriEnvironment()) {
+    await saveDesktopPdf(doc, fileName);
+    return { fileName, reusedExisting: false };
+  }
+
+  defaultSavePdf(doc, fileName);
+  return { fileName, reusedExisting: false };
 }
 
 export function buildReimbursementsPdfFileName(personName: string, month: string): string {
@@ -101,6 +125,17 @@ export function buildReimbursementsPdfFileName(personName: string, month: string
 
 function defaultSavePdf(doc: JsPdfDocument, fileName: string) {
   doc.save(fileName);
+}
+
+async function openExistingDesktopPdf(fileName: string): Promise<boolean> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("open_existing_reimbursement_pdf", { fileName });
+}
+
+async function saveDesktopPdf(doc: JsPdfDocument, fileName: string): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const bytes = Array.from(new Uint8Array(doc.output("arraybuffer")));
+  await invoke("save_reimbursement_pdf", { fileName, bytes });
 }
 
 function buildPdfRow(

@@ -1,12 +1,16 @@
-import { Download, RotateCcw } from "lucide-react";
+import * as AccordionPrimitive from "@radix-ui/react-accordion";
+import { ChevronDown, Download, RotateCcw } from "lucide-react";
 
 import type { CardSummary, PendingReimbursementSummary } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/ui/accordion";
-import { Button } from "../../components/ui/button";
+import { Accordion, AccordionContent, AccordionItem } from "../../components/ui/accordion";
 import { EmptyState } from "../../components/ui/empty-state";
+import { cn } from "../../lib/utils";
 
-import { exportPersonReimbursementsPdf } from "./export-person-reimbursements-pdf";
+import {
+  exportPersonReimbursementsPdf,
+  type ExportPersonReimbursementsPdfResult,
+} from "./export-person-reimbursements-pdf";
 import { groupReimbursementsByPerson } from "./person-grouping";
 import { ReimbursementRow } from "./reimbursement-row";
 
@@ -17,6 +21,8 @@ type ReimbursementPersonListProps = {
   cards: CardSummary[];
   onSelectReimbursement: (reimbursement: PendingReimbursementSummary) => void;
   onOpenQuickAdd?: () => void;
+  onError?: (error: unknown) => void;
+  onExported?: (result: ExportPersonReimbursementsPdfResult) => void;
 };
 
 const STATUS_ORDER: PendingReimbursementSummary["status"][] = [
@@ -33,8 +39,19 @@ export function ReimbursementPersonList({
   cards,
   onSelectReimbursement,
   onOpenQuickAdd,
+  onError,
+  onExported,
 }: ReimbursementPersonListProps) {
   const groups = groupReimbursementsByPerson(reimbursements);
+
+  async function handleExport(group: ReturnType<typeof groupReimbursementsByPerson>[number]) {
+    try {
+      const result = await exportPersonReimbursementsPdf({ group, month, cards });
+      onExported?.(result);
+    } catch (error) {
+      onError?.(error);
+    }
+  }
 
   if (loading) {
     return (
@@ -65,47 +82,55 @@ export function ReimbursementPersonList({
 
         return (
           <AccordionItem key={group.group_id} value={group.group_id} className="border-b border-border/60 last:border-b-0">
-            <AccordionTrigger className="gap-4 px-4 py-4 hover:no-underline">
-              <div className="min-w-0 flex-1 text-left">
-                <p className="truncate text-sm font-semibold text-slate-800">
-                  {group.canonical_name}
-                </p>
-
-                {group.aliases.length > 0 ? (
-                  <p className="truncate text-xs text-muted-foreground">
-                    Também encontrado como: {group.aliases.join(", ")}
+            <AccordionPrimitive.Header className="flex items-start gap-3 px-4 py-4">
+              <AccordionPrimitive.Trigger
+                className={cn(
+                  "flex min-w-0 flex-1 items-start justify-between gap-4 text-left text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2",
+                  "[&[data-state=open]_.reimbursement-chevron]:rotate-180",
+                )}
+              >
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-sm font-semibold text-slate-800">
+                    {group.canonical_name}
                   </p>
-                ) : null}
 
-                {statusSummary ? (
-                  <p className="text-xs text-muted-foreground/80">{statusSummary}</p>
-                ) : null}
-              </div>
+                  {group.aliases.length > 0 ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      Também encontrado como: {group.aliases.join(", ")}
+                    </p>
+                  ) : null}
 
-              <div className="shrink-0 pr-1 text-right">
-                <p className="text-sm font-bold tabular-nums text-slate-900">
-                  {formatCurrency(group.outstanding_total)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {group.item_count} {group.item_count === 1 ? "lançamento" : "lançamentos"}
-                </p>
-              </div>
-            </AccordionTrigger>
+                  {statusSummary ? (
+                    <p className="text-xs text-muted-foreground/80">{statusSummary}</p>
+                  ) : null}
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-bold tabular-nums text-slate-900">
+                    {formatCurrency(group.outstanding_total)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {group.item_count} {group.item_count === 1 ? "lançamento" : "lançamentos"}
+                  </p>
+                </div>
+
+                <ChevronDown className="reimbursement-chevron mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200" />
+              </AccordionPrimitive.Trigger>
+
+              <button
+                type="button"
+                title={`Exportar PDF de ${group.canonical_name}`}
+                aria-label={`Exportar PDF de ${group.canonical_name}`}
+                onClick={() => {
+                  void handleExport(group);
+                }}
+                className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2"
+              >
+                <Download size={14} />
+              </button>
+            </AccordionPrimitive.Header>
 
             <AccordionContent className="pb-2 pt-0">
-              <div className="flex justify-end px-2 pb-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    void exportPersonReimbursementsPdf({ group, month, cards });
-                  }}
-                >
-                  <Download size={13} className="mr-1.5" />
-                  Exportar PDF
-                </Button>
-              </div>
               <div className="divide-y divide-border/60 px-2">
                 {group.items.map((reimbursement) => (
                   <ReimbursementRow

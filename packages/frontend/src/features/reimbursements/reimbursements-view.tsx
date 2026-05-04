@@ -19,6 +19,7 @@ import { ReimbursementList } from "./reimbursement-list";
 import { ReimbursementPersonList } from "./reimbursement-person-list";
 import { ReimbursementDrawer } from "./reimbursement-drawer";
 import { ReceivePaymentDialog } from "./receive-payment-dialog";
+import type { ExportPersonReimbursementsPdfResult } from "./export-person-reimbursements-pdf";
 
 type ReimbursementsViewProps = {
   surface?: "desktop" | "mobile";
@@ -27,6 +28,7 @@ type ReimbursementsViewProps = {
   month: string;
   refreshKey?: number;
   onError?: (error: unknown) => void;
+  onExported?: (result: ExportPersonReimbursementsPdfResult) => void;
   onOpenQuickAdd?: () => void;
   onOpenLedgerFiltered?: (filters: Partial<TransactionFilters>, month?: string) => void;
 };
@@ -47,6 +49,7 @@ export function ReimbursementsView({
   month,
   refreshKey,
   onError,
+  onExported,
   onOpenQuickAdd,
   onOpenLedgerFiltered,
 }: ReimbursementsViewProps) {
@@ -235,6 +238,8 @@ export function ReimbursementsView({
             cards={cards}
             onSelectReimbursement={handleSelectReimbursement}
             onOpenQuickAdd={onOpenQuickAdd}
+            onError={onError}
+            onExported={onExported}
           />
         </TabsContent>
       </Tabs>
