@@ -231,6 +231,8 @@ export function ReimbursementsView({
           <ReimbursementPersonList
             reimbursements={reimbursements}
             loading={isListLoading}
+            month={month}
+            cards={cards}
             onSelectReimbursement={handleSelectReimbursement}
             onOpenQuickAdd={onOpenQuickAdd}
           />

@@ -2,7 +2,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import * as api from "../../lib/api";
+import * as reimbursementPdf from "./export-person-reimbursements-pdf";
 import { ReimbursementsView } from "./reimbursements-view";
+
+vi.mock("./export-person-reimbursements-pdf", () => ({
+  exportPersonReimbursementsPdf: vi.fn(),
+}));
 
 function installDialogEnvironment() {
   vi.stubGlobal(
@@ -123,6 +128,7 @@ const reimbursementsGroupedByPerson: api.PendingReimbursementSummary[] = [
 describe("ReimbursementsView", () => {
   beforeEach(() => {
     installDialogEnvironment();
+    vi.mocked(reimbursementPdf.exportPersonReimbursementsPdf).mockClear();
     vi.spyOn(api, "listReimbursements").mockResolvedValue(reimbursements);
     vi.spyOn(api, "getReimbursementsSummary").mockResolvedValue({
       total_outstanding: 12_000,
@@ -279,6 +285,72 @@ describe("ReimbursementsView", () => {
         card: "card-1",
       },
       "2026-03",
+    );
+  });
+
+  it("exports the selected person group as PDF for the active month", async () => {
+    const user = userEvent.setup();
+    const groupedReimbursements: api.PendingReimbursementSummary[] = [
+      {
+        ...reimbursements[0],
+        transaction_id: "ana-1",
+        person_id: "Ana Maria",
+        amount: 10_000,
+        amount_received: 0,
+        status: "pending",
+      },
+      {
+        ...reimbursements[0],
+        transaction_id: "ana-2",
+        person_id: "Ana Maria",
+        amount: 8_000,
+        amount_received: 3_000,
+        status: "partial",
+      },
+      {
+        ...reimbursements[0],
+        transaction_id: "ana-3",
+        person_id: "Ana Maria",
+        amount: 7_000,
+        amount_received: 7_000,
+        status: "received",
+      },
+      {
+        ...reimbursements[0],
+        transaction_id: "ana-4",
+        person_id: "Ana Maria",
+        amount: 5_000,
+        amount_received: 0,
+        status: "canceled",
+        canceled_at: "2026-03-20T10:00:00Z",
+      },
+    ];
+
+    vi.mocked(api.listReimbursements).mockResolvedValueOnce(groupedReimbursements);
+
+    render(
+      <ReimbursementsView
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+      />,
+    );
+
+    await user.click(await screen.findByRole("tab", { name: /por pessoa/i }));
+    await user.click(await screen.findByRole("button", { name: /ana maria/i }));
+    await user.click(await screen.findByRole("button", { name: /exportar pdf/i }));
+
+    expect(reimbursementPdf.exportPersonReimbursementsPdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        month: "2026-03",
+        cards,
+        group: expect.objectContaining({
+          canonical_name: "Ana Maria",
+          item_count: 4,
+          outstanding_total: 15_000,
+        }),
+      }),
     );
   });
 

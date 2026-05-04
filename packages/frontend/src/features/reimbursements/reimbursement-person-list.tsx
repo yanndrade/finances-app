@@ -1,16 +1,20 @@
-import { RotateCcw } from "lucide-react";
+import { Download, RotateCcw } from "lucide-react";
 
-import type { PendingReimbursementSummary } from "../../lib/api";
+import type { CardSummary, PendingReimbursementSummary } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/ui/accordion";
+import { Button } from "../../components/ui/button";
 import { EmptyState } from "../../components/ui/empty-state";
 
+import { exportPersonReimbursementsPdf } from "./export-person-reimbursements-pdf";
 import { groupReimbursementsByPerson } from "./person-grouping";
 import { ReimbursementRow } from "./reimbursement-row";
 
 type ReimbursementPersonListProps = {
   reimbursements: PendingReimbursementSummary[];
   loading: boolean;
+  month: string;
+  cards: CardSummary[];
   onSelectReimbursement: (reimbursement: PendingReimbursementSummary) => void;
   onOpenQuickAdd?: () => void;
 };
@@ -25,6 +29,8 @@ const STATUS_ORDER: PendingReimbursementSummary["status"][] = [
 export function ReimbursementPersonList({
   reimbursements,
   loading,
+  month,
+  cards,
   onSelectReimbursement,
   onOpenQuickAdd,
 }: ReimbursementPersonListProps) {
@@ -87,6 +93,19 @@ export function ReimbursementPersonList({
             </AccordionTrigger>
 
             <AccordionContent className="pb-2 pt-0">
+              <div className="flex justify-end px-2 pb-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void exportPersonReimbursementsPdf({ group, month, cards });
+                  }}
+                >
+                  <Download size={13} className="mr-1.5" />
+                  Exportar PDF
+                </Button>
+              </div>
               <div className="divide-y divide-border/60 px-2">
                 {group.items.map((reimbursement) => (
                   <ReimbursementRow
