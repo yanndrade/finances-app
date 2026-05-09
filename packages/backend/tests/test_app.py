@@ -2275,6 +2275,80 @@ def test_partial_reimbursement_payment(tmp_path) -> None:
     assert over_response.status_code == 409
 
 
+def test_reimbursements_summary_counts_received_amounts_for_selected_month(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    _create_expense(
+        client,
+        {
+            "id": "tx-1",
+            "occurred_at": "2026-04-02T12:02:00Z",
+            "amount": 60_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Dinner",
+            "person_id": "friend",
+        },
+    )
+    _create_expense(
+        client,
+        {
+            "id": "tx-2",
+            "occurred_at": "2026-04-03T12:02:00Z",
+            "amount": 40_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "Lunch",
+            "person_id": "friend",
+        },
+    )
+    _create_expense(
+        client,
+        {
+            "id": "tx-3",
+            "occurred_at": "2026-05-03T12:02:00Z",
+            "amount": 90_00,
+            "account_id": "acc-1",
+            "payment_method": "CASH",
+            "category_id": "food",
+            "description": "May lunch",
+            "person_id": "friend",
+        },
+    )
+
+    client.post(
+        "/api/reimbursements/tx-1/mark-received",
+        json={"received_at": "2026-05-10T10:00:00Z", "amount": 20_00},
+    )
+    client.post(
+        "/api/reimbursements/tx-2/mark-received",
+        json={"received_at": "2026-04-10T10:00:00Z"},
+    )
+    client.post(
+        "/api/reimbursements/tx-3/mark-received",
+        json={"received_at": "2026-04-10T10:00:00Z"},
+    )
+
+    summary_response = client.get(
+        "/api/reimbursements/summary",
+        params={"month": "2026-04"},
+    )
+
+    assert summary_response.status_code == 200
+    summary = summary_response.json()
+    assert summary["total_outstanding"] == 40_00
+    assert summary["received_in_month"] == 60_00
+
+
 def test_recurring_rules_generate_monthly_pendings_without_affecting_balance(
     tmp_path,
 ) -> None:

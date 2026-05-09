@@ -8,11 +8,13 @@ const pdfMock = vi.hoisted(() => {
     addPage: vi.fn(),
     line: vi.fn(),
     rect: vi.fn(),
+    roundedRect: vi.fn(),
     save: vi.fn(),
     setDrawColor: vi.fn(),
     setFillColor: vi.fn(),
     setFont: vi.fn(),
     setFontSize: vi.fn(),
+    setTextColor: vi.fn(),
     splitTextToSize: vi.fn((value: string) => [value]),
     text: vi.fn(),
   };
@@ -120,8 +122,12 @@ describe("exportPersonReimbursementsPdf", () => {
     expect(textValues).toContain("1/2");
     expect(textValues).toContain("Pendente");
     expect(textValues).toContain("Parcial");
-    expect(textValues).toContain("Recebido");
+    expect(textValues).toContain("OK Recebido");
     expect(textValues).toContain("Cancelado");
+    expect(pdfMock.doc.setFillColor).toHaveBeenCalledWith(255, 251, 235);
+    expect(pdfMock.doc.setFillColor).toHaveBeenCalledWith(236, 253, 245);
+    expect(pdfMock.doc.setFillColor).toHaveBeenCalledWith(248, 250, 252);
+    expect(pdfMock.doc.roundedRect).toHaveBeenCalled();
   });
 });
 

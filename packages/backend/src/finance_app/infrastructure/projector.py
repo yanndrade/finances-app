@@ -1639,15 +1639,8 @@ class Projector:
 
             if row.status in ("pending", "partial"):
                 total_outstanding += outstanding
-            elif row.status == "received":
-                if (
-                    month is not None
-                    and row.received_at
-                    and row.received_at.startswith(month)
-                ):
-                    received_in_month += row.amount
-                elif month is None:
-                    received_in_month += row.amount
+
+            received_in_month += row.amount_received or 0
 
         return {
             "total_outstanding": total_outstanding,

@@ -28,6 +28,55 @@ const STATUS_LABEL: Record<PendingReimbursementSummary["status"], string> = {
   canceled: "Cancelado",
 };
 
+type PdfRow = {
+  cells: string[];
+  status: PendingReimbursementSummary["status"];
+};
+
+type RowStyle = {
+  background: [number, number, number];
+  stripe: [number, number, number];
+  text: [number, number, number];
+  mutedText: [number, number, number];
+  statusFill: [number, number, number];
+  statusText: [number, number, number];
+};
+
+const ROW_STYLE: Record<PendingReimbursementSummary["status"], RowStyle> = {
+  pending: {
+    background: [255, 251, 235],
+    stripe: [245, 158, 11],
+    text: [30, 41, 59],
+    mutedText: [71, 85, 105],
+    statusFill: [254, 243, 199],
+    statusText: [146, 64, 14],
+  },
+  partial: {
+    background: [239, 246, 255],
+    stripe: [59, 130, 246],
+    text: [30, 41, 59],
+    mutedText: [71, 85, 105],
+    statusFill: [219, 234, 254],
+    statusText: [30, 64, 175],
+  },
+  received: {
+    background: [236, 253, 245],
+    stripe: [16, 185, 129],
+    text: [15, 118, 110],
+    mutedText: [51, 65, 85],
+    statusFill: [209, 250, 229],
+    statusText: [4, 120, 87],
+  },
+  canceled: {
+    background: [248, 250, 252],
+    stripe: [148, 163, 184],
+    text: [148, 163, 184],
+    mutedText: [148, 163, 184],
+    statusFill: [226, 232, 240],
+    statusText: [100, 116, 139],
+  },
+};
+
 const TABLE_COLUMNS = [
   { label: "Compra / descricao", width: 190 },
   { label: "Data", width: 66 },
@@ -51,13 +100,6 @@ export async function exportPersonReimbursementsPdf({
   savePdf,
 }: ExportPersonReimbursementsPdfParams): Promise<ExportPersonReimbursementsPdfResult> {
   const fileName = buildReimbursementsPdfFileName(group.canonical_name, month);
-
-  if (!savePdf && isTauriEnvironment()) {
-    const openedExisting = await openExistingDesktopPdf(fileName);
-    if (openedExisting) {
-      return { fileName, reusedExisting: true };
-    }
-  }
 
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -86,7 +128,7 @@ export async function exportPersonReimbursementsPdf({
 
   for (const item of group.items) {
     const row = buildPdfRow(item, cardNameById);
-    const rowHeight = measureRowHeight(doc, row);
+    const rowHeight = measureRowHeight(doc, row.cells);
 
     if (cursorY + rowHeight > 560) {
       doc.addPage();
@@ -127,11 +169,6 @@ function defaultSavePdf(doc: JsPdfDocument, fileName: string) {
   doc.save(fileName);
 }
 
-async function openExistingDesktopPdf(fileName: string): Promise<boolean> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<boolean>("open_existing_reimbursement_pdf", { fileName });
-}
-
 async function saveDesktopPdf(doc: JsPdfDocument, fileName: string): Promise<void> {
   const { invoke } = await import("@tauri-apps/api/core");
   const bytes = Array.from(new Uint8Array(doc.output("arraybuffer")));
@@ -141,7 +178,7 @@ async function saveDesktopPdf(doc: JsPdfDocument, fileName: string): Promise<voi
 function buildPdfRow(
   item: PendingReimbursementSummary,
   cardNameById: Map<string, string>,
-): string[] {
+): PdfRow {
   const sourceTitle =
     item.source_title ??
     item.source_description ??
@@ -155,16 +192,19 @@ function buildPdfRow(
     ? `${item.source_installment_number}/${item.source_installment_total}`
     : "-";
 
-  return [
-    sourceTitle,
-    formatDate(sourceDate),
-    cardName,
-    installment,
-    formatCurrency(item.amount),
-    formatCurrency(item.amount_received ?? 0),
-    formatCurrency(getOutstandingAmount(item)),
-    STATUS_LABEL[item.status],
-  ];
+  return {
+    cells: [
+      sourceTitle,
+      formatDate(sourceDate),
+      cardName,
+      installment,
+      formatCurrency(item.amount),
+      formatCurrency(item.amount_received ?? 0),
+      formatCurrency(getOutstandingAmount(item)),
+      STATUS_LABEL[item.status],
+    ],
+    status: item.status,
+  };
 }
 
 function getOutstandingAmount(item: PendingReimbursementSummary): number {
@@ -179,6 +219,7 @@ function drawTableHeader(doc: JsPdfDocument, y: number): number {
   doc.rect(PAGE_MARGIN, y - 12, getTableWidth(), 24, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
+  doc.setTextColor(51, 65, 85);
 
   let cursorX = PAGE_MARGIN;
   for (const column of TABLE_COLUMNS) {
@@ -188,23 +229,67 @@ function drawTableHeader(doc: JsPdfDocument, y: number): number {
 
   doc.setDrawColor(203, 213, 225);
   doc.line(PAGE_MARGIN, y + 12, PAGE_MARGIN + getTableWidth(), y + 12);
+  doc.setTextColor(15, 23, 42);
   return y + 24;
 }
 
-function drawTableRow(doc: JsPdfDocument, row: string[], y: number, rowHeight: number) {
+function drawTableRow(doc: JsPdfDocument, row: PdfRow, y: number, rowHeight: number) {
+  const style = ROW_STYLE[row.status];
+  const rowTop = y - 11;
+  const rowBottom = y + rowHeight - 10;
+
+  doc.setFillColor(...style.background);
+  doc.rect(PAGE_MARGIN, rowTop, getTableWidth(), rowHeight - 4, "F");
+  doc.setFillColor(...style.stripe);
+  doc.rect(PAGE_MARGIN, rowTop, 4, rowHeight - 4, "F");
+
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
 
   let cursorX = PAGE_MARGIN;
   for (let index = 0; index < TABLE_COLUMNS.length; index += 1) {
     const column = TABLE_COLUMNS[index];
-    const lines = splitCellText(doc, row[index], column.width);
-    doc.text(lines, cursorX + CELL_PADDING, y);
+    const isStatusColumn = index === TABLE_COLUMNS.length - 1;
+    const lines = splitCellText(doc, row.cells[index], column.width);
+
+    if (isStatusColumn) {
+      drawStatusBadge(doc, row.status, cursorX + CELL_PADDING, y - 8, column.width - CELL_PADDING * 2);
+    } else {
+      const isSecondaryColumn = index === 1 || index === 2 || index === 3;
+      const textColor = isSecondaryColumn ? style.mutedText : style.text;
+      doc.setTextColor(...textColor);
+      doc.text(lines, cursorX + CELL_PADDING, y);
+    }
+
     cursorX += column.width;
   }
 
+  if (row.status === "canceled") {
+    doc.setDrawColor(148, 163, 184);
+    doc.line(PAGE_MARGIN + 8, y + 4, PAGE_MARGIN + getTableWidth() - 8, y + 4);
+  }
+
   doc.setDrawColor(226, 232, 240);
-  doc.line(PAGE_MARGIN, y + rowHeight - 10, PAGE_MARGIN + getTableWidth(), y + rowHeight - 10);
+  doc.line(PAGE_MARGIN, rowBottom, PAGE_MARGIN + getTableWidth(), rowBottom);
+  doc.setTextColor(15, 23, 42);
+}
+
+function drawStatusBadge(
+  doc: JsPdfDocument,
+  status: PendingReimbursementSummary["status"],
+  x: number,
+  y: number,
+  width: number,
+) {
+  const style = ROW_STYLE[status];
+  const label = status === "received" ? "OK Recebido" : STATUS_LABEL[status];
+
+  doc.setFillColor(...style.statusFill);
+  doc.roundedRect(x, y, width, 14, 4, 4, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...style.statusText);
+  doc.text(label, x + 5, y + 9);
+  doc.setFont("helvetica", "normal");
 }
 
 function measureRowHeight(doc: JsPdfDocument, row: string[]): number {
