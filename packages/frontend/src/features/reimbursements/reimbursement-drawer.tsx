@@ -69,6 +69,7 @@ export function ReimbursementDrawer({
     null;
   const sourceDate =
     reimbursement.source_purchase_date ?? reimbursement.source_posted_at ?? null;
+  const launchedAt = sourceDate ?? reimbursement.occurred_at;
   const shouldShowSourceDetails = Boolean(
     sourceTitle ||
     reimbursement.source_description ||
@@ -271,7 +272,7 @@ export function ReimbursementDrawer({
             <div className="flex justify-between items-center py-2 border-b border-slate-100">
               <span className="text-sm text-slate-500">Lancado em</span>
               <span className="text-sm font-semibold">
-                {formatDate(reimbursement.occurred_at)}
+                {formatDate(launchedAt)}
               </span>
             </div>
 

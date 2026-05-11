@@ -196,6 +196,20 @@ describe("ReimbursementsView", () => {
     expect(screen.getByRole("button", { name: /^cancelar$/i })).toBeInTheDocument();
   });
 
+  it("shows the original purchase date as the launched date for card reimbursements", async () => {
+    render(
+      <ReimbursementsView
+        surface="desktop"
+        accounts={accounts}
+        cards={cards}
+        month="2026-03"
+      />,
+    );
+
+    expect(await screen.findByText("Lançado em 01/03/2026")).toBeInTheDocument();
+    expect(screen.queryByText("Lançado em 10/03/2026")).not.toBeInTheDocument();
+  });
+
   it("shows related purchase details inside the reimbursement drawer", async () => {
     const user = userEvent.setup();
 
@@ -215,7 +229,7 @@ describe("ReimbursementsView", () => {
     expect(screen.getByText(/casa pio/i)).toBeInTheDocument();
     expect(screen.getByText(/bradesco visa platinum - duda/i)).toBeInTheDocument();
     expect(screen.getByText("1/3")).toBeInTheDocument();
-    expect(screen.getByText(/01\/03\/2026/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/01\/03\/2026/i).length).toBeGreaterThan(0);
   });
 
   it("shows received and canceled dates inside the reimbursement drawer", async () => {

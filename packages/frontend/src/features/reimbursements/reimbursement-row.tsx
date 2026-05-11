@@ -42,6 +42,10 @@ export function ReimbursementRow({ reimbursement, onClick }: ReimbursementRowPro
 
   const outstanding = reimbursement.amount - (reimbursement.amount_received ?? 0);
   const isCanceled = reimbursement.status === "canceled";
+  const launchedAt =
+    reimbursement.source_purchase_date ??
+    reimbursement.source_posted_at ??
+    reimbursement.occurred_at;
 
   return (
     <button
@@ -65,7 +69,7 @@ export function ReimbursementRow({ reimbursement, onClick }: ReimbursementRowPro
           </span>
         </div>
         <p className="text-xs text-slate-400">
-          Lançado em {formatDate(reimbursement.occurred_at)}
+          Lançado em {formatDate(launchedAt)}
         </p>
       </div>
 
