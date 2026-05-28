@@ -14,16 +14,15 @@ import {
 import { MoneyValue } from "../../components/ui/money-value";
 import { chartClassNames } from "../../lib/chart-theme";
 import { formatDate } from "../../lib/format";
-import type { InvestmentMovementSummary, TransactionFilters } from "../../lib/api";
+import type { AccountSummary, InvestmentMovementSummary, TransactionFilters } from "../../lib/api";
 import type { UiDensity } from "../../lib/ui-density";
 import { cn } from "../../lib/utils";
 
 type MovementsPanelProps = {
   movements: InvestmentMovementSummary[];
+  accounts: AccountSummary[];
   isSubmitting: boolean;
   hasMovementAccounts: boolean;
-  fromDate: string;
-  toDate: string;
   uiDensity: UiDensity;
   onOpenQuickAdd: (preset: QuickAddPreset) => void;
   onOpenLedgerFiltered: (filters: Partial<TransactionFilters>, month?: string) => void;
@@ -31,23 +30,26 @@ type MovementsPanelProps = {
 
 export function MovementsPanel({
   movements,
+  accounts,
   isSubmitting,
   hasMovementAccounts,
-  fromDate,
-  toDate,
   uiDensity,
   onOpenQuickAdd,
   onOpenLedgerFiltered,
 }: MovementsPanelProps) {
+  const accountNameById = new Map(accounts.map((account) => [account.account_id, account.name]));
+  const latestMonth = movements[0]?.occurred_at.slice(0, 7);
+
   function openInvestmentLedger() {
+    if (!latestMonth) return;
     onOpenLedgerFiltered(
       {
         period: "custom",
-        from: fromDate,
-        to: toDate,
+        from: `${latestMonth}-01`,
+        to: `${latestMonth}-31`,
         type: "investment",
       },
-      fromDate.slice(0, 7),
+      latestMonth,
     );
   }
 
@@ -61,10 +63,10 @@ export function MovementsPanel({
     >
       <CardHeader className="flex flex-row items-start justify-between gap-3 p-5 pb-3 md:p-6 md:pb-3">
         <div>
-          <h3 className="text-sm font-bold text-slate-800">Caminho do dinheiro</h3>
-          <p className="text-xs text-slate-400">Histórico de aportes e rendimentos</p>
+          <h3 className="text-sm font-bold text-slate-800">Movimentos</h3>
+          <p className="text-xs text-slate-400">Histórico operacional da carteira</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             size="sm"
@@ -73,6 +75,16 @@ export function MovementsPanel({
             className="h-8 rounded-xl text-xs font-bold"
           >
             Novo aporte
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenQuickAdd("investment_purchase")}
+            disabled={isSubmitting || !hasMovementAccounts}
+            className="h-8 rounded-xl text-xs font-bold"
+          >
+            Nova compra
           </Button>
           <Button
             type="button"
@@ -91,7 +103,7 @@ export function MovementsPanel({
             className="h-8 text-[12px] font-bold text-primary hover:bg-primary/5"
             onClick={openInvestmentLedger}
           >
-            Ver movimentos no histórico <ChevronRight className="ml-1 h-3 w-3" />
+            Ver no histórico <ChevronRight className="ml-1 h-3 w-3" />
           </Button>
         </div>
       </CardHeader>
@@ -112,9 +124,6 @@ export function MovementsPanel({
               <p className="text-sm font-semibold text-slate-700">
                 Nenhum movimento registrado neste período.
               </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Registre um aporte ou resgate para começar a acompanhar.
-              </p>
             </div>
           </div>
         ) : (
@@ -125,10 +134,11 @@ export function MovementsPanel({
                   <TableHead className="px-6">Data</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Descrição</TableHead>
+                  <TableHead>Conta</TableHead>
                   <TableHead className="text-right">Capital</TableHead>
-                  <TableHead className="text-right">Rendimento</TableHead>
-                  <TableHead className="text-right">Caixa</TableHead>
-                  <TableHead className="pr-6 text-right">Investido</TableHead>
+                  <TableHead className="text-right">Proventos</TableHead>
+                  <TableHead className="text-right">Reinvestido</TableHead>
+                  <TableHead className="pr-6 text-right">Caixa</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -138,19 +148,18 @@ export function MovementsPanel({
                       {formatDate(movement.occurred_at)}
                     </TableCell>
                     <TableCell>
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-lg px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider",
-                          movement.type === "contribution"
-                            ? "bg-primary/8 text-primary"
-                            : "bg-amber-50 text-amber-700",
-                        )}
-                      >
-                        {movement.type === "contribution" ? "Aporte" : "Resgate"}
+                      <span className="inline-flex items-center rounded-lg bg-primary/8 px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-primary">
+                        {movementLabel(movement.type)}
                       </span>
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate font-medium text-slate-700" title={movement.description ?? "Sem descrição"}>
+                    <TableCell
+                      className="max-w-[200px] truncate font-medium text-slate-700"
+                      title={movement.description ?? "Sem descrição"}
+                    >
                       {movement.description ?? "Sem descrição"}
+                    </TableCell>
+                    <TableCell className="text-slate-600">
+                      {accountNameById.get(movement.account_id) ?? movement.account_id}
                     </TableCell>
                     <TableCell className="text-right">
                       <MoneyValue value={movement.contribution_amount} neutral className="text-sm font-bold" />
@@ -159,10 +168,14 @@ export function MovementsPanel({
                       <MoneyValue value={movement.dividend_amount} className="text-sm font-bold" />
                     </TableCell>
                     <TableCell className="text-right">
-                      <MoneyValue value={movement.cash_delta} className="text-sm font-bold" />
+                      <MoneyValue
+                        value={movement.reinvested_dividend_amount ?? 0}
+                        neutral
+                        className="text-sm font-bold"
+                      />
                     </TableCell>
                     <TableCell className="pr-6 text-right">
-                      <MoneyValue value={movement.invested_delta} neutral className="text-sm font-bold" />
+                      <MoneyValue value={movement.cash_delta} className="text-sm font-bold" />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -173,4 +186,22 @@ export function MovementsPanel({
       </CardContent>
     </Card>
   );
+}
+
+function movementLabel(type: InvestmentMovementSummary["type"]): string {
+  const labels: Record<InvestmentMovementSummary["type"], string> = {
+    contribution: "Aporte",
+    withdrawal: "Resgate",
+    aporte: "Aporte",
+    resgate: "Resgate",
+    compra: "Compra",
+    venda: "Venda",
+    provento: "Provento",
+    reinvestimento: "Reinvestimento",
+    rendimento: "Rendimento",
+    taxa: "Taxa",
+    ajuste: "Ajuste",
+    transferencia: "Transferência",
+  };
+  return labels[type];
 }

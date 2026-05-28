@@ -6,6 +6,7 @@ import type {
   AccountSummary,
   CardSummary,
   DashboardSummary,
+  InvestmentCurrent,
   InvestmentMovementSummary,
   InvestmentOverview,
   InvoiceSummary,
@@ -135,6 +136,32 @@ function buildInvestmentOverview(
   };
 }
 
+function buildInvestmentCurrent(overview = buildInvestmentOverview()): InvestmentCurrent {
+  return {
+    snapshot: {
+      id: "derived-current",
+      date: overview.to,
+      period: "current",
+      total_patrimony: overview.totals.wealth,
+      applied_value: overview.totals.invested_balance,
+      gross_balance: overview.totals.invested_balance,
+      free_cash: overview.totals.cash_balance,
+      accumulated_dividends: overview.totals.dividends_accumulated,
+      monthly_contribution_target: overview.goal.target,
+      fii_applied_value: 0,
+      fii_monthly_income: 0,
+      stock_applied_value: 0,
+      stock_monthly_income: 0,
+      total_monthly_income: 0,
+      reinvested_income: 0,
+      notes: null,
+    },
+    assets: [],
+    allocation_targets: [],
+    income_records: [],
+  };
+}
+
 function buildInvoice(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
   const invoice: InvoiceSummary = {
     invoice_id: "card-1:2026-03",
@@ -249,6 +276,7 @@ function installAppFetchMock(initialState?: {
   pendingExpenses?: PendingExpenseSummary[];
   dashboard?: DashboardSummary;
   investmentOverview?: InvestmentOverview;
+  investmentCurrent?: InvestmentCurrent;
   investmentMovements?: InvestmentMovementSummary[];
   invoices?: InvoiceSummary[];
   securityState?: {
@@ -265,6 +293,9 @@ function installAppFetchMock(initialState?: {
     recurringRules: initialState?.recurringRules ?? [],
     pendingExpenses: initialState?.pendingExpenses ?? [],
     investmentOverview: initialState?.investmentOverview ?? buildInvestmentOverview(),
+    investmentCurrent:
+      initialState?.investmentCurrent ??
+      buildInvestmentCurrent(initialState?.investmentOverview ?? buildInvestmentOverview()),
     investmentMovements: initialState?.investmentMovements ?? [],
     invoices: initialState?.invoices ?? [buildInvoice()],
     dashboard:
@@ -331,6 +362,14 @@ function installAppFetchMock(initialState?: {
 
     if (url.includes("/api/investments/overview") && method === "GET") {
       return new Response(JSON.stringify(state.investmentOverview));
+    }
+
+    if (url.includes("/api/investments/history") && method === "GET") {
+      return new Response(JSON.stringify(state.investmentOverview));
+    }
+
+    if (url.includes("/api/investments/current") && method === "GET") {
+      return new Response(JSON.stringify(state.investmentCurrent));
     }
 
     if (url.includes("/api/investments/movements") && method === "GET") {

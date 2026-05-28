@@ -6,6 +6,8 @@ import {
   fetchCards,
   fetchDashboardSummary,
   fetchInvestmentMovements,
+  fetchInvestmentCurrent,
+  fetchInvestmentHistory,
   fetchInvestmentOverview,
   fetchInvoices,
   fetchPendings,
@@ -15,6 +17,7 @@ import {
   type CardSummary,
   type DashboardSummary,
   type InvestmentMovementSummary,
+  type InvestmentCurrent,
   type InvestmentOverview,
   type InvestmentView,
   type InvoiceSummary,
@@ -71,7 +74,8 @@ export function useAppDataOrchestrator({
   const [transactions, setTransactions] = useState<TransactionSummary[]>([]);
   const [recurringRules, setRecurringRules] = useState<RecurringRuleSummary[]>([]);
   const [pendingExpenses, setPendingExpenses] = useState<PendingExpenseSummary[]>([]);
-  const [investmentOverview, setInvestmentOverview] = useState<InvestmentOverview | null>(null);
+  const [investmentHistory, setInvestmentHistory] = useState<InvestmentOverview | null>(null);
+  const [investmentCurrent, setInvestmentCurrent] = useState<InvestmentCurrent | null>(null);
   const [investmentMovements, setInvestmentMovements] = useState<InvestmentMovementSummary[]>([]);
   const [investmentView, setInvestmentView] = useState<InvestmentView>(initialInvestmentView);
   const [investmentFromDate, setInvestmentFromDate] = useState(initialInvestmentFromDate);
@@ -108,7 +112,8 @@ export function useAppDataOrchestrator({
           nextRecurringRules,
           nextPendingExpenses,
           nextDashboardInvestmentOverview,
-          nextInvestmentOverview,
+          nextInvestmentCurrent,
+          nextInvestmentHistory,
           nextInvestmentMovements,
         ] = await Promise.all([
           fetchCards(),
@@ -124,7 +129,8 @@ export function useAppDataOrchestrator({
             to: dashboardInvestmentTo,
             goalPercent: activeGoalPercent,
           }),
-          fetchInvestmentOverview({
+          fetchInvestmentCurrent(),
+          fetchInvestmentHistory({
             view: activeInvestmentView,
             from: toIsoFromDate(activeFromDate, false),
             to: toIsoFromDate(activeToDate, true),
@@ -148,7 +154,8 @@ export function useAppDataOrchestrator({
         setRecurringRules(nextRecurringRules);
         setPendingExpenses(nextPendingExpenses);
         setDashboardInvestmentOverview(nextDashboardInvestmentOverview);
-        setInvestmentOverview(nextInvestmentOverview);
+        setInvestmentCurrent(nextInvestmentCurrent);
+        setInvestmentHistory(nextInvestmentHistory);
         setInvestmentMovements(nextInvestmentMovements);
         setTransactionFilters(filters);
         setInvestmentView(activeInvestmentView);
@@ -187,7 +194,8 @@ export function useAppDataOrchestrator({
     transactions,
     recurringRules,
     pendingExpenses,
-    investmentOverview,
+    investmentHistory,
+    investmentCurrent,
     investmentMovements,
     investmentView,
     investmentFromDate,

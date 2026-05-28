@@ -6,6 +6,7 @@ import type {
   AccountSummary,
   CardSummary,
   DashboardSummary,
+  InvestmentCurrent,
   InvestmentOverview,
   TransactionSummary,
 } from "./lib/api";
@@ -148,6 +149,32 @@ function buildInvestmentOverview(overrides: Partial<InvestmentOverview> = {}): I
   };
 }
 
+function buildInvestmentCurrent(overview = buildInvestmentOverview()): InvestmentCurrent {
+  return {
+    snapshot: {
+      id: "derived-current",
+      date: overview.to,
+      period: "current",
+      total_patrimony: overview.totals.wealth,
+      applied_value: overview.totals.invested_balance,
+      gross_balance: overview.totals.invested_balance,
+      free_cash: overview.totals.cash_balance,
+      accumulated_dividends: overview.totals.dividends_accumulated,
+      monthly_contribution_target: overview.goal.target,
+      fii_applied_value: 0,
+      fii_monthly_income: 0,
+      stock_applied_value: 0,
+      stock_monthly_income: 0,
+      total_monthly_income: 0,
+      reinvested_income: 0,
+      notes: null,
+    },
+    assets: [],
+    allocation_targets: [],
+    income_records: [],
+  };
+}
+
 function installFetchMock(initialState?: {
   accounts?: AccountSummary[];
   cards?: CardSummary[];
@@ -177,6 +204,7 @@ function installFetchMock(initialState?: {
       ],
     dashboard: initialState?.dashboard ?? buildDashboard(),
     investmentOverview: initialState?.investmentOverview ?? buildInvestmentOverview(),
+    investmentCurrent: buildInvestmentCurrent(initialState?.investmentOverview ?? buildInvestmentOverview()),
   };
 
   const originalFetch = globalThis.fetch;
@@ -209,6 +237,14 @@ function installFetchMock(initialState?: {
 
     if (url.includes("/api/investments/overview")) {
       return new Response(JSON.stringify(state.investmentOverview));
+    }
+
+    if (url.includes("/api/investments/history")) {
+      return new Response(JSON.stringify(state.investmentOverview));
+    }
+
+    if (url.includes("/api/investments/current")) {
+      return new Response(JSON.stringify(state.investmentCurrent));
     }
 
     if (url.includes("/api/investments/movements")) {

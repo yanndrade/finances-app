@@ -383,13 +383,22 @@ class InvestmentMovementProjection:
     description: str | None
     contribution_amount: int
     dividend_amount: int
+    reinvested_dividend_amount: int
     cash_amount: int
     invested_amount: int
     cash_delta: int
     invested_delta: int
+    asset_ticker: str | None = None
+    asset_class: str | None = None
+    category: str | None = None
+    origin_account_id: str | None = None
+    destination_account_id: str | None = None
+    affects_cash: bool = True
+    affects_invested_capital: bool = True
+    affects_income: bool = False
 
-    def to_dict(self) -> dict[str, str | int | None]:
-        return {
+    def to_dict(self) -> dict[str, str | int | bool | None]:
+        payload: dict[str, str | int | bool | None] = {
             "movement_id": self.movement_id,
             "occurred_at": self.occurred_at,
             "type": self.type,
@@ -397,11 +406,29 @@ class InvestmentMovementProjection:
             "description": self.description,
             "contribution_amount": self.contribution_amount,
             "dividend_amount": self.dividend_amount,
+            "reinvested_dividend_amount": self.reinvested_dividend_amount,
             "cash_amount": self.cash_amount,
             "invested_amount": self.invested_amount,
             "cash_delta": self.cash_delta,
             "invested_delta": self.invested_delta,
         }
+        optional_fields = {
+            "asset_ticker": self.asset_ticker,
+            "asset_class": self.asset_class,
+            "category": self.category,
+            "origin_account_id": self.origin_account_id,
+            "destination_account_id": self.destination_account_id,
+        }
+        for key, value in optional_fields.items():
+            if value is not None:
+                payload[key] = value
+        if not self.affects_cash:
+            payload["affects_cash"] = bool(self.affects_cash)
+        if not self.affects_invested_capital:
+            payload["affects_invested_capital"] = bool(self.affects_invested_capital)
+        if self.affects_income:
+            payload["affects_income"] = bool(self.affects_income)
+        return payload
 
 
 @dataclass(frozen=True)

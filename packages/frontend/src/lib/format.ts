@@ -7,6 +7,97 @@ export function formatCurrency(valueInCents: number): string {
   }).format(valueInCents / 100);
 }
 
+/** Formats a value already expressed in reais (not cents). */
+export function formatCurrencyBRL(valueInReais: number): string {
+  if (!Number.isFinite(valueInReais)) {
+    return "Sem base";
+  }
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(valueInReais);
+}
+
+/** Parses user currency input into reais. Returns null when invalid. */
+export function parseCurrencyBRL(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  let normalized = trimmed.replace(/R\$\s?/gi, "").trim();
+  const hasComma = normalized.includes(",");
+  const hasDot = normalized.includes(".");
+
+  if (hasComma && hasDot) {
+    normalized = normalized.replace(/\./g, "").replace(",", ".");
+  } else if (hasComma) {
+    normalized = normalized.replace(",", ".");
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Parses user currency input into integer cents. */
+export function parseCurrencyBRLToCents(input: string): number | null {
+  const parsed = parseCurrencyBRL(input);
+  return parsed === null ? null : Math.round(parsed * 100);
+}
+
+export function formatPercentBR(
+  ratio: number | null | undefined,
+  fractionDigits = 2,
+): string {
+  if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) {
+    return "Sem base";
+  }
+  return ratio.toLocaleString("pt-BR", {
+    style: "percent",
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
+}
+
+export function parsePercentBR(input: string): number | null {
+  const trimmed = input.trim().replace(/%/g, "").trim();
+  if (!trimmed) return null;
+
+  let normalized = trimmed;
+  if (normalized.includes(",") && normalized.includes(".")) {
+    normalized = normalized.replace(/\./g, "").replace(",", ".");
+  } else if (normalized.includes(",")) {
+    normalized = normalized.replace(",", ".");
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed > 1 ? parsed / 100 : parsed;
+}
+
+export function formatMonthBR(date: Date | string): string {
+  const normalized =
+    typeof date === "string" && !date.includes("T")
+      ? date.length === 7
+        ? `${date}-01T12:00:00Z`
+        : `${date}T12:00:00Z`
+      : date;
+  const value = typeof normalized === "string" ? new Date(normalized) : normalized;
+  if (isNaN(value.getTime())) {
+    return typeof date === "string" ? date : "";
+  }
+  const formatted = new Intl.DateTimeFormat("pt-BR", {
+    month: "short",
+    year: "numeric",
+  }).format(value);
+  return formatted.replace(".", "").toLowerCase();
+}
+
+export function formatBasisPointsBR(basisPoints: number | null | undefined): string {
+  if (basisPoints === null || basisPoints === undefined || !Number.isFinite(basisPoints)) {
+    return "Sem base";
+  }
+  return formatPercentBR(basisPoints / 10000);
+}
+
 export function formatCurrencyCompact(valueInCents: number): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",

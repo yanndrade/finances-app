@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { DashboardSummary, InvestmentOverview, ReportSummary } from "../../lib/api";
+import type { DashboardSummary, InvestmentCurrent, InvestmentOverview, ReportSummary } from "../../lib/api";
 import * as api from "../../lib/api";
 import { useAppDataOrchestrator } from "./use-app-data-orchestrator";
 
@@ -71,6 +71,32 @@ function buildInvestmentOverview(): InvestmentOverview {
   };
 }
 
+function buildInvestmentCurrent(): InvestmentCurrent {
+  return {
+    snapshot: {
+      id: "derived-current",
+      date: "2026-01-31T23:59:59Z",
+      period: "2026-01",
+      total_patrimony: 0,
+      applied_value: 0,
+      gross_balance: 0,
+      free_cash: 0,
+      accumulated_dividends: 0,
+      monthly_contribution_target: 0,
+      fii_applied_value: 0,
+      fii_monthly_income: 0,
+      stock_applied_value: 0,
+      stock_monthly_income: 0,
+      total_monthly_income: 0,
+      reinvested_income: 0,
+      notes: null,
+    },
+    assets: [],
+    allocation_targets: [],
+    income_records: [],
+  };
+}
+
 function buildReportSummary(): ReportSummary {
   return {
     period: {
@@ -125,6 +151,8 @@ describe("useAppDataOrchestrator", () => {
     vi.spyOn(api, "fetchRecurringRules").mockResolvedValue([]);
     vi.spyOn(api, "fetchPendings").mockResolvedValue([]);
     vi.spyOn(api, "fetchInvestmentOverview").mockResolvedValue(buildInvestmentOverview());
+    vi.spyOn(api, "fetchInvestmentCurrent").mockResolvedValue(buildInvestmentCurrent());
+    vi.spyOn(api, "fetchInvestmentHistory").mockResolvedValue(buildInvestmentOverview());
     vi.spyOn(api, "fetchInvestmentMovements").mockResolvedValue([]);
     vi.spyOn(api, "fetchReportSummary").mockResolvedValue(buildReportSummary());
     vi.spyOn(api, "fetchDashboardSummary").mockImplementation(async () => {
@@ -193,6 +221,10 @@ describe("useAppDataOrchestrator", () => {
     vi.spyOn(api, "fetchRecurringRules").mockResolvedValue([]);
     vi.spyOn(api, "fetchPendings").mockResolvedValue([]);
     vi.spyOn(api, "fetchInvestmentMovements").mockResolvedValue([]);
+    vi.spyOn(api, "fetchInvestmentCurrent").mockResolvedValue(buildInvestmentCurrent());
+    const fetchInvestmentHistorySpy = vi
+      .spyOn(api, "fetchInvestmentHistory")
+      .mockResolvedValue(buildInvestmentOverview());
     vi.spyOn(api, "fetchDashboardSummary").mockResolvedValue(buildDashboard("2026-02"));
     const fetchInvestmentOverviewSpy = vi
       .spyOn(api, "fetchInvestmentOverview")
@@ -223,19 +255,21 @@ describe("useAppDataOrchestrator", () => {
     );
 
     fetchInvestmentOverviewSpy.mockClear();
+    fetchInvestmentHistorySpy.mockClear();
 
     await act(async () => {
       await result.current.refreshData({ month: "2026-02" });
     });
 
-    expect(fetchInvestmentOverviewSpy).toHaveBeenCalledTimes(2);
-    expect(fetchInvestmentOverviewSpy).toHaveBeenNthCalledWith(1, {
+    expect(fetchInvestmentOverviewSpy).toHaveBeenCalledTimes(1);
+    expect(fetchInvestmentOverviewSpy).toHaveBeenCalledWith({
       view: "monthly",
       from: "2026-02-01T00:00:00Z",
       to: "2026-02-28T23:59:59Z",
       goalPercent: 15,
     });
-    expect(fetchInvestmentOverviewSpy).toHaveBeenNthCalledWith(2, {
+    expect(fetchInvestmentHistorySpy).toHaveBeenCalledTimes(1);
+    expect(fetchInvestmentHistorySpy).toHaveBeenCalledWith({
       view: "monthly",
       from: "2025-12-01T00:00:00Z",
       to: "2025-12-31T23:59:59Z",

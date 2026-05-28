@@ -1,5 +1,5 @@
 import React from "react";
-import { Clock, CreditCard, Receipt, RotateCcw, Target, ArrowRight } from "lucide-react";
+import { Clock, CreditCard, Receipt, RotateCcw, Target, ArrowRight, TrendingUp } from "lucide-react";
 import { MoneyValue } from "../../components/ui/money-value";
 import type {
   DashboardSummary,
@@ -43,13 +43,18 @@ export function MetricStrip({
 
   const pendingReimbursementsTotal = dashboard.pending_reimbursements_total ?? 0;
   const hasPendingReimbursements = pendingReimbursementsTotal > 0;
+  const investmentIncomeTotal =
+    investmentOverview?.totals.dividend_received_total ??
+    investmentOverview?.totals.dividend_total ??
+    0;
+  const hasInvestmentIncome = investmentIncomeTotal > 0;
 
   return (
     <div
       className={cn(
         "grid grid-cols-2 lg:grid-cols-4",
         uiDensity === "dense" ? "gap-3" : "gap-4",
-        hasPendingReimbursements && "lg:grid-cols-5",
+        (hasPendingReimbursements || hasInvestmentIncome) && "lg:grid-cols-5",
       )}
     >
       <MetricCard
@@ -104,6 +109,17 @@ export function MetricStrip({
         />
       </button>
 
+      {hasInvestmentIncome && (
+        <MetricCard
+          title="Proventos"
+          value={investmentIncomeTotal}
+          icon={<TrendingUp className="h-4 w-4 text-emerald-400" />}
+          onClick={() => onNavigate("investments")}
+          density={uiDensity}
+          sublabel="Fora do resultado"
+        />
+      )}
+
       {hasPendingReimbursements && (
         <MetricCard
           title="A Receber"
@@ -123,12 +139,14 @@ function MetricCard({
   icon,
   onClick,
   density,
+  sublabel,
 }: {
   title: string;
   value: number;
   icon: React.ReactNode;
   onClick: () => void;
   density: UiDensity;
+  sublabel?: string;
 }) {
   return (
     <button
@@ -150,6 +168,9 @@ function MetricCard({
         value={value}
         className="text-sm font-bold text-foreground tabular-nums"
       />
+      {sublabel ? (
+        <p className="mt-1 text-[11px] font-medium text-muted-foreground">{sublabel}</p>
+      ) : null}
     </button>
   );
 }

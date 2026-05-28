@@ -48,6 +48,7 @@ import {
   type ExpensePaymentMode,
   type RecurringPaymentMode,
   type InvestmentMode,
+  type InvestmentOriginMode,
   type TransferMode,
   type QuickAddValidationErrors,
 } from "./quick-add/use-quick-add-reducer";
@@ -59,6 +60,8 @@ export type QuickAddPreset =
   | "transfer_internal"
   | "transfer_invoice_payment"
   | "investment_contribution"
+  | "investment_purchase"
+  | "investment_reinvestment"
   | "investment_withdrawal"
   | "expense_card";
 
@@ -227,7 +230,9 @@ export function QuickAddComposer({
     toAccountId,
     installments,
     invoiceId,
-    dividendAmount,
+    investmentOriginMode,
+    newMoneyAmount,
+    reinvestedDividendAmount,
     investedReductionAmount,
     recurringPaymentMode,
     dueDay,
@@ -241,6 +246,7 @@ export function QuickAddComposer({
   const [composerMode, setComposerMode] = useState<ComposerMode>("quick");
 
   const activeTab = TAB_CONFIG.find((t) => t.type === entryType) ?? TAB_CONFIG[0];
+  const isInvestmentContribution = entryType === "investment" && investmentMode === "contribution";
   const categoryOptions = getCategoryOptions(categoryId, externalCategories);
   const isCardExpense = entryType === "expense" && expensePaymentMode === "CARD";
   const isCardRecurring = entryType === "recurring" && recurringPaymentMode === "CARD";
@@ -353,6 +359,14 @@ export function QuickAddComposer({
         dispatchQuickAdd({ type: "entryTypeChanged", entryType: "investment" });
         dispatchQuickAdd({ type: "investmentModeChanged", mode: "contribution" });
         return;
+      case "investment_purchase":
+        dispatchQuickAdd({ type: "entryTypeChanged", entryType: "investment" });
+        dispatchQuickAdd({ type: "investmentModeChanged", mode: "purchase" });
+        return;
+      case "investment_reinvestment":
+        dispatchQuickAdd({ type: "entryTypeChanged", entryType: "investment" });
+        dispatchQuickAdd({ type: "investmentModeChanged", mode: "reinvestment" });
+        return;
       case "investment_withdrawal":
         dispatchQuickAdd({ type: "entryTypeChanged", entryType: "investment" });
         dispatchQuickAdd({ type: "investmentModeChanged", mode: "withdrawal" });
@@ -372,6 +386,15 @@ export function QuickAddComposer({
       setComposerMode("advanced");
     }
   }, [entryType, expensePaymentMode]);
+
+  useEffect(() => {
+    if (entryType !== "investment" || investmentMode !== "contribution") {
+      return;
+    }
+
+    const total = investmentContributionTotalInCents();
+    setAmount(total > 0 ? formatCentsInput(total) : "");
+  }, [entryType, investmentMode, newMoneyAmount, reinvestedDividendAmount]);
 
   function resetForm() {
     setAmount("");
@@ -398,10 +421,27 @@ export function QuickAddComposer({
 
   function formatAmountInput(value: string): string {
     const numericValue = parseAmount(value);
-    return (numericValue / 100).toLocaleString("pt-BR", {
+    return formatCentsInput(numericValue);
+  }
+
+  function formatCentsInput(valueInCents: number): string {
+    if (valueInCents <= 0) return "";
+    return (valueInCents / 100).toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
+  }
+
+  function investmentContributionTotalInCents(): number {
+    return parseAmount(newMoneyAmount) + parseAmount(reinvestedDividendAmount);
+  }
+
+  function effectiveAmountInCents(): number {
+    if (entryType === "investment" && investmentMode === "contribution") {
+      return investmentContributionTotalInCents();
+    }
+
+    return parseAmount(amount);
   }
 
   function validateForm(amountInCents: number): boolean {
@@ -426,6 +466,14 @@ export function QuickAddComposer({
       const accountResult = z.string().min(1, "Selecione uma conta.").safeParse(accountId);
       if (!accountResult.success) {
         nextErrors.accountId = accountResult.error.issues[0]?.message;
+      }
+    }
+
+    if (entryType === "investment" && investmentMode === "purchase" && investmentOriginMode === "manual") {
+      const newMoney = parseAmount(newMoneyAmount);
+      const reinvested = parseAmount(reinvestedDividendAmount);
+      if (newMoney + reinvested !== amountInCents) {
+        nextErrors.investmentOrigins = "A soma das origens precisa ser igual ao valor total.";
       }
     }
 
@@ -522,7 +570,7 @@ export function QuickAddComposer({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
-    const amountInCents = parseAmount(amount);
+    const amountInCents = effectiveAmountInCents();
     if (!validateForm(amountInCents)) {
       return;
     }
@@ -542,22 +590,65 @@ export function QuickAddComposer({
         }
       } else if (entryType === "investment") {
         if (investmentMode === "contribution") {
+          const newMoney = parseAmount(newMoneyAmount);
+          const reinvested = parseAmount(reinvestedDividendAmount);
           await onSubmitInvestmentMovement({
             type: "contribution",
             accountId,
             occurredAt: `${date}T12:00:00Z`,
-            contributionAmountInCents: amountInCents,
-            dividendAmountInCents: parseAmount(dividendAmount),
+            contributionAmountInCents: newMoney,
+            reinvestedDividendAmountInCents: reinvested,
+            investedAmountInCents: amountInCents,
+            cashAmountInCents: newMoney,
+            description,
+          });
+        } else if (investmentMode === "purchase") {
+          await onSubmitInvestmentMovement({
+            type: "compra",
+            accountId,
+            occurredAt: `${date}T12:00:00Z`,
+            cashAmountInCents: amountInCents,
+            investedAmountInCents: amountInCents,
+            contributionAmountInCents:
+              investmentOriginMode === "manual" ? parseAmount(newMoneyAmount) : undefined,
+            reinvestedDividendAmountInCents:
+              investmentOriginMode === "manual" ? parseAmount(reinvestedDividendAmount) : undefined,
+            description,
+          });
+        } else if (investmentMode === "dividend") {
+          await onSubmitInvestmentMovement({
+            type: "provento",
+            accountId,
+            occurredAt: `${date}T12:00:00Z`,
+            dividendAmountInCents: amountInCents,
+            description,
+          });
+        } else if (investmentMode === "reinvestment") {
+          await onSubmitInvestmentMovement({
+            type: "reinvestimento",
+            accountId,
+            occurredAt: `${date}T12:00:00Z`,
+            cashAmountInCents: amountInCents,
+            investedAmountInCents: amountInCents,
+            reinvestedDividendAmountInCents: amountInCents,
+            description,
+          });
+        } else if (investmentMode === "sale") {
+          await onSubmitInvestmentMovement({
+            type: "venda",
+            accountId,
+            occurredAt: `${date}T12:00:00Z`,
+            cashAmountInCents: amountInCents,
+            investedAmountInCents: amountInCents,
             description,
           });
         } else {
-          const investedAmount = parseAmount(investedReductionAmount) || amountInCents;
           await onSubmitInvestmentMovement({
             type: "withdrawal",
             accountId,
             occurredAt: `${date}T12:00:00Z`,
             cashAmountInCents: amountInCents,
-            investedAmountInCents: investedAmount,
+            investedAmountInCents: parseAmount(investedReductionAmount) || amountInCents,
             description,
           });
         }
@@ -681,14 +772,18 @@ export function QuickAddComposer({
 
   const amountBlock = (
     <div className={`flex flex-col items-center justify-center rounded-2xl py-5 mx-6 mb-2 ${activeTab.amountBg}`}>
-      <div className={`mb-1 text-sm font-semibold ${activeTab.currencyText}`}>R$</div>
+      <div className={`mb-1 text-sm font-semibold ${activeTab.currencyText}`}>
+        {isInvestmentContribution ? "Total investido" : "R$"}
+      </div>
       <input
         autoFocus
         ref={amountInputRef}
         className={`w-full max-w-[280px] bg-transparent text-center text-4xl font-bold outline-none placeholder:text-muted-foreground/30 md:text-5xl ${activeTab.amountText}`}
         placeholder="0,00"
+        readOnly={isInvestmentContribution}
         value={amount}
         onChange={(event) => {
+          if (isInvestmentContribution) return;
           setAmount(formatAmountInput(event.target.value));
           dispatchQuickAdd({
             type: "validationErrorsPatched",
@@ -763,7 +858,7 @@ export function QuickAddComposer({
       )}
 
       <Button
-        disabled={isSubmitting || parseAmount(amount) <= 0}
+        disabled={isSubmitting || effectiveAmountInCents() <= 0}
         type="submit"
         size="lg"
         className={`rounded-xl px-8 shadow-lg ${activeTab.submitClass}`}
@@ -1169,7 +1264,9 @@ export function QuickAddComposer({
               value={investmentMode}
             >
               <option value="contribution">Aporte</option>
+              <option value="purchase">Compra</option>
               <option value="withdrawal">Resgate</option>
+              <option value="sale">Venda</option>
             </select>
           </div>
 
@@ -1194,41 +1291,122 @@ export function QuickAddComposer({
             <FieldError message={validationErrors.accountId} />
           </div>
 
-          {isAdvancedMode && investmentMode === "contribution" && (
-            <div className="space-y-2">
-              <Label htmlFor="quick-add-dividend">Dividendos (opcional)</Label>
-              <Input
-                id="quick-add-dividend"
-                aria-label="Dividendos"
-                className="h-11 border-transparent bg-muted/50"
-                value={dividendAmount}
-                onChange={(event) =>
-                  dispatchQuickAdd({
-                    type: "dividendAmountChanged",
-                    amount: formatAmountInput(event.target.value),
-                  })
-                }
-                placeholder="0,00"
-              />
-            </div>
+          {investmentMode === "contribution" && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="quick-add-contribution-new-money">Dinheiro novo</Label>
+                <Input
+                  id="quick-add-contribution-new-money"
+                  aria-label="Dinheiro novo"
+                  className="h-11 border-transparent bg-muted/50"
+                  value={newMoneyAmount}
+                  onChange={(event) => {
+                    dispatchQuickAdd({
+                      type: "newMoneyAmountChanged",
+                      amount: formatAmountInput(event.target.value),
+                    });
+                    dispatchQuickAdd({ type: "validationErrorsPatched", errors: { amount: undefined } });
+                  }}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quick-add-contribution-reinvested">Proventos reinvestidos</Label>
+                <Input
+                  id="quick-add-contribution-reinvested"
+                  aria-label="Proventos reinvestidos"
+                  className="h-11 border-transparent bg-muted/50"
+                  value={reinvestedDividendAmount}
+                  onChange={(event) => {
+                    dispatchQuickAdd({
+                      type: "reinvestedDividendAmountChanged",
+                      amount: formatAmountInput(event.target.value),
+                    });
+                    dispatchQuickAdd({ type: "validationErrorsPatched", errors: { amount: undefined } });
+                  }}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="col-span-1 md:col-span-2 rounded-xl bg-violet-50/70 px-4 py-3 text-sm text-violet-900">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-semibold">Total investido</span>
+                  <span className="font-black tabular-nums">
+                    R$ {formatCentsInput(investmentContributionTotalInCents()) || "0,00"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-violet-700/80">
+                  Use dinheiro novo + proventos reinvestidos. O app registra o total investido e separa a origem.
+                </p>
+              </div>
+            </>
           )}
 
-          {isAdvancedMode && investmentMode === "withdrawal" && (
-            <div className="space-y-2">
-              <Label htmlFor="quick-add-invested-reduction">Redução do investido</Label>
-              <Input
-                id="quick-add-invested-reduction"
-                aria-label="Redução do investido"
-                className="h-11 border-transparent bg-muted/50"
-                value={investedReductionAmount}
-                onChange={(event) =>
-                  dispatchQuickAdd({
-                    type: "investedReductionAmountChanged",
-                    amount: formatAmountInput(event.target.value),
-                  })
-                }
-                placeholder="0,00"
-              />
+          {investmentMode === "purchase" && (
+            <>
+              <div className="col-span-1 md:col-span-2 space-y-2">
+                <Label htmlFor="quick-add-investment-origin-mode">Origem do recurso</Label>
+                <select
+                  id="quick-add-investment-origin-mode"
+                  aria-label="Origem do recurso"
+                  className={QUICK_ADD_SELECT_CLASS_NAME}
+                  onChange={(event) =>
+                    dispatchQuickAdd({
+                      type: "investmentOriginModeChanged",
+                      mode: event.target.value as InvestmentOriginMode,
+                    })
+                  }
+                  value={investmentOriginMode}
+                >
+                  <option value="auto">Automático</option>
+                  <option value="manual">Manual</option>
+                </select>
+              </div>
+
+              {investmentOriginMode === "manual" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="quick-add-new-money">Dinheiro novo</Label>
+                    <Input
+                      id="quick-add-new-money"
+                      aria-label="Dinheiro novo"
+                      className="h-11 border-transparent bg-muted/50"
+                      value={newMoneyAmount}
+                      onChange={(event) =>
+                        dispatchQuickAdd({
+                          type: "newMoneyAmountChanged",
+                          amount: formatAmountInput(event.target.value),
+                        })
+                      }
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="quick-add-reinvested-dividend">Proventos reinvestidos</Label>
+                    <Input
+                      id="quick-add-reinvested-dividend"
+                      aria-label="Proventos reinvestidos"
+                      className="h-11 border-transparent bg-muted/50"
+                      value={reinvestedDividendAmount}
+                      onChange={(event) =>
+                        dispatchQuickAdd({
+                          type: "reinvestedDividendAmountChanged",
+                          amount: formatAmountInput(event.target.value),
+                        })
+                      }
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div className="col-span-1 md:col-span-2">
+                    <FieldError message={validationErrors.investmentOrigins} />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {investmentMode === "dividend" && (
+            <div className="col-span-1 md:col-span-2 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Use este lançamento apenas quando quiser registrar a entrada real no caixa. Para análise mensal de YoC, preencha no fechamento.
             </div>
           )}
         </div>
@@ -1402,7 +1580,7 @@ export function QuickAddComposer({
             ) : null}
             <Button
               form="quick-add-form"
-              disabled={isSubmitting || parseAmount(amount) <= 0}
+              disabled={isSubmitting || effectiveAmountInCents() <= 0}
               type="submit"
               size="lg"
               className={`w-full rounded-xl shadow-lg ${activeTab.submitClass}`}

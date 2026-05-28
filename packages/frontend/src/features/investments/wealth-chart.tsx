@@ -25,19 +25,21 @@ type WealthChartProps = {
   data: WealthPoint[];
   loading: boolean;
   uiDensity: UiDensity;
+  compact?: boolean;
 };
 
 const GRADIENT_ID = "wealthGradient";
 
-function getChartHeight(pointCount: number): number {
-  if (pointCount <= 1) return 0; // show text state instead
+function getChartHeight(pointCount: number, compact: boolean): number {
+  if (pointCount <= 1) return compact ? 120 : 160;
+  if (compact) return pointCount <= 3 ? 120 : 180;
   if (pointCount <= 3) return 160;
   return 224;
 }
 
-export function WealthChart({ data, loading, uiDensity }: WealthChartProps) {
-  const chartHeight = getChartHeight(data.length);
-  const hasEnoughData = data.length > 1;
+export function WealthChart({ data, loading, uiDensity, compact = false }: WealthChartProps) {
+  const chartHeight = getChartHeight(data.length, compact);
+  const hasEnoughData = data.length > 0;
 
   return (
     <Card
@@ -61,12 +63,10 @@ export function WealthChart({ data, loading, uiDensity }: WealthChartProps) {
               <TrendingUp className="h-6 w-6 text-muted-foreground" />
             </div>
             <p className="text-sm font-semibold text-foreground">
-              {data.length === 0
-                ? "Nenhum dado no período."
-                : "Dados insuficientes para o gráfico."}
+              Nenhum dado no período.
             </p>
             <p className="text-xs text-muted-foreground">
-              Com mais períodos, a evolução aparecerá aqui.
+              Salve um fechamento para visualizar a evolução.
             </p>
           </div>
         ) : (
@@ -116,7 +116,7 @@ export function WealthChart({ data, loading, uiDensity }: WealthChartProps) {
                   stroke={CHART_THEME.primary}
                   strokeWidth={2.5}
                   fill={`url(#${GRADIENT_ID})`}
-                  dot={false}
+                  dot={{ r: 3, strokeWidth: 0 }}
                   activeDot={{ r: 4, strokeWidth: 0 }}
                   isAnimationActive={!prefersReducedMotion()}
                 />

@@ -282,11 +282,9 @@ export function App() {
     transactions,
     recurringRules,
     pendingExpenses,
-    investmentOverview,
+    investmentHistory,
+    investmentCurrent,
     investmentMovements,
-    investmentView,
-    investmentFromDate,
-    investmentToDate,
     transactionFilters,
     loading: isDataLoading,
     refreshData,
@@ -1174,19 +1172,15 @@ export function App() {
             accounts={accounts}
             loading={isDataLoading}
             isSubmitting={isSubmitting}
-            overview={investmentOverview}
+            history={investmentHistory}
+            current={investmentCurrent}
             movements={investmentMovements}
-            view={investmentView}
-            fromDate={investmentFromDate}
-            toDate={investmentToDate}
-            onViewChange={(nextView) => {
-              void handleInvestmentViewChange(nextView);
-            }}
-            onRangeChange={(nextFromDate, nextToDate) => {
-              void handleInvestmentRangeChange(nextFromDate, nextToDate);
-            }}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={(preset) => openQuickAdd(preset)}
+            onRefreshData={() => {
+              void refreshData({ month: selectedMonth });
+            }}
+            onError={(message) => showToast("error", message)}
             uiDensity={uiDensity}
           />
         ) : null}

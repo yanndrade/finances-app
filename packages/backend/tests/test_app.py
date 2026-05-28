@@ -1087,7 +1087,6 @@ def test_transactions_ledger_mode_aggregates_card_purchases_and_investment_movem
             "account_id": "acc-1",
             "description": "Aporte mensal",
             "contribution_amount": 40_00,
-            "dividend_amount": 5_00,
         },
     )
     assert investment_contribution_response.status_code == 201
@@ -4926,7 +4925,6 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
             "account_id": "acc-1",
             "description": "Aporte mensal",
             "contribution_amount": 30_00,
-            "dividend_amount": 5_00,
         },
     )
     withdrawal_response = client.post(
@@ -4961,11 +4959,12 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
         "account_id": "acc-1",
         "description": "Aporte mensal",
         "contribution_amount": 30_00,
-        "dividend_amount": 5_00,
+        "dividend_amount": 0,
+        "reinvested_dividend_amount": 0,
         "cash_amount": 30_00,
-        "invested_amount": 35_00,
+        "invested_amount": 30_00,
         "cash_delta": -30_00,
-        "invested_delta": 35_00,
+        "invested_delta": 30_00,
     }
     assert withdrawal_response.status_code == 201
     assert withdrawal_response.json() == {
@@ -4976,6 +4975,7 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
         "description": "Resgate parcial",
         "contribution_amount": 0,
         "dividend_amount": 0,
+        "reinvested_dividend_amount": 0,
         "cash_amount": 18_00,
         "invested_amount": 20_00,
         "cash_delta": 18_00,
@@ -4991,6 +4991,7 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
             "description": "Resgate parcial",
             "contribution_amount": 0,
             "dividend_amount": 0,
+            "reinvested_dividend_amount": 0,
             "cash_amount": 18_00,
             "invested_amount": 20_00,
             "cash_delta": 18_00,
@@ -5003,11 +5004,12 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
             "account_id": "acc-1",
             "description": "Aporte mensal",
             "contribution_amount": 30_00,
-            "dividend_amount": 5_00,
+            "dividend_amount": 0,
+            "reinvested_dividend_amount": 0,
             "cash_amount": 30_00,
-            "invested_amount": 35_00,
+            "invested_amount": 30_00,
             "cash_delta": -30_00,
-            "invested_delta": 35_00,
+            "invested_delta": 30_00,
         },
     ]
     assert overview_response.status_code == 200
@@ -5017,16 +5019,23 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
         "to": "2026-03-31T23:59:59Z",
         "totals": {
             "contribution_total": 30_00,
-            "dividend_total": 5_00,
+            "dividend_total": 0,
+            "reinvested_dividend_total": 0,
+            "external_contribution_total": 30_00,
+            "dividend_received_total": 0,
+            "dividend_reinvested_total": 0,
+            "dividend_available_balance": 0,
+            "reinvestment_rate": 0,
+            "contribution_autonomy_rate": 0,
             "withdrawal_total": 18_00,
-            "invested_balance": 15_00,
+            "invested_balance": 10_00,
             "cash_balance": 68_00,
-            "wealth": 83_00,
-            "dividends_accumulated": 5_00,
+            "wealth": 78_00,
+            "dividends_accumulated": 0,
         },
         "goal": {
             "target": 0,
-            "realized": 35_00,
+            "realized": 30_00,
             "remaining": 0,
             "progress_percent": 0,
         },
@@ -5035,15 +5044,16 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
                 {
                     "bucket": "2026-03",
                     "cash_balance": 68_00,
-                    "invested_balance": 15_00,
-                    "wealth": 83_00,
+                    "invested_balance": 10_00,
+                    "wealth": 78_00,
                 }
             ],
             "contribution_dividend_trend": [
                 {
                     "bucket": "2026-03",
                     "contribution_total": 30_00,
-                    "dividend_total": 5_00,
+                    "dividend_total": 0,
+                    "reinvested_dividend_total": 0,
                     "withdrawal_total": 18_00,
                 }
             ],
@@ -5136,6 +5146,286 @@ def test_investment_overview_goal_percent_uses_requested_percentage_and_zero_inc
         "remaining": 0,
         "progress_percent": 0,
     }
+
+
+def test_investment_current_snapshot_is_independent_from_history_range(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    snapshot_response = client.post(
+        "/api/investments/snapshots",
+        json={
+            "id": "snap-1",
+            "date": "2026-05-31T23:59:59Z",
+            "period": "2026-05",
+            "total_patrimony": 120_00,
+            "applied_value": 80_00,
+            "gross_balance": 90_00,
+            "free_cash": 30_00,
+            "accumulated_dividends": 4_00,
+            "monthly_contribution_target": 10_00,
+        },
+    )
+    client.post(
+        "/api/investments/movements",
+        json={
+            "id": "inv-1",
+            "occurred_at": "2026-03-10T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "contribution_amount": 30_00,
+        },
+    )
+
+    march_history = client.get(
+        "/api/investments/history",
+        params={
+            "view": "monthly",
+            "from": "2026-03-01T00:00:00Z",
+            "to": "2026-03-31T23:59:59Z",
+        },
+    )
+    may_history = client.get(
+        "/api/investments/history",
+        params={
+            "view": "monthly",
+            "from": "2026-05-01T00:00:00Z",
+            "to": "2026-05-31T23:59:59Z",
+        },
+    )
+    current_response = client.get("/api/investments/current")
+
+    assert snapshot_response.status_code == 201
+    assert march_history.status_code == 200
+    assert may_history.status_code == 200
+    assert current_response.status_code == 200
+    assert current_response.json()["snapshot"] == {
+        "id": "snap-1",
+        "date": "2026-05-31T23:59:59Z",
+        "period": "2026-05",
+        "total_patrimony": 120_00,
+        "applied_value": 80_00,
+        "gross_balance": 90_00,
+        "free_cash": 30_00,
+        "accumulated_dividends": 4_00,
+        "monthly_contribution_target": 10_00,
+        "fii_applied_value": 0,
+        "fii_monthly_income": 0,
+        "stock_applied_value": 0,
+        "stock_monthly_income": 0,
+        "total_monthly_income": 0,
+        "reinvested_income": 0,
+        "notes": None,
+    }
+
+
+def test_investment_snapshot_extended_fields_and_get_by_period(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+
+    save_response = client.post(
+        "/api/investments/snapshots",
+        json={
+            "id": "snap-extended",
+            "date": "2026-05-31T23:59:59Z",
+            "period": "2026-05",
+            "total_patrimony": 932_715,
+            "applied_value": 919_522,
+            "gross_balance": 977_116,
+            "free_cash": 131_99,
+            "accumulated_dividends": 859_07,
+            "monthly_contribution_target": 160_000,
+            "fii_applied_value": 485_00,
+            "fii_monthly_income": 40_43,
+            "stock_applied_value": 0,
+            "stock_monthly_income": 0,
+            "total_monthly_income": 40_43,
+            "reinvested_income": 40_43,
+        },
+    )
+    missing_response = client.get("/api/investments/snapshots/2026-04")
+    found_response = client.get("/api/investments/snapshots/2026-05")
+
+    assert save_response.status_code == 201
+    assert missing_response.status_code == 404
+    assert found_response.status_code == 200
+    assert found_response.json()["fii_monthly_income"] == 40_43
+    assert found_response.json()["reinvested_income"] == 40_43
+
+
+def test_investment_endpoints_accept_new_movement_types_and_entities(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 100_00)
+
+    movement_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "mov-1",
+            "occurred_at": "2026-05-10T12:00:00Z",
+            "type": "provento",
+            "account_id": "acc-1",
+            "asset_class": "fii",
+            "asset_ticker": "RBRR11",
+            "cash_amount": 2_50,
+            "affects_income": True,
+        },
+    )
+    asset_response = client.post(
+        "/api/investments/assets",
+        json={
+            "id": "asset-1",
+            "ticker": "RBRR11",
+            "asset_class": "fii",
+            "category": "Papel CDI",
+            "quantity": 2,
+            "average_price": 84_00,
+            "current_price": 86_00,
+            "monthly_income": 2_50,
+        },
+    )
+    target_response = client.post(
+        "/api/investments/allocation-targets",
+        json={
+            "id": "target-1",
+            "asset_class": "fii",
+            "label": "FIIs",
+            "ideal_percentage": 3000,
+            "current_value": 172_00,
+        },
+    )
+    income_response = client.post(
+        "/api/investments/income-records",
+        json={
+            "id": "income-1",
+            "month": "2026-05",
+            "asset_class": "fii",
+            "asset_ticker": "RBRR11",
+            "amount": 2_50,
+        },
+    )
+
+    assert movement_response.status_code == 201
+    assert movement_response.json()["type"] == "provento"
+    assert movement_response.json()["cash_delta"] == 2_50
+    assert movement_response.json()["invested_delta"] == 0
+    assert movement_response.json()["affects_income"] is True
+    assert asset_response.status_code == 201
+    assert asset_response.json()["current_value"] == 172_00
+    assert target_response.status_code == 201
+    assert income_response.status_code == 201
+
+
+def test_investment_purchase_reinvests_available_dividends_by_account(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 200_00)
+    _create_account(client, "acc-2", "Other Wallet", "wallet", 100_00)
+
+    dividend_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "div-1",
+            "occurred_at": "2026-05-01T12:00:00Z",
+            "type": "provento",
+            "account_id": "acc-1",
+            "dividend_amount": 40_00,
+        },
+    )
+    other_account_purchase_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "buy-other",
+            "occurred_at": "2026-05-02T12:00:00Z",
+            "type": "compra",
+            "account_id": "acc-2",
+            "cash_amount": 30_00,
+            "invested_amount": 30_00,
+        },
+    )
+    purchase_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "buy-1",
+            "occurred_at": "2026-05-03T12:00:00Z",
+            "type": "compra",
+            "account_id": "acc-1",
+            "cash_amount": 60_00,
+            "invested_amount": 60_00,
+        },
+    )
+    invalid_contribution_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "bad-1",
+            "occurred_at": "2026-05-04T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "contribution_amount": 10_00,
+            "dividend_amount": 1_00,
+        },
+    )
+
+    assert dividend_response.status_code == 201
+    assert other_account_purchase_response.status_code == 201
+    assert other_account_purchase_response.json()["contribution_amount"] == 30_00
+    assert other_account_purchase_response.json()["reinvested_dividend_amount"] == 0
+    assert purchase_response.status_code == 201
+    assert purchase_response.json()["contribution_amount"] == 20_00
+    assert purchase_response.json()["reinvested_dividend_amount"] == 40_00
+    assert invalid_contribution_response.status_code == 422
+
+
+def test_investment_contribution_accepts_reinvested_dividend_breakdown(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Main Wallet", "wallet", 1_000_00)
+
+    response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "aporte-1",
+            "occurred_at": "2026-05-04T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "contribution_amount": 500_00,
+            "reinvested_dividend_amount": 4_56,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["contribution_amount"] == 500_00
+    assert response.json()["reinvested_dividend_amount"] == 4_56
+    assert response.json()["cash_amount"] == 500_00
+    assert response.json()["invested_amount"] == 504_56
+    assert response.json()["cash_delta"] == -500_00
+    assert response.json()["invested_delta"] == 504_56
 
 
 def test_investment_endpoints_reject_contribution_from_investment_account(

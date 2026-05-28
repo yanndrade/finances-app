@@ -44,8 +44,8 @@ CARD_PURCHASE_SOURCE_EVENT_TYPES = (
     "CardPurchaseCreated",
     "CardPurchaseUpdated",
 )
-CURRENT_PROJECTION_SCHEMA_VERSION = 4
-COMPATIBLE_PROJECTION_SCHEMA_VERSIONS = {4}
+CURRENT_PROJECTION_SCHEMA_VERSION = 5
+COMPATIBLE_PROJECTION_SCHEMA_VERSIONS = {5}
 
 
 class ProjectionBase(DeclarativeBase):
@@ -255,10 +255,77 @@ class InvestmentMovementRecord(ProjectionBase):
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     contribution_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     dividend_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reinvested_dividend_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cash_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     invested_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cash_delta: Mapped[int] = mapped_column(Integer, nullable=False)
     invested_delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    asset_ticker: Mapped[str | None] = mapped_column(String, nullable=True)
+    asset_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    category: Mapped[str | None] = mapped_column(String, nullable=True)
+    origin_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    destination_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    affects_cash: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    affects_invested_capital: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    affects_income: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class InvestmentSnapshotRecord(ProjectionBase):
+    __tablename__ = "investment_snapshots"
+
+    snapshot_id: Mapped[str] = mapped_column(String, primary_key=True)
+    date: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    period: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    total_patrimony: Mapped[int] = mapped_column(Integer, nullable=False)
+    applied_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    gross_balance: Mapped[int] = mapped_column(Integer, nullable=False)
+    free_cash: Mapped[int] = mapped_column(Integer, nullable=False)
+    accumulated_dividends: Mapped[int] = mapped_column(Integer, nullable=False)
+    monthly_contribution_target: Mapped[int] = mapped_column(Integer, nullable=False)
+    fii_applied_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fii_monthly_income: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stock_applied_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stock_monthly_income: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_monthly_income: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reinvested_income: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    notes: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class InvestmentAssetRecord(ProjectionBase):
+    __tablename__ = "investment_assets"
+
+    asset_id: Mapped[str] = mapped_column(String, primary_key=True)
+    ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    asset_class: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    average_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    current_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    invested_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    current_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    monthly_income: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class AllocationTargetRecord(ProjectionBase):
+    __tablename__ = "allocation_targets"
+
+    target_id: Mapped[str] = mapped_column(String, primary_key=True)
+    asset_class: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    ideal_percentage: Mapped[int] = mapped_column(Integer, nullable=False)
+    current_value: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class MonthlyIncomeRecord(ProjectionBase):
+    __tablename__ = "monthly_income_records"
+
+    income_id: Mapped[str] = mapped_column(String, primary_key=True)
+    month: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    asset_class: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    asset_ticker: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class UnifiedMovementRecord(ProjectionBase):
@@ -870,7 +937,7 @@ class Projector:
         self,
         *,
         invoice_id: str,
-    ) -> list[dict[str, str | int | None]]:
+    ) -> list[dict[str, str | int | bool | None]]:
         with self._lock:
             self.bootstrap()
             with self._session_factory() as session:
@@ -1684,13 +1751,197 @@ class Projector:
                 description=row.description,
                 contribution_amount=row.contribution_amount,
                 dividend_amount=row.dividend_amount,
+                reinvested_dividend_amount=row.reinvested_dividend_amount,
                 cash_amount=row.cash_amount,
                 invested_amount=row.invested_amount,
                 cash_delta=row.cash_delta,
                 invested_delta=row.invested_delta,
+                asset_ticker=row.asset_ticker,
+                asset_class=row.asset_class,
+                category=row.category,
+                origin_account_id=row.origin_account_id,
+                destination_account_id=row.destination_account_id,
+                affects_cash=row.affects_cash,
+                affects_invested_capital=row.affects_invested_capital,
+                affects_income=row.affects_income,
             ).to_dict()
             for row in rows
         ]
+
+    def list_investment_snapshots(self) -> list[dict[str, str | int | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                rows = (
+                    session.query(InvestmentSnapshotRecord)
+                    .order_by(
+                        InvestmentSnapshotRecord.date.desc(),
+                        InvestmentSnapshotRecord.snapshot_id.desc(),
+                    )
+                    .all()
+                )
+
+        return [self._snapshot_to_dict(row) for row in rows]
+
+    def get_investment_snapshot_by_period(
+        self,
+        period: str,
+    ) -> dict[str, str | int | None] | None:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                row = (
+                    session.query(InvestmentSnapshotRecord)
+                    .filter(InvestmentSnapshotRecord.period == period)
+                    .order_by(
+                        InvestmentSnapshotRecord.date.desc(),
+                        InvestmentSnapshotRecord.snapshot_id.desc(),
+                    )
+                    .first()
+                )
+        if row is None:
+            return None
+        return self._snapshot_to_dict(row)
+
+    @staticmethod
+    def _snapshot_to_dict(row: InvestmentSnapshotRecord) -> dict[str, str | int | None]:
+        return {
+            "id": row.snapshot_id,
+            "date": row.date,
+            "period": row.period,
+            "total_patrimony": row.total_patrimony,
+            "applied_value": row.applied_value,
+            "gross_balance": row.gross_balance,
+            "free_cash": row.free_cash,
+            "accumulated_dividends": row.accumulated_dividends,
+            "monthly_contribution_target": row.monthly_contribution_target,
+            "fii_applied_value": row.fii_applied_value,
+            "fii_monthly_income": row.fii_monthly_income,
+            "stock_applied_value": row.stock_applied_value,
+            "stock_monthly_income": row.stock_monthly_income,
+            "total_monthly_income": row.total_monthly_income,
+            "reinvested_income": row.reinvested_income,
+            "notes": row.notes,
+        }
+
+    def list_investment_assets(self) -> list[dict[str, str | int | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                rows = (
+                    session.query(InvestmentAssetRecord)
+                    .order_by(InvestmentAssetRecord.asset_class.asc(), InvestmentAssetRecord.ticker.asc())
+                    .all()
+                )
+
+        return [
+            {
+                "id": row.asset_id,
+                "ticker": row.ticker,
+                "name": row.name,
+                "asset_class": row.asset_class,
+                "category": row.category,
+                "quantity": row.quantity,
+                "average_price": row.average_price,
+                "current_price": row.current_price,
+                "invested_value": row.invested_value,
+                "current_value": row.current_value,
+                "monthly_income": row.monthly_income,
+                "notes": row.notes,
+            }
+            for row in rows
+        ]
+
+    def list_allocation_targets(self) -> list[dict[str, str | int]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                rows = (
+                    session.query(AllocationTargetRecord)
+                    .order_by(AllocationTargetRecord.asset_class.asc())
+                    .all()
+                )
+
+        return [
+            {
+                "id": row.target_id,
+                "asset_class": row.asset_class,
+                "label": row.label,
+                "ideal_percentage": row.ideal_percentage,
+                "current_value": row.current_value,
+            }
+            for row in rows
+        ]
+
+    def list_monthly_income_records(
+        self,
+        *,
+        month_from: str | None = None,
+        month_to: str | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                query = session.query(MonthlyIncomeRecord)
+                if month_from is not None:
+                    query = query.filter(MonthlyIncomeRecord.month >= month_from)
+                if month_to is not None:
+                    query = query.filter(MonthlyIncomeRecord.month <= month_to)
+                rows = (
+                    query.order_by(MonthlyIncomeRecord.month.desc(), MonthlyIncomeRecord.income_id.desc())
+                    .all()
+                )
+
+        return [
+            {
+                "id": row.income_id,
+                "month": row.month,
+                "asset_class": row.asset_class,
+                "asset_ticker": row.asset_ticker,
+                "amount": row.amount,
+            }
+            for row in rows
+        ]
+
+    def get_current_investments(self) -> dict[str, object]:
+        snapshots = self.list_investment_snapshots()
+        assets = self.list_investment_assets()
+        targets = self.list_allocation_targets()
+        income_records = self.list_monthly_income_records()
+        latest_snapshot = snapshots[0] if snapshots else None
+
+        if latest_snapshot is None:
+            legacy = self.get_investment_overview(
+                view="yearly",
+                occurred_from="1900-01-01T00:00:00Z",
+                occurred_to="2999-12-31T23:59:59Z",
+            )
+            totals = legacy["totals"]  # type: ignore[index]
+            latest_snapshot = {
+                "id": "derived-current",
+                "date": "2999-12-31T23:59:59Z",
+                "period": "current",
+                "total_patrimony": int(totals["wealth"]),  # type: ignore[index]
+                "applied_value": int(totals["invested_balance"]),  # type: ignore[index]
+                "gross_balance": int(totals["invested_balance"]),  # type: ignore[index]
+                "free_cash": int(totals["cash_balance"]),  # type: ignore[index]
+                "accumulated_dividends": int(totals["dividends_accumulated"]),  # type: ignore[index]
+                "monthly_contribution_target": 0,
+                "fii_applied_value": 0,
+                "fii_monthly_income": 0,
+                "stock_applied_value": 0,
+                "stock_monthly_income": 0,
+                "total_monthly_income": 0,
+                "reinvested_income": 0,
+                "notes": None,
+            }
+
+        return {
+            "snapshot": latest_snapshot,
+            "assets": assets,
+            "allocation_targets": targets,
+            "income_records": income_records,
+        }
 
     def get_investment_overview(
         self,
@@ -1744,6 +1995,9 @@ class Projector:
                 current_dividends_accumulated = sum(
                     row.dividend_amount for row in movement_rows_all
                 )
+                current_dividends_reinvested = sum(
+                    row.reinvested_dividend_amount for row in movement_rows_all
+                )
                 tx_after_from: Sequence[TransactionProjectionRecord] = (
                     session.query(TransactionProjectionRecord)
                     .filter(TransactionProjectionRecord.status == "active")
@@ -1787,8 +2041,13 @@ class Projector:
 
         contribution_total = sum(row.contribution_amount for row in movements_in_range)
         dividend_total = sum(row.dividend_amount for row in movements_in_range)
+        reinvested_dividend_total = sum(
+            row.reinvested_dividend_amount for row in movements_in_range
+        )
         withdrawal_total = sum(
-            row.cash_amount for row in movements_in_range if row.type == "withdrawal"
+            row.cash_amount
+            for row in movements_in_range
+            if row.type in {"withdrawal", "resgate", "venda"}
         )
         bucket_keys = self._bucket_keys_for_range(
             view=view,
@@ -1812,6 +2071,7 @@ class Projector:
         movement_invested_by_bucket = {key: 0 for key in bucket_keys}
         contribution_by_bucket = {key: 0 for key in bucket_keys}
         dividend_by_bucket = {key: 0 for key in bucket_keys}
+        reinvested_dividend_by_bucket = {key: 0 for key in bucket_keys}
         withdrawal_by_bucket = {key: 0 for key in bucket_keys}
         for row in movements_in_range:
             bucket = self._bucket_key(view=view, occurred_at=row.occurred_at)
@@ -1821,7 +2081,8 @@ class Projector:
             movement_invested_by_bucket[bucket] += row.invested_delta
             contribution_by_bucket[bucket] += row.contribution_amount
             dividend_by_bucket[bucket] += row.dividend_amount
-            if row.type == "withdrawal":
+            reinvested_dividend_by_bucket[bucket] += row.reinvested_dividend_amount
+            if row.type in {"withdrawal", "resgate", "venda"}:
                 withdrawal_by_bucket[bucket] += row.cash_amount
 
         running_cash = cash_baseline
@@ -1846,6 +2107,7 @@ class Projector:
                     "bucket": bucket,
                     "contribution_total": contribution_by_bucket[bucket],
                     "dividend_total": dividend_by_bucket[bucket],
+                    "reinvested_dividend_total": reinvested_dividend_by_bucket[bucket],
                     "withdrawal_total": withdrawal_by_bucket[bucket],
                 }
             )
@@ -1861,7 +2123,12 @@ class Projector:
             monthly_income_total=monthly_income_total,
             goal_percent=goal_percent,
         )
-        realized = contribution_total + dividend_total
+        planned_contribution = target
+        dividend_available_balance = max(
+            current_dividends_accumulated - current_dividends_reinvested,
+            0,
+        )
+        realized = contribution_total
 
         return {
             "view": view,
@@ -1870,6 +2137,21 @@ class Projector:
             "totals": {
                 "contribution_total": contribution_total,
                 "dividend_total": dividend_total,
+                "reinvested_dividend_total": reinvested_dividend_total,
+                "external_contribution_total": contribution_total,
+                "dividend_received_total": dividend_total,
+                "dividend_reinvested_total": reinvested_dividend_total,
+                "dividend_available_balance": dividend_available_balance,
+                "reinvestment_rate": (
+                    0
+                    if dividend_total <= 0
+                    else int(round((reinvested_dividend_total * 10000) / dividend_total))
+                ),
+                "contribution_autonomy_rate": (
+                    0
+                    if planned_contribution <= 0
+                    else int(round((dividend_total * 10000) / planned_contribution))
+                ),
                 "withdrawal_total": withdrawal_total,
                 "invested_balance": range_end_invested_balance,
                 "cash_balance": range_end_cash_balance,
@@ -2435,6 +2717,22 @@ class Projector:
 
         if event.type == "InvestmentMovementRecorded":
             self._apply_investment_movement_recorded(session, event.payload)
+            return
+
+        if event.type == "InvestmentSnapshotSaved":
+            self._apply_investment_snapshot_saved(session, event.payload)
+            return
+
+        if event.type == "InvestmentAssetSaved":
+            self._apply_investment_asset_saved(session, event.payload)
+            return
+
+        if event.type == "AllocationTargetSaved":
+            self._apply_allocation_target_saved(session, event.payload)
+            return
+
+        if event.type == "MonthlyIncomeRecordSaved":
+            self._apply_monthly_income_record_saved(session, event.payload)
             return
 
         if event.type == "InvoicePaid":
@@ -3016,19 +3314,39 @@ class Projector:
             return
 
         cash_delta = int(payload["cash_delta"])
+        movement_type = str(payload["type"])
+        raw_dividend_amount = int(payload.get("dividend_amount", 0))
+        legacy_reinvested_dividend = (
+            raw_dividend_amount
+            if movement_type in {"contribution", "aporte"} and raw_dividend_amount > 0
+            else 0
+        )
+        dividend_amount = 0 if legacy_reinvested_dividend > 0 else raw_dividend_amount
+        reinvested_dividend_amount = int(
+            payload.get("reinvested_dividend_amount", legacy_reinvested_dividend)
+        )
         session.add(
             InvestmentMovementRecord(
                 movement_id=movement_id,
                 occurred_at=str(payload["occurred_at"]),
-                type=str(payload["type"]),
+                type=movement_type,
                 account_id=str(payload["account_id"]),
                 description=_optional_string(payload.get("description")),
                 contribution_amount=int(payload.get("contribution_amount", 0)),
-                dividend_amount=int(payload.get("dividend_amount", 0)),
+                dividend_amount=dividend_amount,
+                reinvested_dividend_amount=reinvested_dividend_amount,
                 cash_amount=int(payload.get("cash_amount", 0)),
                 invested_amount=int(payload.get("invested_amount", 0)),
                 cash_delta=cash_delta,
                 invested_delta=int(payload["invested_delta"]),
+                asset_ticker=_optional_string(payload.get("asset_ticker")),
+                asset_class=_optional_string(payload.get("asset_class")),
+                category=_optional_string(payload.get("category")),
+                origin_account_id=_optional_string(payload.get("origin_account_id")),
+                destination_account_id=_optional_string(payload.get("destination_account_id")),
+                affects_cash=bool(payload.get("affects_cash", True)),
+                affects_invested_capital=bool(payload.get("affects_invested_capital", True)),
+                affects_income=bool(payload.get("affects_income", False)),
             )
         )
         self._apply_balance_delta(
@@ -3036,11 +3354,13 @@ class Projector:
             account_id=str(payload["account_id"]),
             delta=cash_delta,
         )
-        _inv_type = str(payload["type"])
+        _inv_type = movement_type
         _inv_description = _optional_string(payload.get("description"))
         _inv_occurred_at = str(payload["occurred_at"])
+        _is_contribution = _inv_type in {"contribution", "aporte", "compra", "reinvestimento"}
+        _is_income = _inv_type in {"provento", "rendimento"}
         _inv_title = _inv_description or (
-            "Aporte" if _inv_type == "contribution" else "Resgate"
+            "Provento" if _is_income else "Aporte" if _is_contribution else "Resgate"
         )
         self._upsert_unified_movement(
             session,
@@ -3066,6 +3386,112 @@ class Projector:
             installment_total=None,
             source_event_type="InvestmentMovementRecorded",
         )
+
+    def _apply_investment_snapshot_saved(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        snapshot_id = str(payload["id"])
+        existing = session.get(InvestmentSnapshotRecord, snapshot_id)
+        values = {
+            "date": str(payload["date"]),
+            "period": str(payload["period"]),
+            "total_patrimony": int(payload["total_patrimony"]),
+            "applied_value": int(payload["applied_value"]),
+            "gross_balance": int(payload["gross_balance"]),
+            "free_cash": int(payload["free_cash"]),
+            "accumulated_dividends": int(payload["accumulated_dividends"]),
+            "monthly_contribution_target": int(payload["monthly_contribution_target"]),
+            "fii_applied_value": int(payload.get("fii_applied_value", 0)),
+            "fii_monthly_income": int(payload.get("fii_monthly_income", 0)),
+            "stock_applied_value": int(payload.get("stock_applied_value", 0)),
+            "stock_monthly_income": int(payload.get("stock_monthly_income", 0)),
+            "total_monthly_income": int(payload.get("total_monthly_income", 0)),
+            "reinvested_income": int(payload.get("reinvested_income", 0)),
+            "notes": _optional_string(payload.get("notes")),
+        }
+        if existing is None:
+            session.add(InvestmentSnapshotRecord(snapshot_id=snapshot_id, **values))
+            return
+        for key, value in values.items():
+            setattr(existing, key, value)
+
+    def _apply_investment_asset_saved(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        asset_id = str(payload["id"])
+        quantity = int(payload.get("quantity", 0))
+        average_price = int(payload.get("average_price", 0))
+        current_price = payload.get("current_price")
+        values = {
+            "ticker": str(payload["ticker"]).upper(),
+            "name": _optional_string(payload.get("name")),
+            "asset_class": str(payload["asset_class"]),
+            "category": str(payload["category"]),
+            "quantity": quantity,
+            "average_price": average_price,
+            "current_price": None if current_price is None else int(current_price),
+            "invested_value": int(payload.get("invested_value", quantity * average_price)),
+            "current_value": int(
+                payload.get(
+                    "current_value",
+                    quantity * (int(current_price) if current_price is not None else average_price),
+                )
+            ),
+            "monthly_income": (
+                None
+                if payload.get("monthly_income") is None
+                else int(payload.get("monthly_income", 0))
+            ),
+            "notes": _optional_string(payload.get("notes")),
+        }
+        existing = session.get(InvestmentAssetRecord, asset_id)
+        if existing is None:
+            session.add(InvestmentAssetRecord(asset_id=asset_id, **values))
+            return
+        for key, value in values.items():
+            setattr(existing, key, value)
+
+    def _apply_allocation_target_saved(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        target_id = str(payload["id"])
+        values = {
+            "asset_class": str(payload["asset_class"]),
+            "label": str(payload["label"]),
+            "ideal_percentage": int(payload["ideal_percentage"]),
+            "current_value": int(payload.get("current_value", 0)),
+        }
+        existing = session.get(AllocationTargetRecord, target_id)
+        if existing is None:
+            session.add(AllocationTargetRecord(target_id=target_id, **values))
+            return
+        for key, value in values.items():
+            setattr(existing, key, value)
+
+    def _apply_monthly_income_record_saved(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        income_id = str(payload["id"])
+        values = {
+            "month": str(payload["month"]),
+            "asset_class": str(payload["asset_class"]),
+            "asset_ticker": _optional_string(payload.get("asset_ticker")),
+            "amount": int(payload["amount"]),
+        }
+        existing = session.get(MonthlyIncomeRecord, income_id)
+        if existing is None:
+            session.add(MonthlyIncomeRecord(income_id=income_id, **values))
+            return
+        for key, value in values.items():
+            setattr(existing, key, value)
 
     def _apply_invoice_item(
         self,
@@ -4430,6 +4856,8 @@ class Projector:
         if category_id is not None and category_id not in {
             "investment_contribution",
             "investment_withdrawal",
+            "investment_income",
+            "investment_reinvestment",
         }:
             return []
 
@@ -4441,9 +4869,13 @@ class Projector:
         if account_id is not None:
             query = query.filter(InvestmentMovementRecord.account_id == account_id)
         if category_id == "investment_contribution":
-            query = query.filter(InvestmentMovementRecord.type == "contribution")
+            query = query.filter(InvestmentMovementRecord.type.in_(["contribution", "aporte", "compra"]))
+        if category_id == "investment_reinvestment":
+            query = query.filter(InvestmentMovementRecord.type == "reinvestimento")
+        if category_id == "investment_income":
+            query = query.filter(InvestmentMovementRecord.type.in_(["provento", "rendimento"]))
         if category_id == "investment_withdrawal":
-            query = query.filter(InvestmentMovementRecord.type == "withdrawal")
+            query = query.filter(InvestmentMovementRecord.type.in_(["withdrawal", "resgate", "venda"]))
         if text is not None:
             search = f"%{text}%"
             query = query.filter(
@@ -4460,15 +4892,21 @@ class Projector:
 
         ledger_rows: list[dict[str, str | int | None]] = []
         for row in rows:
-            movement_category = (
-                "investment_contribution"
-                if row.type == "contribution"
-                else "investment_withdrawal"
-            )
+            if row.type in {"provento", "rendimento"}:
+                movement_category = "investment_income"
+            elif row.type == "reinvestimento":
+                movement_category = "investment_reinvestment"
+            elif row.type in {"contribution", "aporte", "compra"}:
+                movement_category = "investment_contribution"
+            else:
+                movement_category = "investment_withdrawal"
             amount = abs(row.cash_delta)
-            if row.type == "contribution":
+            if row.type in {"contribution", "aporte", "compra", "reinvestimento"}:
                 ledger_source = f"account:{row.account_id}"
                 ledger_destination = f"investment_asset:{row.account_id}"
+            elif row.type in {"provento", "rendimento"}:
+                ledger_source = "investment_income"
+                ledger_destination = f"account:{row.account_id}"
             else:
                 ledger_source = f"investment_asset:{row.account_id}"
                 ledger_destination = f"account:{row.account_id}"
@@ -4818,12 +5256,79 @@ class Projector:
             "description",
             "contribution_amount",
             "dividend_amount",
+            "reinvested_dividend_amount",
             "cash_amount",
             "invested_amount",
             "cash_delta",
             "invested_delta",
+            "asset_ticker",
+            "asset_class",
+            "category",
+            "origin_account_id",
+            "destination_account_id",
+            "affects_cash",
+            "affects_invested_capital",
+            "affects_income",
         }
         if investment_columns != expected_investment_columns:
+            return True
+
+        expected_snapshot_columns = {
+            "snapshot_id",
+            "date",
+            "period",
+            "total_patrimony",
+            "applied_value",
+            "gross_balance",
+            "free_cash",
+            "accumulated_dividends",
+            "monthly_contribution_target",
+            "fii_applied_value",
+            "fii_monthly_income",
+            "stock_applied_value",
+            "stock_monthly_income",
+            "total_monthly_income",
+            "reinvested_income",
+            "notes",
+        }
+        if self._safe_column_names(inspector, "investment_snapshots") != expected_snapshot_columns:
+            return True
+
+        expected_asset_columns = {
+            "asset_id",
+            "ticker",
+            "name",
+            "asset_class",
+            "category",
+            "quantity",
+            "average_price",
+            "current_price",
+            "invested_value",
+            "current_value",
+            "monthly_income",
+            "notes",
+        }
+        if self._safe_column_names(inspector, "investment_assets") != expected_asset_columns:
+            return True
+
+        expected_target_columns = {
+            "target_id",
+            "asset_class",
+            "label",
+            "ideal_percentage",
+            "current_value",
+        }
+        if self._safe_column_names(inspector, "allocation_targets") != expected_target_columns:
+            return True
+
+        expected_income_record_columns = {
+            "income_id",
+            "month",
+            "asset_class",
+            "asset_ticker",
+            "amount",
+        }
+        if self._safe_column_names(inspector, "monthly_income_records") != expected_income_record_columns:
             return True
 
         if not self._unified_movements_schema_ok(inspector):

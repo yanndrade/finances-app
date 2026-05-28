@@ -20,18 +20,50 @@ export type InvestmentView =
   | "quarterly"
   | "yearly";
 
+export type InvestmentMovementType =
+  | "contribution"
+  | "withdrawal"
+  | "aporte"
+  | "resgate"
+  | "compra"
+  | "venda"
+  | "provento"
+  | "reinvestimento"
+  | "rendimento"
+  | "taxa"
+  | "ajuste"
+  | "transferencia";
+
+export type InvestmentAssetClass =
+  | "caixa"
+  | "renda_fixa"
+  | "fii"
+  | "acao"
+  | "exterior"
+  | "cripto"
+  | "outros";
+
 export type InvestmentMovementSummary = {
   movement_id: string;
   occurred_at: string;
-  type: "contribution" | "withdrawal";
+  type: InvestmentMovementType;
   account_id: string;
   description: string | null;
   contribution_amount: number;
   dividend_amount: number;
+  reinvested_dividend_amount?: number;
   cash_amount: number;
   invested_amount: number;
   cash_delta: number;
   invested_delta: number;
+  asset_ticker?: string | null;
+  asset_class?: string | null;
+  category?: string | null;
+  origin_account_id?: string | null;
+  destination_account_id?: string | null;
+  affects_cash?: boolean;
+  affects_invested_capital?: boolean;
+  affects_income?: boolean;
 };
 
 export type InvestmentWealthPoint = {
@@ -45,6 +77,7 @@ export type InvestmentTrendPoint = {
   bucket: string;
   contribution_total: number;
   dividend_total: number;
+  reinvested_dividend_total?: number;
   withdrawal_total: number;
 };
 
@@ -55,6 +88,13 @@ export type InvestmentOverview = {
   totals: {
     contribution_total: number;
     dividend_total: number;
+    reinvested_dividend_total?: number;
+    external_contribution_total?: number;
+    dividend_received_total?: number;
+    dividend_reinvested_total?: number;
+    dividend_available_balance?: number;
+    reinvestment_rate?: number;
+    contribution_autonomy_rate?: number;
     withdrawal_total: number;
     invested_balance: number;
     cash_balance: number;
@@ -71,6 +111,98 @@ export type InvestmentOverview = {
     wealth_evolution: InvestmentWealthPoint[];
     contribution_dividend_trend: InvestmentTrendPoint[];
   };
+};
+
+export type InvestmentSnapshot = {
+  id: string;
+  date: string;
+  period: string;
+  total_patrimony: number;
+  applied_value: number;
+  gross_balance: number;
+  free_cash: number;
+  accumulated_dividends: number;
+  monthly_contribution_target: number;
+  fii_applied_value: number;
+  fii_monthly_income: number;
+  stock_applied_value: number;
+  stock_monthly_income: number;
+  total_monthly_income: number;
+  reinvested_income: number;
+  notes: string | null;
+};
+
+export type SaveInvestmentSnapshotPayload = {
+  id: string;
+  date: string;
+  period: string;
+  total_patrimony: number;
+  applied_value: number;
+  gross_balance: number;
+  free_cash: number;
+  accumulated_dividends?: number;
+  monthly_contribution_target?: number;
+  fii_applied_value?: number;
+  fii_monthly_income?: number;
+  stock_applied_value?: number;
+  stock_monthly_income?: number;
+  total_monthly_income?: number;
+  reinvested_income?: number;
+  notes?: string | null;
+};
+
+export type SaveAllocationTargetPayload = {
+  id: string;
+  asset_class: string;
+  label: string;
+  ideal_percentage: number;
+  current_value?: number;
+};
+
+export type SaveMonthlyIncomeRecordPayload = {
+  id: string;
+  month: string;
+  asset_class: string;
+  asset_ticker?: string | null;
+  amount: number;
+};
+
+export type InvestmentAsset = {
+  id: string;
+  ticker: string;
+  name: string | null;
+  asset_class: InvestmentAssetClass;
+  category: string;
+  quantity: number;
+  average_price: number;
+  current_price: number | null;
+  invested_value: number;
+  current_value: number;
+  monthly_income: number | null;
+  notes: string | null;
+};
+
+export type AllocationTarget = {
+  id: string;
+  asset_class: string;
+  label: string;
+  ideal_percentage: number;
+  current_value: number;
+};
+
+export type MonthlyIncomeRecord = {
+  id: string;
+  month: string;
+  asset_class: string;
+  asset_ticker: string | null;
+  amount: number;
+};
+
+export type InvestmentCurrent = {
+  snapshot: InvestmentSnapshot;
+  assets: InvestmentAsset[];
+  allocation_targets: AllocationTarget[];
+  income_records: MonthlyIncomeRecord[];
 };
 
 export type CategoryBudgetSummary = {
@@ -385,14 +517,23 @@ export type ReimbursementSummary = {
 };
 
 export type InvestmentMovementPayload = {
-  type: "contribution" | "withdrawal";
+  type: InvestmentMovementType;
   accountId: string;
   occurredAt: string;
   description?: string;
   contributionAmountInCents?: number;
   dividendAmountInCents?: number;
+  reinvestedDividendAmountInCents?: number;
   cashAmountInCents?: number;
   investedAmountInCents?: number;
+  assetTicker?: string;
+  assetClass?: string;
+  category?: string;
+  originAccountId?: string;
+  destinationAccountId?: string;
+  affectsCash?: boolean;
+  affectsInvestedCapital?: boolean;
+  affectsIncome?: boolean;
 };
 
 export type CategoryBudgetPayload = {
@@ -1369,10 +1510,23 @@ export async function createInvestmentMovement(
       description: payload.description || undefined,
       contribution_amount: payload.contributionAmountInCents,
       dividend_amount: payload.dividendAmountInCents ?? 0,
+      reinvested_dividend_amount: payload.reinvestedDividendAmountInCents,
       cash_amount: payload.cashAmountInCents,
       invested_amount: payload.investedAmountInCents,
+      asset_ticker: payload.assetTicker,
+      asset_class: payload.assetClass,
+      category: payload.category,
+      origin_account_id: payload.originAccountId,
+      destination_account_id: payload.destinationAccountId,
+      affects_cash: payload.affectsCash,
+      affects_invested_capital: payload.affectsInvestedCapital,
+      affects_income: payload.affectsIncome,
     }),
   });
+}
+
+export async function fetchInvestmentCurrent(): Promise<InvestmentCurrent> {
+  return requestJson<InvestmentCurrent>("/api/investments/current");
 }
 
 export async function fetchInvestmentMovements(filters?: {
@@ -1409,6 +1563,75 @@ export async function fetchInvestmentOverview(
   const query = searchParams.toString();
 
   return requestJson<InvestmentOverview>(`/api/investments/overview?${query}`);
+}
+
+export async function fetchInvestmentHistory(
+  params: InvestmentOverviewParams,
+): Promise<InvestmentOverview> {
+  const searchParams = new URLSearchParams({
+    view: params.view,
+    from: params.from,
+    to: params.to,
+  });
+  if (typeof params.goalPercent === "number") {
+    searchParams.set("goal_percent", String(params.goalPercent));
+  }
+  const query = searchParams.toString();
+
+  return requestJson<InvestmentOverview>(`/api/investments/history?${query}`);
+}
+
+export async function fetchInvestmentSnapshotByPeriod(
+  period: string,
+): Promise<InvestmentSnapshot | null> {
+  try {
+    return await requestJson<InvestmentSnapshot>(`/api/investments/snapshots/${period}`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function saveInvestmentSnapshot(
+  payload: SaveInvestmentSnapshotPayload,
+): Promise<InvestmentSnapshot> {
+  return requestJson<InvestmentSnapshot>("/api/investments/snapshots", {
+    method: "POST",
+    body: JSON.stringify({
+      accumulated_dividends: 0,
+      monthly_contribution_target: 0,
+      fii_applied_value: 0,
+      fii_monthly_income: 0,
+      stock_applied_value: 0,
+      stock_monthly_income: 0,
+      total_monthly_income: 0,
+      reinvested_income: 0,
+      ...payload,
+    }),
+  });
+}
+
+export async function saveAllocationTarget(
+  payload: SaveAllocationTargetPayload,
+): Promise<AllocationTarget> {
+  return requestJson<AllocationTarget>("/api/investments/allocation-targets", {
+    method: "POST",
+    body: JSON.stringify({
+      current_value: 0,
+      ...payload,
+    }),
+  });
+}
+
+export async function saveMonthlyIncomeRecord(
+  payload: SaveMonthlyIncomeRecordPayload,
+): Promise<MonthlyIncomeRecord> {
+  return requestJson<MonthlyIncomeRecord>("/api/investments/income-records", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function fetchMovements(

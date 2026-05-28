@@ -23,6 +23,8 @@ function renderInvestmentsView(options?: {
 }) {
   const onOpenLedgerFiltered = options?.onOpenLedgerFiltered ?? vi.fn();
   const onOpenQuickAdd = options?.onOpenQuickAdd ?? vi.fn();
+  const onRefreshData = vi.fn();
+  const onError = vi.fn();
 
   render(
     <InvestmentsView
@@ -30,7 +32,30 @@ function renderInvestmentsView(options?: {
       loading={false}
       isSubmitting={false}
       movements={[]}
-      overview={{
+      current={{
+        snapshot: {
+          id: "snap-1",
+          date: "2026-03-31T23:59:59Z",
+          period: "2026-03",
+          total_patrimony: 83_00,
+          applied_value: 15_00,
+          gross_balance: 15_00,
+          free_cash: 68_00,
+          accumulated_dividends: 5_00,
+          monthly_contribution_target: 0,
+          fii_applied_value: 0,
+          fii_monthly_income: 0,
+          stock_applied_value: 0,
+          stock_monthly_income: 0,
+          total_monthly_income: 0,
+          reinvested_income: 0,
+          notes: null,
+        },
+        assets: [],
+        allocation_targets: [],
+        income_records: [],
+      }}
+      history={{
         view: "monthly",
         from: "2026-03-01T00:00:00Z",
         to: "2026-03-31T23:59:59Z",
@@ -70,34 +95,32 @@ function renderInvestmentsView(options?: {
       }}
       onOpenLedgerFiltered={onOpenLedgerFiltered}
       onOpenQuickAdd={onOpenQuickAdd}
-      onRangeChange={() => {}}
-      onViewChange={() => {}}
-      view="monthly"
-      fromDate="2026-03-01"
-      toDate="2026-03-31"
+      onRefreshData={onRefreshData}
+      onError={onError}
       uiDensity="compact"
     />,
   );
 
-  return { onOpenLedgerFiltered, onOpenQuickAdd };
+  return { onOpenLedgerFiltered, onOpenQuickAdd, onRefreshData, onError };
 }
 
 describe("InvestmentsView", () => {
-  it("uses internal tabs to separate panel, charts and movements", async () => {
-    const user = userEvent.setup();
-
+  it("renders four tabs without calculators or evolution labels", () => {
     renderInvestmentsView();
 
-    expect(screen.getByRole("tab", { name: /painel/i })).toHaveAttribute("data-state", "active");
-    expect(screen.getByRole("heading", { name: /composi/i })).toBeInTheDocument();
-    expect(screen.queryByText(/meta patrimonial/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /evolu.*patrim/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /painel/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /carteira/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /proventos/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /movimentos/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /calculadoras/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /evolu/i })).not.toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("tab", { name: /evolu/i }));
+  it("does not show manual/calculated/movement badges on summary cards", () => {
+    renderInvestmentsView();
 
-    expect(screen.getByRole("heading", { name: /evolu.*patrim/i })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /aporte/i })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /dividendos/i })).toBeInTheDocument();
+    expect(screen.queryByText(/^Manual$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Calculado$/)).not.toBeInTheDocument();
   });
 
   it("opens contribution quick add from the movements tab", async () => {
@@ -112,24 +135,13 @@ describe("InvestmentsView", () => {
     expect(onOpenQuickAdd).toHaveBeenCalledWith("investment_contribution");
   });
 
-  it("opens the filtered ledger shortcut from the movements tab", async () => {
+  it("does not expose reinvest button in movements header", async () => {
     const user = userEvent.setup();
-    const onOpenLedgerFiltered = vi.fn();
-
-    renderInvestmentsView({ onOpenLedgerFiltered });
+    renderInvestmentsView();
 
     await user.click(screen.getByRole("tab", { name: /movimentos/i }));
-    await user.click(screen.getByRole("button", { name: /ver movimentos no hist/i }));
 
-    expect(onOpenLedgerFiltered).toHaveBeenCalledWith(
-      expect.objectContaining({
-        period: "custom",
-        from: "2026-03-01",
-        to: "2026-03-31",
-        type: "investment",
-      }),
-      "2026-03",
-    );
+    expect(screen.queryByRole("button", { name: /reinvestir/i })).not.toBeInTheDocument();
   });
 
   it("disables movement actions when no cash account is available", async () => {

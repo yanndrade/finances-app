@@ -421,6 +421,7 @@ fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std:
         let stdout_log_file = startup_log_file.try_clone()?;
         let mut command = Command::new("uv");
         command
+            .env("UV_NO_MANAGED_PYTHON", "false")
             .arg("run")
             .arg("backend")
             .arg("--host")

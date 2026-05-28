@@ -377,6 +377,28 @@ describe("QuickAddComposer", () => {
     });
   });
 
+  it("submits investment contributions with new money and reinvested dividends", async () => {
+    installMatchMedia(false);
+    const user = userEvent.setup();
+    const { onSubmitInvestmentMovement } = renderComposer({ preset: "investment_contribution" });
+
+    await user.type(screen.getByLabelText(/dinheiro novo/i), "50000");
+    await user.type(screen.getByLabelText(/proventos reinvestidos/i), "456");
+    await user.click(screen.getByRole("button", { name: /^lançar$/i }));
+
+    await waitFor(() => {
+      expect(onSubmitInvestmentMovement).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "contribution",
+          contributionAmountInCents: 500_00,
+          reinvestedDividendAmountInCents: 4_56,
+          cashAmountInCents: 500_00,
+          investedAmountInCents: 504_56,
+        }),
+      );
+    });
+  });
+
   it("opens advanced mode on demand for optional fields", async () => {
     installMatchMedia(false);
     const user = userEvent.setup();

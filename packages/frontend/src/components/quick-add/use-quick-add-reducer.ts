@@ -2,10 +2,25 @@ export type EntryType = "expense" | "income" | "transfer" | "investment" | "recu
 export type ExpensePaymentMode = "PIX" | "CASH" | "OTHER" | "CARD";
 export type RecurringPaymentMode = "PIX" | "CASH" | "OTHER" | "CARD";
 export type TransferMode = "internal" | "invoice_payment";
-export type InvestmentMode = "contribution" | "withdrawal";
+export type InvestmentMode =
+  | "contribution"
+  | "purchase"
+  | "dividend"
+  | "reinvestment"
+  | "withdrawal"
+  | "sale";
+export type InvestmentOriginMode = "auto" | "manual";
 export type QuickAddValidationErrors = Partial<
   Record<
-    "amount" | "date" | "accountId" | "toAccountId" | "invoiceId" | "cardId" | "installments" | "dueDay",
+    | "amount"
+    | "date"
+    | "accountId"
+    | "toAccountId"
+    | "invoiceId"
+    | "cardId"
+    | "installments"
+    | "dueDay"
+    | "investmentOrigins",
     string
   >
 >;
@@ -23,7 +38,10 @@ export type QuickAddState = {
   toAccountId: string;
   installments: string;
   invoiceId: string;
+  investmentOriginMode: InvestmentOriginMode;
+  newMoneyAmount: string;
   dividendAmount: string;
+  reinvestedDividendAmount: string;
   investedReductionAmount: string;
   validationErrors: QuickAddValidationErrors;
 };
@@ -34,6 +52,7 @@ export type QuickAddAction =
   | { type: "recurringPaymentModeChanged"; mode: RecurringPaymentMode }
   | { type: "transferModeChanged"; mode: TransferMode }
   | { type: "investmentModeChanged"; mode: InvestmentMode }
+  | { type: "investmentOriginModeChanged"; mode: InvestmentOriginMode }
   | { type: "dateChanged"; date: string }
   | { type: "dueDayChanged"; dueDay: string }
   | { type: "accountChanged"; accountId: string }
@@ -41,7 +60,9 @@ export type QuickAddAction =
   | { type: "toAccountChanged"; accountId: string }
   | { type: "invoiceChanged"; invoiceId: string }
   | { type: "installmentsChanged"; installments: string }
+  | { type: "newMoneyAmountChanged"; amount: string }
   | { type: "dividendAmountChanged"; amount: string }
+  | { type: "reinvestedDividendAmountChanged"; amount: string }
   | { type: "investedReductionAmountChanged"; amount: string }
   | { type: "validationErrorsSet"; errors: QuickAddValidationErrors }
   | { type: "validationErrorsPatched"; errors: QuickAddValidationErrors }
@@ -64,7 +85,10 @@ export function createInitialQuickAddState(options: {
     toAccountId: "",
     installments: "1",
     invoiceId: "",
+    investmentOriginMode: "auto",
+    newMoneyAmount: "",
     dividendAmount: "",
+    reinvestedDividendAmount: "",
     investedReductionAmount: "",
     validationErrors: {},
   };
@@ -93,7 +117,10 @@ export function quickAddReducer(state: QuickAddState, action: QuickAddAction): Q
 
       if (action.entryType !== "investment") {
         nextState.investmentMode = "contribution";
+        nextState.investmentOriginMode = "auto";
+        nextState.newMoneyAmount = "";
         nextState.dividendAmount = "";
+        nextState.reinvestedDividendAmount = "";
         nextState.investedReductionAmount = "";
       }
 
@@ -147,6 +174,26 @@ export function quickAddReducer(state: QuickAddState, action: QuickAddAction): Q
       return {
         ...state,
         investmentMode: action.mode,
+        investmentOriginMode: "auto",
+        newMoneyAmount: "",
+        dividendAmount: "",
+        reinvestedDividendAmount: "",
+        investedReductionAmount: "",
+        validationErrors: {
+          ...state.validationErrors,
+          investmentOrigins: undefined,
+        },
+      };
+    case "investmentOriginModeChanged":
+      return {
+        ...state,
+        investmentOriginMode: action.mode,
+        newMoneyAmount: "",
+        reinvestedDividendAmount: "",
+        validationErrors: {
+          ...state.validationErrors,
+          investmentOrigins: undefined,
+        },
       };
     case "dateChanged":
       return {
@@ -183,10 +230,20 @@ export function quickAddReducer(state: QuickAddState, action: QuickAddAction): Q
         ...state,
         installments: action.installments,
       };
+    case "newMoneyAmountChanged":
+      return {
+        ...state,
+        newMoneyAmount: action.amount,
+      };
     case "dividendAmountChanged":
       return {
         ...state,
         dividendAmount: action.amount,
+      };
+    case "reinvestedDividendAmountChanged":
+      return {
+        ...state,
+        reinvestedDividendAmount: action.amount,
       };
     case "investedReductionAmountChanged":
       return {

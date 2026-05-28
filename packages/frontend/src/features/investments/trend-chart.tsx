@@ -21,6 +21,7 @@ type TrendPoint = {
   bucket: string;
   aporte: number;
   dividendos: number;
+  reinvestido: number;
 };
 
 type TrendChartProps = {
@@ -30,7 +31,7 @@ type TrendChartProps = {
 };
 
 function getChartHeight(pointCount: number): number {
-  if (pointCount <= 1) return 0;
+  if (pointCount <= 1) return 160;
   if (pointCount <= 3) return 160;
   return 224;
 }
@@ -41,8 +42,9 @@ const GRADIENT_DIVIDENDOS = "trendDividendosGradient";
 export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
   const [showContribution, setShowContribution] = useState(true);
   const [showDividend, setShowDividend] = useState(true);
+  const [showReinvested, setShowReinvested] = useState(true);
   const chartHeight = getChartHeight(data.length);
-  const hasEnoughData = data.length > 1;
+  const hasEnoughData = data.length > 0;
 
   return (
     <Card
@@ -54,12 +56,12 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
     >
       <CardHeader className="space-y-3 pb-2">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-foreground">Aportes e dividendos</h3>
+          <h3 className="text-sm font-semibold text-foreground">Dinheiro novo x proventos reinvestidos</h3>
         </div>
         <div className="flex flex-wrap gap-3">
           <ToggleLegend
             color={CHART_THEME.primary}
-            label="Aporte"
+            label="Dinheiro novo"
             active={showContribution}
             onToggle={() => setShowContribution((v) => !v)}
           />
@@ -68,6 +70,12 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
             label="Dividendos"
             active={showDividend}
             onToggle={() => setShowDividend((v) => !v)}
+          />
+          <ToggleLegend
+            color={CHART_THEME.transfer}
+            label="Reinvestidos"
+            active={showReinvested}
+            onToggle={() => setShowReinvested((v) => !v)}
           />
         </div>
       </CardHeader>
@@ -82,10 +90,10 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
               <BarChart2 className="h-6 w-6 text-muted-foreground" />
             </div>
             <p className="text-sm font-semibold text-foreground">
-              {data.length === 0 ? "Nenhum dado no período." : "Dados insuficientes para o gráfico."}
+              Nenhum dado no período.
             </p>
             <p className="text-xs text-muted-foreground">
-              Com mais períodos, a tendência aparecerá aqui.
+              Salve um fechamento ou movimento para visualizar aqui.
             </p>
           </div>
         ) : (
@@ -124,7 +132,7 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
                 <Tooltip
                   formatter={(value: number | undefined, name: string | undefined) => [
                     value !== undefined ? formatCurrency(value * 100) : "—",
-                    name === "aporte" ? "Aporte" : "Dividendos",
+                    name === "aporte" ? "Dinheiro novo" : name === "reinvestido" ? "Proventos reinvestidos" : "Proventos recebidos",
                   ]}
                   contentStyle={{
                     borderRadius: "12px",
@@ -140,7 +148,7 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
                     stroke={CHART_THEME.primary}
                     strokeWidth={2.5}
                     fill={`url(#${GRADIENT_APORTE})`}
-                    dot={false}
+                    dot={{ r: 3, strokeWidth: 0 }}
                     activeDot={{ r: 4, strokeWidth: 0 }}
                     isAnimationActive={!prefersReducedMotion()}
                   />
@@ -152,7 +160,19 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
                     stroke={CHART_THEME.income}
                     strokeWidth={2.5}
                     fill={`url(#${GRADIENT_DIVIDENDOS})`}
-                    dot={false}
+                    dot={{ r: 3, strokeWidth: 0 }}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                    isAnimationActive={!prefersReducedMotion()}
+                  />
+                )}
+                {showReinvested && (
+                  <Area
+                    type="monotone"
+                    dataKey="reinvestido"
+                    stroke={CHART_THEME.transfer}
+                    strokeWidth={2.5}
+                    fill="transparent"
+                    dot={{ r: 3, strokeWidth: 0 }}
                     activeDot={{ r: 4, strokeWidth: 0 }}
                     isAnimationActive={!prefersReducedMotion()}
                   />
