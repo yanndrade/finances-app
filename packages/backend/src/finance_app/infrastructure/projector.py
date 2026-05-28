@@ -2727,6 +2727,10 @@ class Projector:
             self._apply_investment_asset_saved(session, event.payload)
             return
 
+        if event.type == "InvestmentAssetDeleted":
+            self._apply_investment_asset_deleted(session, event.payload)
+            return
+
         if event.type == "AllocationTargetSaved":
             self._apply_allocation_target_saved(session, event.payload)
             return
@@ -3454,6 +3458,16 @@ class Projector:
             return
         for key, value in values.items():
             setattr(existing, key, value)
+
+    def _apply_investment_asset_deleted(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        asset_id = str(payload["id"])
+        existing = session.get(InvestmentAssetRecord, asset_id)
+        if existing is not None:
+            session.delete(existing)
 
     def _apply_allocation_target_saved(
         self,

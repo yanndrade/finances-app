@@ -1,9 +1,10 @@
 import { BarChart2 } from "lucide-react";
 import { useState } from "react";
 import {
-  Area,
-  AreaChart,
+  Bar,
   CartesianGrid,
+  ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -17,11 +18,13 @@ import type { UiDensity } from "../../lib/ui-density";
 import { cn } from "../../lib/utils";
 import { prefersReducedMotion } from "../../lib/motion";
 
-type TrendPoint = {
+export type TrendPoint = {
   bucket: string;
   aporte: number;
-  dividendos: number;
+  resgate: number;
+  provento: number;
   reinvestido: number;
+  ganhoCapital: number;
 };
 
 type TrendChartProps = {
@@ -30,19 +33,29 @@ type TrendChartProps = {
   uiDensity: UiDensity;
 };
 
+type ToggleKey = Exclude<keyof TrendPoint, "bucket">;
+
+const SERIES: Array<{ key: ToggleKey; label: string; color: string; kind: "bar" | "line" }> = [
+  { key: "aporte", label: "Aporte", color: CHART_THEME.primary, kind: "bar" },
+  { key: "resgate", label: "Resgate", color: CHART_THEME.expense, kind: "bar" },
+  { key: "provento", label: "Provento", color: CHART_THEME.income, kind: "bar" },
+  { key: "reinvestido", label: "Reinvestido", color: CHART_THEME.transfer, kind: "bar" },
+  { key: "ganhoCapital", label: "Ganho de capital", color: "#64748b", kind: "line" },
+];
+
 function getChartHeight(pointCount: number): number {
-  if (pointCount <= 1) return 160;
-  if (pointCount <= 3) return 160;
-  return 224;
+  if (pointCount <= 3) return 180;
+  return 260;
 }
 
-const GRADIENT_APORTE = "trendAporteGradient";
-const GRADIENT_DIVIDENDOS = "trendDividendosGradient";
-
 export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
-  const [showContribution, setShowContribution] = useState(true);
-  const [showDividend, setShowDividend] = useState(true);
-  const [showReinvested, setShowReinvested] = useState(true);
+  const [visible, setVisible] = useState<Record<ToggleKey, boolean>>({
+    aporte: true,
+    resgate: true,
+    provento: true,
+    reinvestido: true,
+    ganhoCapital: true,
+  });
   const chartHeight = getChartHeight(data.length);
   const hasEnoughData = data.length > 0;
 
@@ -56,27 +69,18 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
     >
       <CardHeader className="space-y-3 pb-2">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-foreground">Dinheiro novo x proventos reinvestidos</h3>
+          <h3 className="text-sm font-semibold text-foreground">Aportes versus proventos</h3>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <ToggleLegend
-            color={CHART_THEME.primary}
-            label="Dinheiro novo"
-            active={showContribution}
-            onToggle={() => setShowContribution((v) => !v)}
-          />
-          <ToggleLegend
-            color={CHART_THEME.income}
-            label="Dividendos"
-            active={showDividend}
-            onToggle={() => setShowDividend((v) => !v)}
-          />
-          <ToggleLegend
-            color={CHART_THEME.transfer}
-            label="Reinvestidos"
-            active={showReinvested}
-            onToggle={() => setShowReinvested((v) => !v)}
-          />
+        <div className="flex flex-wrap gap-2">
+          {SERIES.map((series) => (
+            <ToggleLegend
+              key={series.key}
+              color={series.color}
+              label={series.label}
+              active={visible[series.key]}
+              onToggle={() => setVisible((current) => ({ ...current, [series.key]: !current[series.key] }))}
+            />
+          ))}
         </div>
       </CardHeader>
       <CardContent className="min-w-0">
@@ -89,9 +93,7 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
             <div className="rounded-full bg-muted p-3">
               <BarChart2 className="h-6 w-6 text-muted-foreground" />
             </div>
-            <p className="text-sm font-semibold text-foreground">
-              Nenhum dado no período.
-            </p>
+            <p className="text-sm font-semibold text-foreground">Nenhum dado no período.</p>
             <p className="text-xs text-muted-foreground">
               Salve um fechamento ou movimento para visualizar aqui.
             </p>
@@ -99,29 +101,9 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
         ) : (
           <div style={{ height: chartHeight }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id={GRADIENT_APORTE} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={CHART_THEME.primary} stopOpacity={0.15} />
-                    <stop offset="95%" stopColor={CHART_THEME.primary} stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id={GRADIENT_DIVIDENDOS} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={CHART_THEME.income} stopOpacity={0.15} />
-                    <stop offset="95%" stopColor={CHART_THEME.income} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke={CHART_THEME.grid}
-                  opacity={0.4}
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="bucket"
-                  tick={{ fontSize: 10, fill: "#94a3b8" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
+              <ComposedChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} opacity={0.4} vertical={false} />
+                <XAxis dataKey="bucket" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                 <YAxis
                   tick={{ fontSize: 10, fill: "#94a3b8" }}
                   axisLine={false}
@@ -132,7 +114,7 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
                 <Tooltip
                   formatter={(value: number | undefined, name: string | undefined) => [
                     value !== undefined ? formatCurrency(value * 100) : "—",
-                    name === "aporte" ? "Dinheiro novo" : name === "reinvestido" ? "Proventos reinvestidos" : "Proventos recebidos",
+                    labelForSeries(name),
                   ]}
                   contentStyle={{
                     borderRadius: "12px",
@@ -141,49 +123,44 @@ export function TrendChart({ data, loading, uiDensity }: TrendChartProps) {
                     fontSize: 12,
                   }}
                 />
-                {showContribution && (
-                  <Area
-                    type="monotone"
-                    dataKey="aporte"
-                    stroke={CHART_THEME.primary}
-                    strokeWidth={2.5}
-                    fill={`url(#${GRADIENT_APORTE})`}
-                    dot={{ r: 3, strokeWidth: 0 }}
-                    activeDot={{ r: 4, strokeWidth: 0 }}
-                    isAnimationActive={!prefersReducedMotion()}
-                  />
-                )}
-                {showDividend && (
-                  <Area
-                    type="monotone"
-                    dataKey="dividendos"
-                    stroke={CHART_THEME.income}
-                    strokeWidth={2.5}
-                    fill={`url(#${GRADIENT_DIVIDENDOS})`}
-                    dot={{ r: 3, strokeWidth: 0 }}
-                    activeDot={{ r: 4, strokeWidth: 0 }}
-                    isAnimationActive={!prefersReducedMotion()}
-                  />
-                )}
-                {showReinvested && (
-                  <Area
-                    type="monotone"
-                    dataKey="reinvestido"
-                    stroke={CHART_THEME.transfer}
-                    strokeWidth={2.5}
-                    fill="transparent"
-                    dot={{ r: 3, strokeWidth: 0 }}
-                    activeDot={{ r: 4, strokeWidth: 0 }}
-                    isAnimationActive={!prefersReducedMotion()}
-                  />
-                )}
-              </AreaChart>
+                {SERIES.map((series) => {
+                  if (!visible[series.key]) return null;
+                  if (series.kind === "line") {
+                    return (
+                      <Line
+                        key={series.key}
+                        type="monotone"
+                        dataKey={series.key}
+                        stroke={series.color}
+                        strokeWidth={2.4}
+                        dot={{ r: 3, strokeWidth: 0 }}
+                        activeDot={{ r: 4, strokeWidth: 0 }}
+                        isAnimationActive={!prefersReducedMotion()}
+                      />
+                    );
+                  }
+                  return (
+                    <Bar
+                      key={series.key}
+                      dataKey={series.key}
+                      fill={series.color}
+                      radius={[5, 5, 0, 0]}
+                      maxBarSize={34}
+                      isAnimationActive={!prefersReducedMotion()}
+                    />
+                  );
+                })}
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
       </CardContent>
     </Card>
   );
+}
+
+function labelForSeries(name: string | undefined): string {
+  return SERIES.find((series) => series.key === name)?.label ?? name ?? "Valor";
 }
 
 function ToggleLegend({
@@ -198,24 +175,16 @@ function ToggleLegend({
   onToggle: () => void;
 }) {
   return (
-    <label
+    <button
+      type="button"
       className={cn(
-        "inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all select-none",
+        "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all",
         active ? "bg-muted text-foreground" : "bg-muted/40 text-muted-foreground",
       )}
+      onClick={onToggle}
     >
-      <input
-        type="checkbox"
-        aria-label={label}
-        checked={active}
-        onChange={onToggle}
-        className="sr-only"
-      />
-      <span
-        className="h-2 w-2 rounded-full transition-opacity"
-        style={{ backgroundColor: color, opacity: active ? 1 : 0.3 }}
-      />
+      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color, opacity: active ? 1 : 0.3 }} />
       {label}
-    </label>
+    </button>
   );
 }

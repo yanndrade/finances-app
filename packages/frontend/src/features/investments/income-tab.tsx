@@ -1,9 +1,19 @@
 import { Fragment, useMemo } from "react";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import type { MonthlyIncomeRecord } from "@/lib/api";
-import { chartClassNames } from "@/lib/chart-theme";
-import { formatCurrency, formatPercentBR } from "@/lib/format";
+import { CHART_THEME, chartClassNames } from "@/lib/chart-theme";
+import { formatCurrency, formatCurrencyCompact, formatPercentBR } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { buildAnnualIncomeMatrix } from "./investment-calculations";
@@ -17,8 +27,10 @@ type IncomeTabProps = {
   trendData: Array<{
     bucket: string;
     aporte: number;
-    dividendos: number;
+    resgate: number;
+    provento: number;
     reinvestido: number;
+    ganhoCapital: number;
   }>;
   loading: boolean;
   uiDensity: import("../../lib/ui-density").UiDensity;
@@ -26,6 +38,50 @@ type IncomeTabProps = {
 
 function isFutureMonth(year: string, month: string, referencePeriod: string): boolean {
   return `${year}-${month}` > referencePeriod;
+}
+
+type IncomeEvolutionRow = {
+  month: string;
+  proventos: number;
+  media3: number | null;
+  media12: number | null;
+  acumuladoAno: number;
+  yoy: number | null;
+};
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function buildIncomeEvolutionRows(matrix: ReturnType<typeof buildAnnualIncomeMatrix>): IncomeEvolutionRow[] {
+  const rows = matrix
+    .flatMap((yearRow) =>
+      yearRow.months.map((monthRow) => ({
+        month: `${yearRow.year}-${monthRow.month}`,
+        proventos: monthRow.amount,
+      })),
+    )
+    .sort((left, right) => left.month.localeCompare(right.month));
+  const amountByMonth = new Map(rows.map((row) => [row.month, row.proventos]));
+  const ytdByYear = new Map<string, number>();
+
+  return rows.map((row, index) => {
+    const year = row.month.slice(0, 4);
+    const month = row.month.slice(5, 7);
+    const previousYearAmount = amountByMonth.get(`${Number(year) - 1}-${month}`) ?? 0;
+    const ytd = (ytdByYear.get(year) ?? 0) + row.proventos;
+    ytdByYear.set(year, ytd);
+
+    return {
+      month: row.month,
+      proventos: row.proventos,
+      media3: average(rows.slice(Math.max(0, index - 2), index + 1).map((item) => item.proventos)),
+      media12: average(rows.slice(Math.max(0, index - 11), index + 1).map((item) => item.proventos)),
+      acumuladoAno: ytd,
+      yoy: previousYearAmount > 0 ? (row.proventos - previousYearAmount) / previousYearAmount : null,
+    };
+  });
 }
 
 export function IncomeTab({
@@ -39,13 +95,13 @@ export function IncomeTab({
     () => buildAnnualIncomeMatrix(incomeRecords, period.slice(0, 4)),
     [incomeRecords, period],
   );
-  const chartData = useMemo(() => {
-    return trendData.map((item) => ({ ...item }));
-  }, [trendData]);
+  const incomeEvolution = useMemo(() => buildIncomeEvolutionRows(matrix), [matrix]);
+  const chartData = useMemo(() => trendData.map((item) => ({ ...item })), [trendData]);
 
   return (
     <div className="space-y-5">
       <AnnualIncomeMatrix matrix={matrix} period={period} />
+      <IncomeEvolutionChart rows={incomeEvolution} loading={loading} uiDensity={uiDensity} />
       <IncomeGrowthTable matrix={matrix} period={period} />
       <Card className={cn("finance-card", chartClassNames.surface)}>
         <CardHeader>
@@ -56,8 +112,10 @@ export function IncomeTab({
             data={chartData.map((item) => ({
               bucket: item.bucket,
               aporte: item.aporte,
-              dividendos: item.dividendos,
+              resgate: item.resgate,
+              provento: item.provento,
               reinvestido: item.reinvestido,
+              ganhoCapital: item.ganhoCapital,
             }))}
             loading={loading}
             uiDensity={uiDensity}
@@ -66,6 +124,94 @@ export function IncomeTab({
       </Card>
     </div>
   );
+}
+
+function IncomeEvolutionChart({
+  rows,
+  loading,
+  uiDensity,
+}: {
+  rows: IncomeEvolutionRow[];
+  loading: boolean;
+  uiDensity: import("../../lib/ui-density").UiDensity;
+}) {
+  return (
+    <Card className={cn("finance-card", chartClassNames.surface)}>
+      <CardHeader>
+        <h3 className="text-sm font-semibold text-foreground">Evolução dos proventos</h3>
+        <p className="text-xs text-slate-400">
+          Proventos mensais, médias móveis, acumulado no ano e comparação ano contra ano.
+        </p>
+      </CardHeader>
+      <CardContent className="min-w-0">
+        {loading ? (
+          <div className="flex h-44 items-center justify-center">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="flex h-44 items-center justify-center text-sm text-slate-400">
+            Sem proventos registrados.
+          </div>
+        ) : (
+          <div className={uiDensity === "dense" ? "h-52" : "h-64"}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} opacity={0.4} vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <YAxis
+                  yAxisId="money"
+                  tick={{ fontSize: 10, fill: "#94a3b8" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(val: number) => formatCurrencyCompact(val)}
+                  width={64}
+                />
+                <YAxis
+                  yAxisId="percent"
+                  orientation="right"
+                  tick={{ fontSize: 10, fill: "#94a3b8" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(val: number) => formatPercentBR(val, 0)}
+                  width={48}
+                />
+                <Tooltip
+                  formatter={(value, name) => {
+                    const numericValue = typeof value === "number" ? value : null;
+                    if (numericValue === null) return ["Sem base", labelForIncomeEvolution(String(name))];
+                    if (name === "yoy") return [formatPercentBR(numericValue), labelForIncomeEvolution(String(name))];
+                    return [formatCurrency(numericValue), labelForIncomeEvolution(String(name))];
+                  }}
+                  contentStyle={{
+                    borderRadius: "12px",
+                    border: "none",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                    fontSize: 12,
+                  }}
+                />
+                <Bar yAxisId="money" dataKey="proventos" fill={CHART_THEME.income} radius={[5, 5, 0, 0]} maxBarSize={34} />
+                <Line yAxisId="money" type="monotone" dataKey="media3" stroke={CHART_THEME.primary} strokeWidth={2.4} dot={false} />
+                <Line yAxisId="money" type="monotone" dataKey="media12" stroke={CHART_THEME.transfer} strokeWidth={2.4} dot={false} />
+                <Line yAxisId="money" type="monotone" dataKey="acumuladoAno" stroke="#64748b" strokeWidth={2} dot={false} />
+                <Line yAxisId="percent" type="monotone" dataKey="yoy" stroke="#f59e0b" strokeWidth={2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function labelForIncomeEvolution(name: string | undefined): string {
+  const labels: Record<string, string> = {
+    proventos: "Proventos mensais",
+    media3: "Média móvel 3 meses",
+    media12: "Média móvel 12 meses",
+    acumuladoAno: "Acumulado no ano",
+    yoy: "Ano contra ano",
+  };
+  return name ? labels[name] ?? name : "Valor";
 }
 
 function AnnualIncomeMatrix({
@@ -162,12 +308,55 @@ function IncomeGrowthTable({
     return Math.round(yearRow.total / 12);
   }
 
+  const growthChartRows = matrix
+    .flatMap((yearRow) =>
+      yearRow.months
+        .filter((monthRow) => !isFutureMonth(yearRow.year, monthRow.month, period))
+        .map((monthRow) => ({
+          month: `${yearRow.year}-${monthRow.month}`,
+          proventos: monthRow.amount,
+          delta: monthlyDelta(yearRow.year, monthRow.month, monthRow.amount),
+        })),
+    )
+    .sort((left, right) => left.month.localeCompare(right.month));
+
   return (
     <Card className="finance-card">
       <CardHeader>
         <h3 className="text-sm font-semibold text-foreground">Crescimento dos proventos</h3>
       </CardHeader>
       <CardContent className="overflow-x-auto">
+        {growthChartRows.length > 0 && (
+          <div className="mb-5 h-44 min-w-[680px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={growthChartRows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} opacity={0.4} vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "#94a3b8" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(val: number) => formatCurrencyCompact(val)}
+                  width={64}
+                />
+                <Tooltip
+                  formatter={(value: number | undefined, name: string | undefined) => [
+                    value !== undefined ? formatCurrency(value) : "-",
+                    name === "delta" ? "Δ em R$" : "Proventos",
+                  ]}
+                  contentStyle={{
+                    borderRadius: "12px",
+                    border: "none",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                    fontSize: 12,
+                  }}
+                />
+                <Bar dataKey="proventos" fill={CHART_THEME.income} radius={[5, 5, 0, 0]} maxBarSize={34} />
+                <Line type="monotone" dataKey="delta" stroke={CHART_THEME.primary} strokeWidth={2.2} dot={{ r: 3, strokeWidth: 0 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
         <table className="w-full min-w-[980px] border-collapse text-sm">
           <tbody>
             {matrix.length === 0 ? (

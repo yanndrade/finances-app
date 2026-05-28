@@ -7,13 +7,17 @@ import { PercentInput } from "@/components/ui/percent-input";
 import type { QuickAddPreset } from "../../components/quick-add-composer";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
-import { saveAllocationTarget } from "../../lib/api";
+import { deleteInvestmentAsset, saveAllocationTarget, saveInvestmentAsset } from "../../lib/api";
 import type {
   AccountSummary,
   InvestmentCurrent,
+  InvestmentAsset,
+  InvestmentAssetClass,
   InvestmentMovementSummary,
   InvestmentOverview,
+  InvestmentSnapshot,
   MonthlyIncomeRecord,
   TransactionFilters,
 } from "../../lib/api";
@@ -50,12 +54,47 @@ const CHART_COLORS = [
   "#64748b",
 ];
 
+const FII_CATEGORIES = [
+  "Papel CDI",
+  "Papel IPCA",
+  "Papel híbrido",
+  "Logística/galpões",
+  "Shoppings",
+  "Lajes corporativas",
+  "Híbridos",
+  "Fiagros",
+  "Hedge",
+  "Residencial",
+  "Outros",
+] as const;
+
+const STOCK_PRIMARY_CATEGORIES = [
+  "Bancos",
+  "Energia elétrica",
+  "Saneamento",
+  "Seguridade/seguros",
+  "Telecomunicações",
+] as const;
+
+const STOCK_SECONDARY_CATEGORIES = [
+  "Commodities",
+  "Industrial",
+  "Varejo",
+  "Saúde",
+  "Tecnologia",
+  "Educação",
+  "Outros",
+] as const;
+
+const STOCK_CATEGORIES = [...STOCK_PRIMARY_CATEGORIES, ...STOCK_SECONDARY_CATEGORIES] as const;
+
 type InvestmentsViewProps = {
   accounts: AccountSummary[];
   loading: boolean;
   isSubmitting: boolean;
   current: InvestmentCurrent | null;
   history: InvestmentOverview | null;
+  snapshots?: InvestmentSnapshot[];
   movements: InvestmentMovementSummary[];
   onOpenLedgerFiltered: (
     filters: Partial<TransactionFilters>,
@@ -83,6 +122,14 @@ function currentValueFromBasisPoints(patrimony: number, basisPoints: number): nu
 
 function allocationTargetId(assetClass: string): string {
   return `allocation-target-${assetClass}`;
+}
+
+function assetIdFromTicker(ticker: string): string {
+  return `manual-${ticker.trim().toUpperCase().replace(/[^A-Z0-9]/g, "-")}`;
+}
+
+function normalizeCategory(value: string): string {
+  return value.trim().toLocaleLowerCase("pt-BR");
 }
 
 type KrakenDraftCache = {
@@ -121,6 +168,7 @@ export function InvestmentsView({
   isSubmitting,
   current,
   history,
+  snapshots = [],
   movements,
   onOpenLedgerFiltered,
   onOpenQuickAdd,
@@ -337,48 +385,68 @@ export function InvestmentsView({
     }
   }
 
-  const wealthData = useMemo(
-    () =>
-      (history?.series.wealth_evolution ?? []).map((item) => ({
-        bucket: item.bucket,
-        patrimonio: item.wealth / 100,
-      })),
-    [history],
-  );
+  const wealthData = useMemo(() => {
+    const source = snapshots.length > 0 ? snapshots : snapshot ? [snapshot] : [];
+    return [...source]
+      .sort((left, right) => left.period.localeCompare(right.period) || left.date.localeCompare(right.date))
+      .map((item) => ({
+        bucket: item.period,
+        date: item.date,
+        patrimonio: item.total_patrimony || item.gross_balance,
+        valorAplicado: item.applied_value,
+        saldoBruto: item.gross_balance,
+        caixaLivre: item.free_cash,
+        proventosAcumulados: item.accumulated_dividends,
+      }));
+  }, [snapshots, snapshot]);
+
+  const capitalGainByMonth = useMemo(() => {
+    const byMonth = new Map<string, number>();
+    for (const item of wealthData) {
+      byMonth.set(item.bucket, Math.max(item.saldoBruto - item.valorAplicado, 0));
+    }
+    return byMonth;
+  }, [wealthData]);
 
   const trendData = useMemo(() => {
-    const byBucket = new Map<string, { bucket: string; aporte: number; dividendos: number; reinvestido: number }>();
-    for (const item of history?.series.contribution_dividend_trend ?? []) {
-      byBucket.set(item.bucket, {
-        bucket: item.bucket,
-        aporte: item.contribution_total / 100,
-        dividendos: item.dividend_total / 100,
-        reinvestido: (item.reinvested_dividend_total ?? 0) / 100,
-      });
+    const byBucket = new Map<string, {
+      bucket: string;
+      aporte: number;
+      resgate: number;
+      provento: number;
+      reinvestido: number;
+      ganhoCapital: number;
+    }>();
+
+    function ensureBucket(month: string) {
+      const current = byBucket.get(month) ?? {
+        bucket: month,
+        aporte: 0,
+        resgate: 0,
+        provento: 0,
+        reinvestido: 0,
+        ganhoCapital: 0,
+      };
+      byBucket.set(month, current);
+      return current;
     }
 
-    const movementContributionByMonth = new Map<string, number>();
-    const movementReinvestedByMonth = new Map<string, number>();
     for (const movement of movements) {
       const month = movement.occurred_at.slice(0, 7);
-      movementContributionByMonth.set(
-        month,
-        (movementContributionByMonth.get(month) ?? 0) + movement.contribution_amount,
-      );
-      movementReinvestedByMonth.set(
-        month,
-        (movementReinvestedByMonth.get(month) ?? 0) + (movement.reinvested_dividend_amount ?? 0),
-      );
-    }
-    for (const [month, amount] of movementContributionByMonth) {
-      const current = byBucket.get(month) ?? { bucket: month, aporte: 0, dividendos: 0, reinvestido: 0 };
-      current.aporte = Math.max(current.aporte, amount / 100);
-      byBucket.set(month, current);
-    }
-    for (const [month, amount] of movementReinvestedByMonth) {
-      const current = byBucket.get(month) ?? { bucket: month, aporte: 0, dividendos: 0, reinvestido: 0 };
-      current.reinvestido = Math.max(current.reinvestido, amount / 100);
-      byBucket.set(month, current);
+      const current = ensureBucket(month);
+      if (["contribution", "aporte", "compra"].includes(movement.type)) {
+        current.aporte += movement.contribution_amount / 100;
+      }
+      if (["withdrawal", "resgate", "venda"].includes(movement.type)) {
+        current.resgate += (movement.cash_amount || Math.max(-movement.invested_delta, 0)) / 100;
+      }
+      if (["provento"].includes(movement.type)) {
+        current.provento += movement.dividend_amount / 100;
+      }
+      if (["rendimento"].includes(movement.type)) {
+        current.provento += movement.dividend_amount / 100;
+      }
+      current.reinvestido += (movement.reinvested_dividend_amount ?? 0) / 100;
     }
 
     const incomeByMonth = new Map<string, number>();
@@ -386,18 +454,28 @@ export function InvestmentsView({
       incomeByMonth.set(record.month, (incomeByMonth.get(record.month) ?? 0) + record.amount);
     }
     for (const [month, amount] of incomeByMonth) {
-      const current = byBucket.get(month) ?? { bucket: month, aporte: 0, dividendos: 0, reinvestido: 0 };
-      current.dividendos = Math.max(current.dividendos, amount / 100);
-      byBucket.set(month, current);
+      const current = ensureBucket(month);
+      current.provento = Math.max(current.provento, amount / 100);
     }
     if (reinvestedIncome > 0) {
-      const current = byBucket.get(period) ?? { bucket: period, aporte: 0, dividendos: 0, reinvestido: 0 };
+      const current = ensureBucket(period);
       current.reinvestido = Math.max(current.reinvestido, reinvestedIncome / 100);
-      byBucket.set(period, current);
+    }
+    for (const [month, amount] of capitalGainByMonth) {
+      const current = ensureBucket(month);
+      current.ganhoCapital = amount / 100;
     }
 
-    return [...byBucket.values()].sort((left, right) => left.bucket.localeCompare(right.bucket));
-  }, [effectiveIncomeRecords, history, movements, period, reinvestedIncome]);
+    return [...byBucket.values()]
+      .filter((item) =>
+        item.aporte > 0 ||
+        item.resgate > 0 ||
+        item.provento > 0 ||
+        item.reinvestido > 0 ||
+        item.ganhoCapital > 0,
+      )
+      .sort((left, right) => left.bucket.localeCompare(right.bucket));
+  }, [capitalGainByMonth, effectiveIncomeRecords, movements, period, reinvestedIncome]);
 
   const classChartData = allocationRows
     .filter((row) => row.currentValue > 0)
@@ -508,6 +586,11 @@ export function InvestmentsView({
 
         <TabsContent value="wallet" className="space-y-5 outline-none">
           <AllocationSection rows={allocationRows} chartData={classChartData} cashReserve={cashReserve} />
+          <DiversificationControl
+            assets={assets}
+            onChanged={onRefreshData}
+            onError={onError}
+          />
         </TabsContent>
 
         <TabsContent value="income" className="space-y-5 outline-none">
@@ -756,5 +839,209 @@ function AllocationSection({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function DiversificationControl({
+  assets,
+  onChanged,
+  onError,
+}: {
+  assets: InvestmentAsset[];
+  onChanged: () => void;
+  onError: (message: string) => void;
+}) {
+  const [ticker, setTicker] = useState("");
+  const [assetClass, setAssetClass] = useState<Extract<InvestmentAssetClass, "fii" | "acao">>("fii");
+  const [category, setCategory] = useState<string>(FII_CATEGORIES[0]);
+  const [saving, setSaving] = useState(false);
+  const categories = assetClass === "fii" ? FII_CATEGORIES : STOCK_CATEGORIES;
+
+  useEffect(() => {
+    setCategory(assetClass === "fii" ? FII_CATEGORIES[0] : STOCK_CATEGORIES[0]);
+  }, [assetClass]);
+
+  async function handleSaveAsset() {
+    const normalizedTicker = ticker.trim().toUpperCase();
+    if (!normalizedTicker) {
+      onError("Informe o ticker do ativo.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveInvestmentAsset({
+        id: assetIdFromTicker(normalizedTicker),
+        ticker: normalizedTicker,
+        name: null,
+        asset_class: assetClass,
+        category,
+        notes: "Controle manual de diversificação",
+      });
+      setTicker("");
+      onChanged();
+    } catch (error) {
+      onError(getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemoveAsset(assetId: string) {
+    setSaving(true);
+    try {
+      await deleteInvestmentAsset(assetId);
+      onChanged();
+    } catch (error) {
+      onError(getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className={cn("finance-card", chartClassNames.surface)}>
+      <CardHeader className="space-y-2">
+        <h3 className="text-sm font-semibold text-foreground">Diversificação por ativos</h3>
+        <p className="text-xs text-slate-400">
+          Cadastre só o ticker e a categoria. Sem preço médio, quantidade ou cotação.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3 md:grid-cols-[1fr_11rem_14rem_auto]">
+          <label className="space-y-1.5">
+            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Ticker</span>
+            <Input
+              value={ticker}
+              onChange={(event) => setTicker(event.target.value.toUpperCase())}
+              placeholder="MXRF11"
+            />
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Tipo</span>
+            <select
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={assetClass}
+              onChange={(event) => setAssetClass(event.target.value as "fii" | "acao")}
+            >
+              <option value="fii">FII</option>
+              <option value="acao">Ação</option>
+            </select>
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Categoria</span>
+            <select
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              {categories.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-end">
+            <Button type="button" className="w-full" disabled={saving} onClick={() => void handleSaveAsset()}>
+              {saving ? "Salvando..." : "Adicionar"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-2">
+          <CategoryBoard
+            title="FIIs"
+            subtitle="Subdivisão da carteira imobiliária"
+            categories={FII_CATEGORIES}
+            assets={assets.filter((asset) => asset.asset_class === "fii")}
+            onRemove={handleRemoveAsset}
+            saving={saving}
+          />
+          <CategoryBoard
+            title="Ações"
+            subtitle="BESST primeiro, secundárias depois"
+            categories={STOCK_CATEGORIES}
+            primaryCategories={STOCK_PRIMARY_CATEGORIES}
+            assets={assets.filter((asset) => asset.asset_class === "acao")}
+            onRemove={handleRemoveAsset}
+            saving={saving}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CategoryBoard({
+  title,
+  subtitle,
+  categories,
+  primaryCategories = [],
+  assets,
+  onRemove,
+  saving,
+}: {
+  title: string;
+  subtitle: string;
+  categories: readonly string[];
+  primaryCategories?: readonly string[];
+  assets: InvestmentAsset[];
+  onRemove: (assetId: string) => Promise<void>;
+  saving: boolean;
+}) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h4 className="text-sm font-black text-slate-900">{title}</h4>
+        <p className="text-xs text-slate-400">{subtitle}</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {categories.map((category) => {
+          const categoryAssets = assets
+            .filter((asset) => normalizeCategory(asset.category) === normalizeCategory(category))
+            .sort((left, right) => left.ticker.localeCompare(right.ticker));
+          const isPrimary = primaryCategories.some((item) => normalizeCategory(item) === normalizeCategory(category));
+
+          return (
+            <div
+              key={`${title}-${category}`}
+              className={cn(
+                "min-h-24 rounded-2xl border bg-white p-3",
+                isPrimary ? "border-primary/20 bg-primary/5" : "border-slate-100",
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-black uppercase tracking-widest text-slate-400">{category}</p>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                  {categoryAssets.length}
+                </span>
+              </div>
+              {categoryAssets.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-300">vazio</p>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {categoryAssets.map((asset) => (
+                    <span
+                      key={asset.id}
+                      className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-black text-white"
+                    >
+                      {asset.ticker}
+                      <button
+                        type="button"
+                        className="ml-1 text-white/60 hover:text-white"
+                        disabled={saving}
+                        onClick={() => void onRemove(asset.id)}
+                        aria-label={`Remover ${asset.ticker}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

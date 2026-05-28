@@ -284,6 +284,7 @@ export function App() {
     pendingExpenses,
     investmentHistory,
     investmentCurrent,
+    investmentSnapshots,
     investmentMovements,
     transactionFilters,
     loading: isDataLoading,
@@ -1174,6 +1175,7 @@ export function App() {
             isSubmitting={isSubmitting}
             history={investmentHistory}
             current={investmentCurrent}
+            snapshots={investmentSnapshots}
             movements={investmentMovements}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={(preset) => openQuickAdd(preset)}

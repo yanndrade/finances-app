@@ -187,6 +187,10 @@ class InvestmentService:
         assets = self._projector.list_investment_assets()
         return next(item for item in assets if item["id"] == payload["id"])
 
+    def delete_asset(self, asset_id: str) -> dict[str, str]:
+        self._append_upsert_event("InvestmentAssetDeleted", {"id": asset_id})
+        return {"id": asset_id}
+
     def save_allocation_target(self, payload: dict[str, object]) -> dict[str, str | int]:
         self._append_upsert_event("AllocationTargetSaved", payload)
         targets = self._projector.list_allocation_targets()

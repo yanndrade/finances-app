@@ -167,6 +167,21 @@ export type SaveMonthlyIncomeRecordPayload = {
   amount: number;
 };
 
+export type SaveInvestmentAssetPayload = {
+  id: string;
+  ticker: string;
+  name?: string | null;
+  asset_class: InvestmentAssetClass;
+  category: string;
+  quantity?: number;
+  average_price?: number;
+  current_price?: number | null;
+  invested_value?: number | null;
+  current_value?: number | null;
+  monthly_income?: number | null;
+  notes?: string | null;
+};
+
 export type InvestmentAsset = {
   id: string;
   ticker: string;
@@ -1594,6 +1609,10 @@ export async function fetchInvestmentSnapshotByPeriod(
   }
 }
 
+export async function fetchInvestmentSnapshots(): Promise<InvestmentSnapshot[]> {
+  return requestJson<InvestmentSnapshot[]>("/api/investments/snapshots");
+}
+
 export async function saveInvestmentSnapshot(
   payload: SaveInvestmentSnapshotPayload,
 ): Promise<InvestmentSnapshot> {
@@ -1631,6 +1650,28 @@ export async function saveMonthlyIncomeRecord(
   return requestJson<MonthlyIncomeRecord>("/api/investments/income-records", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function saveInvestmentAsset(
+  payload: SaveInvestmentAssetPayload,
+): Promise<InvestmentAsset> {
+  return requestJson<InvestmentAsset>("/api/investments/assets", {
+    method: "POST",
+    body: JSON.stringify({
+      quantity: 0,
+      average_price: 0,
+      invested_value: 0,
+      current_value: 0,
+      monthly_income: null,
+      ...payload,
+    }),
+  });
+}
+
+export async function deleteInvestmentAsset(assetId: string): Promise<{ id: string }> {
+  return requestJson<{ id: string }>(`/api/investments/assets/${encodeURIComponent(assetId)}`, {
+    method: "DELETE",
   });
 }
 

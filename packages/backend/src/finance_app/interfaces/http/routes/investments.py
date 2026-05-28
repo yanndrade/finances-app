@@ -207,6 +207,10 @@ def build_investments_router(investment_service: InvestmentService) -> APIRouter
             data["current_value"] = int(data["quantity"]) * int(price)
         return investment_service.save_asset(data)
 
+    @router.delete("/api/investments/assets/{asset_id}")
+    def delete_investment_asset(asset_id: str) -> dict[str, str]:
+        return investment_service.delete_asset(asset_id)
+
     @router.get("/api/investments/allocation-targets")
     def list_allocation_targets() -> list[dict[str, str | int]]:
         return investment_service.list_allocation_targets()

@@ -8,6 +8,7 @@ import {
   fetchInvestmentMovements,
   fetchInvestmentCurrent,
   fetchInvestmentHistory,
+  fetchInvestmentSnapshots,
   fetchInvestmentOverview,
   fetchInvoices,
   fetchPendings,
@@ -19,6 +20,7 @@ import {
   type InvestmentMovementSummary,
   type InvestmentCurrent,
   type InvestmentOverview,
+  type InvestmentSnapshot,
   type InvestmentView,
   type InvoiceSummary,
   type PendingExpenseSummary,
@@ -76,6 +78,7 @@ export function useAppDataOrchestrator({
   const [pendingExpenses, setPendingExpenses] = useState<PendingExpenseSummary[]>([]);
   const [investmentHistory, setInvestmentHistory] = useState<InvestmentOverview | null>(null);
   const [investmentCurrent, setInvestmentCurrent] = useState<InvestmentCurrent | null>(null);
+  const [investmentSnapshots, setInvestmentSnapshots] = useState<InvestmentSnapshot[]>([]);
   const [investmentMovements, setInvestmentMovements] = useState<InvestmentMovementSummary[]>([]);
   const [investmentView, setInvestmentView] = useState<InvestmentView>(initialInvestmentView);
   const [investmentFromDate, setInvestmentFromDate] = useState(initialInvestmentFromDate);
@@ -113,6 +116,7 @@ export function useAppDataOrchestrator({
           nextPendingExpenses,
           nextDashboardInvestmentOverview,
           nextInvestmentCurrent,
+          nextInvestmentSnapshots,
           nextInvestmentHistory,
           nextInvestmentMovements,
         ] = await Promise.all([
@@ -130,6 +134,7 @@ export function useAppDataOrchestrator({
             goalPercent: activeGoalPercent,
           }),
           fetchInvestmentCurrent(),
+          fetchInvestmentSnapshots(),
           fetchInvestmentHistory({
             view: activeInvestmentView,
             from: toIsoFromDate(activeFromDate, false),
@@ -155,6 +160,7 @@ export function useAppDataOrchestrator({
         setPendingExpenses(nextPendingExpenses);
         setDashboardInvestmentOverview(nextDashboardInvestmentOverview);
         setInvestmentCurrent(nextInvestmentCurrent);
+        setInvestmentSnapshots(nextInvestmentSnapshots);
         setInvestmentHistory(nextInvestmentHistory);
         setInvestmentMovements(nextInvestmentMovements);
         setTransactionFilters(filters);
@@ -196,6 +202,7 @@ export function useAppDataOrchestrator({
     pendingExpenses,
     investmentHistory,
     investmentCurrent,
+    investmentSnapshots,
     investmentMovements,
     investmentView,
     investmentFromDate,
