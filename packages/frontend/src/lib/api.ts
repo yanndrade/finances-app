@@ -551,6 +551,8 @@ export type InvestmentMovementPayload = {
   affectsIncome?: boolean;
 };
 
+export type InvestmentMovementUpdatePayload = Partial<InvestmentMovementPayload>;
+
 export type CategoryBudgetPayload = {
   categoryId: string;
   month: string;
@@ -1538,6 +1540,59 @@ export async function createInvestmentMovement(
       affects_income: payload.affectsIncome,
     }),
   });
+}
+
+export async function updateInvestmentMovement(
+  movementId: string,
+  payload: InvestmentMovementUpdatePayload,
+): Promise<InvestmentMovementSummary> {
+  const body = {
+    ...(payload.occurredAt !== undefined
+      ? { occurred_at: normalizeTimestampForApi(payload.occurredAt) }
+      : {}),
+    ...(payload.type !== undefined ? { type: payload.type } : {}),
+    ...(payload.accountId !== undefined ? { account_id: payload.accountId } : {}),
+    ...(payload.description !== undefined
+      ? { description: payload.description || null }
+      : {}),
+    ...(payload.contributionAmountInCents !== undefined
+      ? { contribution_amount: payload.contributionAmountInCents }
+      : {}),
+    ...(payload.dividendAmountInCents !== undefined
+      ? { dividend_amount: payload.dividendAmountInCents }
+      : {}),
+    ...(payload.reinvestedDividendAmountInCents !== undefined
+      ? { reinvested_dividend_amount: payload.reinvestedDividendAmountInCents }
+      : {}),
+    ...(payload.cashAmountInCents !== undefined
+      ? { cash_amount: payload.cashAmountInCents }
+      : {}),
+    ...(payload.investedAmountInCents !== undefined
+      ? { invested_amount: payload.investedAmountInCents }
+      : {}),
+    ...(payload.assetTicker !== undefined ? { asset_ticker: payload.assetTicker } : {}),
+    ...(payload.assetClass !== undefined ? { asset_class: payload.assetClass } : {}),
+    ...(payload.category !== undefined ? { category: payload.category } : {}),
+    ...(payload.originAccountId !== undefined
+      ? { origin_account_id: payload.originAccountId }
+      : {}),
+    ...(payload.destinationAccountId !== undefined
+      ? { destination_account_id: payload.destinationAccountId }
+      : {}),
+    ...(payload.affectsCash !== undefined ? { affects_cash: payload.affectsCash } : {}),
+    ...(payload.affectsInvestedCapital !== undefined
+      ? { affects_invested_capital: payload.affectsInvestedCapital }
+      : {}),
+    ...(payload.affectsIncome !== undefined ? { affects_income: payload.affectsIncome } : {}),
+  };
+
+  return requestJson<InvestmentMovementSummary>(
+    `/api/investments/movements/${encodeURIComponent(movementId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 export async function fetchInvestmentCurrent(): Promise<InvestmentCurrent> {

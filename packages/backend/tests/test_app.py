@@ -5075,6 +5075,63 @@ def test_investment_endpoints_record_movements_and_preserve_budget_semantics(
     assert accounts_response.json()[0]["current_balance"] == 68_00
 
 
+def test_investment_movement_update_changes_account_and_rebalances_cash(
+    tmp_path,
+) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
+        event_database_url=f"sqlite:///{(tmp_path / 'events.db').as_posix()}",
+    )
+    client = TestClient(app)
+    _create_account(client, "acc-1", "Wrong Wallet", "wallet", 100_00)
+    _create_account(client, "acc-2", "Right Wallet", "wallet", 200_00)
+
+    create_response = client.post(
+        "/api/investments/movements",
+        json={
+            "id": "inv-1",
+            "occurred_at": "2026-03-10T12:00:00Z",
+            "type": "contribution",
+            "account_id": "acc-1",
+            "description": "Aporte mensal",
+            "contribution_amount": 30_00,
+        },
+    )
+    update_response = client.patch(
+        "/api/investments/movements/inv-1",
+        json={
+            "account_id": "acc-2",
+            "description": "Aporte corrigido",
+        },
+    )
+    accounts_response = client.get("/api/accounts")
+
+    assert create_response.status_code == 201
+    assert update_response.status_code == 200
+    assert update_response.json() == {
+        "movement_id": "inv-1",
+        "occurred_at": "2026-03-10T12:00:00Z",
+        "type": "contribution",
+        "account_id": "acc-2",
+        "description": "Aporte corrigido",
+        "contribution_amount": 30_00,
+        "dividend_amount": 0,
+        "reinvested_dividend_amount": 0,
+        "cash_amount": 30_00,
+        "invested_amount": 30_00,
+        "cash_delta": -30_00,
+        "invested_delta": 30_00,
+    }
+    balances_by_account = {
+        account["account_id"]: account["current_balance"]
+        for account in accounts_response.json()
+    }
+    assert balances_by_account == {
+        "acc-1": 100_00,
+        "acc-2": 170_00,
+    }
+
+
 def test_investment_overview_goal_percent_uses_requested_percentage_and_zero_income_month(
     tmp_path,
 ) -> None:

@@ -38,6 +38,10 @@ class InvestmentMovementAlreadyExistsError(InvestmentServiceError):
     pass
 
 
+class InvestmentMovementNotFoundError(InvestmentServiceError):
+    pass
+
+
 class InvalidInvestmentAccountError(InvestmentServiceError):
     pass
 
@@ -259,12 +263,148 @@ class InvestmentService:
             affects_cash=affects_cash,
             affects_invested_capital=affects_invested_capital,
             affects_income=affects_income,
+            exclude_movement_id_from_dividends=None,
         )
 
         self._event_store.create_schema()
         self._event_store.append(
             NewEvent(
                 type="InvestmentMovementRecorded",
+                timestamp=self._utc_now(),
+                payload=payload,
+                version=1,
+            )
+        )
+        self._projector.run()
+        movement = self._find_movement(movement_id)
+        assert movement is not None
+        return movement
+
+    def update_movement(
+        self,
+        *,
+        movement_id: str,
+        occurred_at: str | None = None,
+        movement_type: str | None = None,
+        account_id: str | None = None,
+        description: str | None = None,
+        contribution_amount: int | None = None,
+        dividend_amount: int | None = None,
+        reinvested_dividend_amount: int | None = None,
+        cash_amount: int | None = None,
+        invested_amount: int | None = None,
+        asset_ticker: str | None = None,
+        asset_class: str | None = None,
+        category: str | None = None,
+        origin_account_id: str | None = None,
+        destination_account_id: str | None = None,
+        affects_cash: bool | None = None,
+        affects_invested_capital: bool | None = None,
+        affects_income: bool | None = None,
+    ) -> dict[str, str | int | bool | None]:
+        self._sync_projections()
+        current = self._find_movement(movement_id)
+        if current is None:
+            raise InvestmentMovementNotFoundError(
+                f"Investment movement '{movement_id}' was not found."
+            )
+
+        next_occurred_at = (
+            occurred_at if occurred_at is not None else str(current["occurred_at"])
+        )
+        next_type = movement_type if movement_type is not None else str(current["type"])
+        self._validate_utc_timestamp(next_occurred_at)
+        self._validate_movement_type(next_type)
+
+        next_account_id = (
+            account_id if account_id is not None else str(current["account_id"])
+        )
+        account = self._account_reader.get_account(next_account_id)
+        if str(account["type"]) == "investment":
+            raise InvalidInvestmentAccountError(
+                "account_id must reference a non-investment account."
+            )
+
+        payload = self._build_payload(
+            movement_id=movement_id,
+            occurred_at=next_occurred_at,
+            movement_type=next_type,
+            account_id=next_account_id,
+            description=(
+                description
+                if description is not None
+                else current.get("description")  # type: ignore[arg-type]
+            ),
+            contribution_amount=(
+                contribution_amount
+                if contribution_amount is not None
+                else int(current["contribution_amount"])
+            ),
+            dividend_amount=(
+                dividend_amount
+                if dividend_amount is not None
+                else int(current["dividend_amount"])
+            ),
+            reinvested_dividend_amount=(
+                reinvested_dividend_amount
+                if reinvested_dividend_amount is not None
+                else int(current.get("reinvested_dividend_amount") or 0)
+            ),
+            cash_amount=(
+                cash_amount if cash_amount is not None else int(current["cash_amount"])
+            ),
+            invested_amount=(
+                invested_amount
+                if invested_amount is not None
+                else int(current["invested_amount"])
+            ),
+            asset_ticker=(
+                asset_ticker
+                if asset_ticker is not None
+                else current.get("asset_ticker")  # type: ignore[arg-type]
+            ),
+            asset_class=(
+                asset_class
+                if asset_class is not None
+                else current.get("asset_class")  # type: ignore[arg-type]
+            ),
+            category=(
+                category
+                if category is not None
+                else current.get("category")  # type: ignore[arg-type]
+            ),
+            origin_account_id=(
+                origin_account_id
+                if origin_account_id is not None
+                else current.get("origin_account_id")  # type: ignore[arg-type]
+            ),
+            destination_account_id=(
+                destination_account_id
+                if destination_account_id is not None
+                else current.get("destination_account_id")  # type: ignore[arg-type]
+            ),
+            affects_cash=(
+                affects_cash
+                if affects_cash is not None
+                else bool(current.get("affects_cash", True))
+            ),
+            affects_invested_capital=(
+                affects_invested_capital
+                if affects_invested_capital is not None
+                else bool(current.get("affects_invested_capital", True))
+            ),
+            affects_income=(
+                affects_income
+                if affects_income is not None
+                else bool(current.get("affects_income", False))
+            ),
+            exclude_movement_id_from_dividends=movement_id,
+        )
+
+        self._event_store.create_schema()
+        self._event_store.append(
+            NewEvent(
+                type="InvestmentMovementUpdated",
                 timestamp=self._utc_now(),
                 payload=payload,
                 version=1,
@@ -296,6 +436,7 @@ class InvestmentService:
         affects_cash: bool | None,
         affects_invested_capital: bool | None,
         affects_income: bool | None,
+        exclude_movement_id_from_dividends: str | None,
     ) -> dict[str, str | int | bool | None]:
         contribution = contribution_amount or 0
         dividend = dividend_amount or 0
@@ -363,7 +504,10 @@ class InvestmentService:
                 raise InvestmentServiceError(
                     "dividend_amount is only allowed for received dividends."
                 )
-            available_dividends = self._available_dividends_for_account(account_id)
+            available_dividends = self._available_dividends_for_account(
+                account_id,
+                exclude_movement_id=exclude_movement_id_from_dividends,
+            )
             if normalized_type == "reinvestimento":
                 reinvested_dividend_value = reinvested_dividend or amount
                 contribution_value = 0
@@ -461,9 +605,16 @@ class InvestmentService:
             return -amount
         return 0
 
-    def _available_dividends_for_account(self, account_id: str) -> int:
+    def _available_dividends_for_account(
+        self,
+        account_id: str,
+        *,
+        exclude_movement_id: str | None = None,
+    ) -> int:
         available = 0
         for movement in self._projector.list_investment_movements():
+            if movement["movement_id"] == exclude_movement_id:
+                continue
             if movement["account_id"] != account_id:
                 continue
             available += int(movement.get("dividend_amount") or 0)

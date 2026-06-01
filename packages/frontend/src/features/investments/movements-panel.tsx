@@ -1,8 +1,18 @@
 import { ChevronRight, PlusCircle } from "lucide-react";
+import { useState } from "react";
 
 import type { QuickAddPreset } from "../../components/quick-add-composer";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
+import { Input } from "../../components/ui/input";
 import {
   Table,
   TableBody,
@@ -14,7 +24,12 @@ import {
 import { MoneyValue } from "../../components/ui/money-value";
 import { chartClassNames } from "../../lib/chart-theme";
 import { formatDate } from "../../lib/format";
-import type { AccountSummary, InvestmentMovementSummary, TransactionFilters } from "../../lib/api";
+import type {
+  AccountSummary,
+  InvestmentMovementSummary,
+  InvestmentMovementUpdatePayload,
+  TransactionFilters,
+} from "../../lib/api";
 import type { UiDensity } from "../../lib/ui-density";
 import { cn } from "../../lib/utils";
 
@@ -26,6 +41,10 @@ type MovementsPanelProps = {
   uiDensity: UiDensity;
   onOpenQuickAdd: (preset: QuickAddPreset) => void;
   onOpenLedgerFiltered: (filters: Partial<TransactionFilters>, month?: string) => void;
+  onUpdateMovement: (
+    movementId: string,
+    payload: InvestmentMovementUpdatePayload,
+  ) => Promise<void>;
 };
 
 export function MovementsPanel({
@@ -36,9 +55,15 @@ export function MovementsPanel({
   uiDensity,
   onOpenQuickAdd,
   onOpenLedgerFiltered,
+  onUpdateMovement,
 }: MovementsPanelProps) {
+  const movementAccounts = accounts.filter((account) => account.type !== "investment" && account.is_active);
   const accountNameById = new Map(accounts.map((account) => [account.account_id, account.name]));
   const latestMonth = movements[0]?.occurred_at.slice(0, 7);
+  const [editingMovement, setEditingMovement] = useState<InvestmentMovementSummary | null>(null);
+  const [editAccountId, setEditAccountId] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   function openInvestmentLedger() {
     if (!latestMonth) return;
@@ -53,14 +78,38 @@ export function MovementsPanel({
     );
   }
 
+  function openEditMovement(movement: InvestmentMovementSummary) {
+    setEditingMovement(movement);
+    setEditAccountId(movement.account_id);
+    setEditDescription(movement.description ?? "");
+  }
+
+  async function saveEditMovement() {
+    if (editingMovement === null || editAccountId.length === 0) {
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      await onUpdateMovement(editingMovement.movement_id, {
+        accountId: editAccountId,
+        description: editDescription.trim(),
+      });
+      setEditingMovement(null);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }
+
   return (
-    <Card
-      className={cn(
-        "finance-card",
-        chartClassNames.surface,
-        uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-2xl",
-      )}
-    >
+    <>
+      <Card
+        className={cn(
+          "finance-card",
+          chartClassNames.surface,
+          uiDensity === "dense" ? "rounded-[1.6rem]" : "rounded-2xl",
+        )}
+      >
       <CardHeader className="flex flex-row items-start justify-between gap-3 p-5 pb-3 md:p-6 md:pb-3">
         <div>
           <h3 className="text-sm font-bold text-slate-800">Movimentos</h3>
@@ -138,7 +187,8 @@ export function MovementsPanel({
                   <TableHead className="text-right">Capital</TableHead>
                   <TableHead className="text-right">Proventos</TableHead>
                   <TableHead className="text-right">Reinvestido</TableHead>
-                  <TableHead className="pr-6 text-right">Caixa</TableHead>
+                  <TableHead className="text-right">Caixa</TableHead>
+                  <TableHead className="pr-6 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -174,8 +224,20 @@ export function MovementsPanel({
                         className="text-sm font-bold"
                       />
                     </TableCell>
-                    <TableCell className="pr-6 text-right">
+                    <TableCell className="text-right">
                       <MoneyValue value={movement.cash_delta} className="text-sm font-bold" />
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs font-bold"
+                        onClick={() => openEditMovement(movement)}
+                        disabled={isSubmitting}
+                      >
+                        Editar
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -184,7 +246,64 @@ export function MovementsPanel({
           </div>
         )}
       </CardContent>
-    </Card>
+      </Card>
+
+      <Dialog open={editingMovement !== null} onOpenChange={(open) => !open && setEditingMovement(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar movimento</DialogTitle>
+            <DialogDescription>
+              Ajuste a conta usada neste movimento de investimento.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Conta</span>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={editAccountId}
+                onChange={(event) => setEditAccountId(event.target.value)}
+                disabled={isSavingEdit}
+              >
+                {movementAccounts.map((account) => (
+                  <option key={account.account_id} value={account.account_id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Descrição</span>
+              <Input
+                value={editDescription}
+                onChange={(event) => setEditDescription(event.target.value)}
+                disabled={isSavingEdit}
+              />
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditingMovement(null)}
+              disabled={isSavingEdit}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void saveEditMovement()}
+              disabled={isSavingEdit || editAccountId.length === 0}
+            >
+              {isSavingEdit ? "Salvando..." : "Salvar alterações"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

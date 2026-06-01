@@ -49,6 +49,7 @@ import {
   updateCard,
   updateCardPurchase,
   updateInvoicePayment,
+  updateInvestmentMovement,
   updateRecurringRule,
   updateTransaction,
   voidCardPurchase,
@@ -65,6 +66,7 @@ import {
   type InvoicePaymentPayload,
   type InvoicePaymentUpdatePayload,
   type InvestmentMovementPayload,
+  type InvestmentMovementUpdatePayload,
   type InvestmentView,
   type InvoiceSummary,
   type RecurringRulePayload,
@@ -868,6 +870,20 @@ export function App() {
     }
   }
 
+  async function handleUpdateInvestmentMovement(
+    movementId: string,
+    payload: InvestmentMovementUpdatePayload,
+  ): Promise<void> {
+    const wasSuccessful = await runMutation(
+      () => updateInvestmentMovement(movementId, payload),
+      "Movimento de investimento atualizado com sucesso.",
+    );
+
+    if (!wasSuccessful) {
+      throw new Error("NÃ£o foi possÃ­vel atualizar movimento de investimento.");
+    }
+  }
+
   async function handleInvestmentViewChange(
     nextView: InvestmentView,
   ): Promise<void> {
@@ -1179,6 +1195,7 @@ export function App() {
             movements={investmentMovements}
             onOpenLedgerFiltered={openLedgerWithFilters}
             onOpenQuickAdd={(preset) => openQuickAdd(preset)}
+            onUpdateMovement={handleUpdateInvestmentMovement}
             onRefreshData={() => {
               void refreshData({ month: selectedMonth });
             }}

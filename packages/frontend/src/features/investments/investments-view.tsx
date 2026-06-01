@@ -16,6 +16,7 @@ import type {
   InvestmentAsset,
   InvestmentAssetClass,
   InvestmentMovementSummary,
+  InvestmentMovementUpdatePayload,
   InvestmentOverview,
   InvestmentSnapshot,
   MonthlyIncomeRecord,
@@ -101,6 +102,10 @@ type InvestmentsViewProps = {
     month?: string,
   ) => void;
   onOpenQuickAdd: (preset: QuickAddPreset) => void;
+  onUpdateMovement: (
+    movementId: string,
+    payload: InvestmentMovementUpdatePayload,
+  ) => Promise<void>;
   onRefreshData: () => void;
   onError: (message: string) => void;
   uiDensity: UiDensity;
@@ -172,6 +177,7 @@ export function InvestmentsView({
   movements,
   onOpenLedgerFiltered,
   onOpenQuickAdd,
+  onUpdateMovement,
   onRefreshData,
   onError,
   uiDensity,
@@ -629,6 +635,7 @@ export function InvestmentsView({
             uiDensity={uiDensity}
             onOpenQuickAdd={onOpenQuickAdd}
             onOpenLedgerFiltered={onOpenLedgerFiltered}
+            onUpdateMovement={onUpdateMovement}
           />
         </TabsContent>
       </Tabs>

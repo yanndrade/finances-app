@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { AccountSummary } from "../../lib/api";
+import type { AccountSummary, InvestmentMovementSummary } from "../../lib/api";
 import { InvestmentsView } from "./investments-view";
 
 function buildAccount(overrides: Partial<AccountSummary> = {}): AccountSummary {
@@ -18,11 +18,13 @@ function buildAccount(overrides: Partial<AccountSummary> = {}): AccountSummary {
 
 function renderInvestmentsView(options?: {
   accounts?: AccountSummary[];
+  movements?: InvestmentMovementSummary[];
   onOpenLedgerFiltered?: ReturnType<typeof vi.fn>;
   onOpenQuickAdd?: ReturnType<typeof vi.fn>;
 }) {
   const onOpenLedgerFiltered = options?.onOpenLedgerFiltered ?? vi.fn();
   const onOpenQuickAdd = options?.onOpenQuickAdd ?? vi.fn();
+  const onUpdateMovement = vi.fn();
   const onRefreshData = vi.fn();
   const onError = vi.fn();
 
@@ -31,7 +33,7 @@ function renderInvestmentsView(options?: {
       accounts={options?.accounts ?? [buildAccount()]}
       loading={false}
       isSubmitting={false}
-      movements={[]}
+      movements={options?.movements ?? []}
       current={{
         snapshot: {
           id: "snap-1",
@@ -95,13 +97,14 @@ function renderInvestmentsView(options?: {
       }}
       onOpenLedgerFiltered={onOpenLedgerFiltered}
       onOpenQuickAdd={onOpenQuickAdd}
+      onUpdateMovement={onUpdateMovement}
       onRefreshData={onRefreshData}
       onError={onError}
       uiDensity="compact"
     />,
   );
 
-  return { onOpenLedgerFiltered, onOpenQuickAdd, onRefreshData, onError };
+  return { onOpenLedgerFiltered, onOpenQuickAdd, onUpdateMovement, onRefreshData, onError };
 }
 
 describe("InvestmentsView", () => {
@@ -164,5 +167,46 @@ describe("InvestmentsView", () => {
     expect(
       screen.getByText(/cadastre uma conta de caixa para registrar aportes e resgates/i),
     ).toBeInTheDocument();
+  });
+
+  it("edits an investment movement account", async () => {
+    const user = userEvent.setup();
+    const { onUpdateMovement } = renderInvestmentsView({
+      accounts: [
+        buildAccount(),
+        buildAccount({
+          account_id: "acc-2",
+          name: "Conta correta",
+        }),
+      ],
+      movements: [
+        {
+          movement_id: "inv-1",
+          occurred_at: "2026-03-10T12:00:00Z",
+          type: "contribution",
+          account_id: "acc-1",
+          description: "Aporte mensal",
+          contribution_amount: 30_00,
+          dividend_amount: 0,
+          reinvested_dividend_amount: 0,
+          cash_amount: 30_00,
+          invested_amount: 30_00,
+          cash_delta: -30_00,
+          invested_delta: 30_00,
+        },
+      ],
+    });
+
+    await user.click(screen.getByRole("tab", { name: /movimentos/i }));
+    await user.click(screen.getByRole("button", { name: /^editar$/i }));
+    await user.selectOptions(screen.getByLabelText(/conta/i), "acc-2");
+    await user.clear(screen.getByLabelText(/descrição/i));
+    await user.type(screen.getByLabelText(/descrição/i), "Aporte corrigido");
+    await user.click(screen.getByRole("button", { name: /salvar alterações/i }));
+
+    expect(onUpdateMovement).toHaveBeenCalledWith("inv-1", {
+      accountId: "acc-2",
+      description: "Aporte corrigido",
+    });
   });
 });

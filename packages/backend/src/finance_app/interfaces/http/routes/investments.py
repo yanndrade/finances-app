@@ -10,6 +10,7 @@ from finance_app.application.investments import (
     InvalidInvestmentTypeError,
     InvalidInvestmentViewError,
     InvestmentMovementAlreadyExistsError,
+    InvestmentMovementNotFoundError,
     InvestmentService,
     InvestmentServiceError,
 )
@@ -33,6 +34,39 @@ class CreateInvestmentMovementRequest(BaseModel):
         "transferencia",
     ]
     account_id: str = Field(min_length=1)
+    description: str | None = None
+    contribution_amount: int | None = Field(default=None, ge=0)
+    dividend_amount: int | None = Field(default=None, ge=0)
+    reinvested_dividend_amount: int | None = Field(default=None, ge=0)
+    cash_amount: int | None = Field(default=None, ge=0)
+    invested_amount: int | None = Field(default=None, ge=0)
+    asset_ticker: str | None = None
+    asset_class: str | None = None
+    category: str | None = None
+    origin_account_id: str | None = None
+    destination_account_id: str | None = None
+    affects_cash: bool | None = None
+    affects_invested_capital: bool | None = None
+    affects_income: bool | None = None
+
+
+class UpdateInvestmentMovementRequest(BaseModel):
+    occurred_at: str | None = None
+    type: Literal[
+        "contribution",
+        "withdrawal",
+        "aporte",
+        "resgate",
+        "compra",
+        "venda",
+        "provento",
+        "reinvestimento",
+        "rendimento",
+        "taxa",
+        "ajuste",
+        "transferencia",
+    ] | None = None
+    account_id: str | None = Field(default=None, min_length=1)
     description: str | None = None
     contribution_amount: int | None = Field(default=None, ge=0)
     dividend_amount: int | None = Field(default=None, ge=0)
@@ -160,6 +194,52 @@ def build_investments_router(investment_service: InvestmentService) -> APIRouter
         except (
             InvalidInvestmentDateError,
             InvalidInvestmentRangeError,
+            InvestmentServiceError,
+        ) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.patch("/api/investments/movements/{movement_id}")
+    def update_investment_movement(
+        movement_id: str,
+        payload: UpdateInvestmentMovementRequest,
+    ) -> dict[str, str | int | bool | None]:
+        try:
+            return investment_service.update_movement(
+                movement_id=movement_id,
+                occurred_at=payload.occurred_at,
+                movement_type=payload.type,
+                account_id=payload.account_id,
+                description=payload.description,
+                contribution_amount=payload.contribution_amount,
+                dividend_amount=payload.dividend_amount,
+                reinvested_dividend_amount=payload.reinvested_dividend_amount,
+                cash_amount=payload.cash_amount,
+                invested_amount=payload.invested_amount,
+                asset_ticker=payload.asset_ticker,
+                asset_class=payload.asset_class,
+                category=payload.category,
+                origin_account_id=payload.origin_account_id,
+                destination_account_id=payload.destination_account_id,
+                affects_cash=payload.affects_cash,
+                affects_invested_capital=payload.affects_invested_capital,
+                affects_income=payload.affects_income,
+            )
+        except AccountNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except InvestmentMovementNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except (
+            InvalidInvestmentDateError,
+            InvalidInvestmentTypeError,
             InvestmentServiceError,
         ) as exc:
             raise HTTPException(

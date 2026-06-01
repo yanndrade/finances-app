@@ -2719,6 +2719,10 @@ class Projector:
             self._apply_investment_movement_recorded(session, event.payload)
             return
 
+        if event.type == "InvestmentMovementUpdated":
+            self._apply_investment_movement_updated(session, event.payload)
+            return
+
         if event.type == "InvestmentSnapshotSaved":
             self._apply_investment_snapshot_saved(session, event.payload)
             return
@@ -3389,6 +3393,98 @@ class Projector:
             installment_number=None,
             installment_total=None,
             source_event_type="InvestmentMovementRecorded",
+        )
+
+    def _apply_investment_movement_updated(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        movement_id = str(payload["id"])
+        existing = session.get(InvestmentMovementRecord, movement_id)
+        if existing is None:
+            self._apply_investment_movement_recorded(session, payload)
+            return
+
+        self._apply_balance_delta(
+            session,
+            account_id=existing.account_id,
+            delta=-existing.cash_delta,
+        )
+
+        cash_delta = int(payload["cash_delta"])
+        movement_type = str(payload["type"])
+        raw_dividend_amount = int(payload.get("dividend_amount", 0))
+        legacy_reinvested_dividend = (
+            raw_dividend_amount
+            if movement_type in {"contribution", "aporte"} and raw_dividend_amount > 0
+            else 0
+        )
+        dividend_amount = 0 if legacy_reinvested_dividend > 0 else raw_dividend_amount
+        reinvested_dividend_amount = int(
+            payload.get("reinvested_dividend_amount", legacy_reinvested_dividend)
+        )
+
+        existing.occurred_at = str(payload["occurred_at"])
+        existing.type = movement_type
+        existing.account_id = str(payload["account_id"])
+        existing.description = _optional_string(payload.get("description"))
+        existing.contribution_amount = int(payload.get("contribution_amount", 0))
+        existing.dividend_amount = dividend_amount
+        existing.reinvested_dividend_amount = reinvested_dividend_amount
+        existing.cash_amount = int(payload.get("cash_amount", 0))
+        existing.invested_amount = int(payload.get("invested_amount", 0))
+        existing.cash_delta = cash_delta
+        existing.invested_delta = int(payload["invested_delta"])
+        existing.asset_ticker = _optional_string(payload.get("asset_ticker"))
+        existing.asset_class = _optional_string(payload.get("asset_class"))
+        existing.category = _optional_string(payload.get("category"))
+        existing.origin_account_id = _optional_string(payload.get("origin_account_id"))
+        existing.destination_account_id = _optional_string(
+            payload.get("destination_account_id")
+        )
+        existing.affects_cash = bool(payload.get("affects_cash", True))
+        existing.affects_invested_capital = bool(
+            payload.get("affects_invested_capital", True)
+        )
+        existing.affects_income = bool(payload.get("affects_income", False))
+
+        self._apply_balance_delta(
+            session,
+            account_id=existing.account_id,
+            delta=cash_delta,
+        )
+
+        _inv_description = _optional_string(payload.get("description"))
+        _inv_occurred_at = str(payload["occurred_at"])
+        _is_contribution = movement_type in {"contribution", "aporte", "compra", "reinvestimento"}
+        _is_income = movement_type in {"provento", "rendimento"}
+        _inv_title = _inv_description or (
+            "Provento" if _is_income else "Aporte" if _is_contribution else "Resgate"
+        )
+        self._upsert_unified_movement(
+            session,
+            movement_id=movement_id,
+            kind="investment",
+            origin_type="investment",
+            title=_inv_title,
+            description=_inv_description,
+            amount=abs(cash_delta),
+            posted_at=_inv_occurred_at,
+            competence_month=_inv_occurred_at[:7],
+            account_id=str(payload["account_id"]),
+            card_id=None,
+            payment_method="BALANCE",
+            category_id="investment",
+            counterparty=None,
+            lifecycle_status="cleared",
+            edit_policy="locked",
+            parent_id=None,
+            group_id=None,
+            transfer_direction=None,
+            installment_number=None,
+            installment_total=None,
+            source_event_type="InvestmentMovementUpdated",
         )
 
     def _apply_investment_snapshot_saved(
