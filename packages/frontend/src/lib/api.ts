@@ -391,6 +391,10 @@ export type InvoiceSummary = {
   remaining_amount: number;
   purchase_count: number;
   status: string;
+  forecast_amount?: number;
+  forecast_count?: number;
+  expected_total_amount?: number;
+  expected_remaining_amount?: number;
 };
 
 export type InvoicePaymentSummary = {
@@ -405,17 +409,19 @@ export type InvoicePaymentSummary = {
 export type InvoiceItemSummary = {
   invoice_item_id: string;
   invoice_id: string;
-  purchase_id: string;
+  purchase_id: string | null;
   card_id: string;
-  purchase_date: string;
+  purchase_date: string | null;
+  scheduled_date?: string | null;
   category_id: string;
   title?: string | null;
   description: string | null;
   origin_type?: string | null;
   group_id?: string | null;
-  installment_number: number;
-  installments_count: number;
+  installment_number: number | null;
+  installments_count: number | null;
   amount: number;
+  lifecycle_status?: "forecast" | "pending" | "cleared" | string;
 };
 
 export type TransactionSummary = {
@@ -570,6 +576,7 @@ export type RecurringRuleSummary = {
   category_id: string;
   description: string | null;
   is_active: boolean;
+  card_start_month?: string | null;
 };
 
 export type PendingExpenseSummary = {
@@ -634,6 +641,7 @@ export type RecurringRulePayload = {
   cardId?: string;
   categoryId: string;
   description?: string;
+  cardStartMonth?: string;
 };
 
 export type RecurringRuleUpdatePayload = Partial<RecurringRulePayload> & {
@@ -987,10 +995,24 @@ export async function fetchPendings(
 
 export async function fetchInvoices(
   cardId?: string,
+  forecastMonth?: string,
 ): Promise<InvoiceSummary[]> {
-  const query = cardId ? `?card=${encodeURIComponent(cardId)}` : "";
+  const searchParams = new URLSearchParams();
+  if (cardId) searchParams.set("card", cardId);
+  if (forecastMonth) searchParams.set("month", forecastMonth);
+  const query = searchParams.toString();
 
-  return requestJson<InvoiceSummary[]>(`/api/invoices${query}`);
+  return requestJson<InvoiceSummary[]>(
+    query.length > 0 ? `/api/invoices?${query}` : "/api/invoices",
+  );
+}
+
+export async function syncRecurringCardCharges(): Promise<{
+  as_of_date: string;
+  processed_date: string;
+  posted_count: number;
+}> {
+  return requestJson("/api/recurring-card-charges/sync", { method: "POST" });
 }
 
 export async function fetchCardPurchases(
@@ -1183,6 +1205,10 @@ export async function createRecurringRule(
           : undefined,
       category_id: payload.categoryId,
       description: payload.description || undefined,
+      card_start_month:
+        payload.paymentMethod === "CARD"
+          ? payload.cardStartMonth || undefined
+          : undefined,
     }),
   });
 }
@@ -1229,6 +1255,9 @@ export async function updateRecurringRule(
       : {}),
     ...(payload.cardId !== undefined
       ? { card_id: payload.cardId || null }
+      : {}),
+    ...(payload.cardStartMonth !== undefined
+      ? { card_start_month: payload.cardStartMonth || null }
       : {}),
   };
 

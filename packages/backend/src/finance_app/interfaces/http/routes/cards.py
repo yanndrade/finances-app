@@ -257,9 +257,13 @@ def build_cards_router(
     @router.get("/api/invoices")
     def list_invoices(
         card_id: str | None = Query(default=None, alias="card"),
+        forecast_month: str | None = Query(default=None, alias="month"),
     ) -> list[dict[str, str | int]]:
         try:
-            return card_purchase_service.list_invoices(card_id=card_id)
+            return card_purchase_service.list_invoices(
+                card_id=card_id,
+                forecast_month=forecast_month,
+            )
         except CardPurchaseServiceError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

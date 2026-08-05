@@ -1,4 +1,5 @@
 import { format, parseISO } from "date-fns";
+import { CalendarClock, Layers3 } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import {
@@ -19,6 +20,7 @@ import {
 } from "../../../components/ui/table";
 import type { InvoiceItemSummary } from "../../../lib/api";
 import { formatCurrency } from "../../../lib/format";
+import { cn } from "../../../lib/utils";
 
 type InvoiceItemsDrawerProps = {
   open: boolean;
@@ -108,13 +110,34 @@ function InvoiceItemsTable({ invoiceItems }: { invoiceItems: InvoiceItemSummary[
           invoiceItems.map((item) => (
             <TableRow key={item.invoice_item_id} className="border-slate-50">
               <TableCell className="px-8 py-5 font-bold text-slate-500">
-                {format(parseISO(item.purchase_date), "dd MMM")}
+                {item.scheduled_date || item.purchase_date
+                  ? format(parseISO(item.scheduled_date ?? item.purchase_date!), "dd MMM")
+                  : "—"}
               </TableCell>
-              <TableCell className="font-black text-slate-900">
+              <TableCell className={cn(
+                "font-black",
+                item.lifecycle_status === "forecast" ? "text-primary" : "text-slate-900",
+              )}>
+                {item.lifecycle_status === "forecast" ? (
+                  <span className="mr-2 inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-[11px] font-bold text-primary">
+                    <CalendarClock className="h-3 w-3" /> Assinatura prevista
+                  </span>
+                ) : item.origin_type === "recurring" ? (
+                  <span className="mr-2 inline-flex rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-[11px] font-bold text-primary">
+                    Assinatura
+                  </span>
+                ) : null}
                 {item.description || "Compra no cartão"}
               </TableCell>
               <TableCell className="font-bold text-slate-500">
-                {item.installment_number}/{item.installments_count}
+                {item.installments_count && item.installments_count > 1 ? (
+                  <span className="inline-flex items-center gap-1 text-finance-transfer">
+                    <Layers3 className="h-3.5 w-3.5" />
+                    Parcela {item.installment_number}/{item.installments_count}
+                  </span>
+                ) : (
+                  "—"
+                )}
               </TableCell>
               <TableCell className="pr-8 text-right font-black text-slate-900">
                 {formatCurrency(item.amount)}

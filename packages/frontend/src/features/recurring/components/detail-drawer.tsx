@@ -42,6 +42,7 @@ export function DetailDrawer({
   if (!pending) return null;
 
   const isConfirmed = pending.status === "confirmed";
+  const isCardRecurring = pending.payment_method === "CARD";
   const canUndoPayment =
     isConfirmed &&
     pending.payment_method !== "CARD" &&
@@ -129,6 +130,11 @@ export function DetailDrawer({
           <DrawerFooter>
             {isConfirmed ? (
               <div className="flex flex-col gap-2">
+                {isCardRecurring ? (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary">
+                    Na fatura
+                  </div>
+                ) : null}
                 {canUndoPayment ? (
                   <Button
                     onClick={() => onUndoPayment?.(pending.transaction_id!)}
@@ -142,6 +148,10 @@ export function DetailDrawer({
                 <Button onClick={onViewHistory} variant="outline" className="w-full">
                   Ver no histórico
                 </Button>
+              </div>
+            ) : isCardRecurring ? (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary">
+                Agendada no cartão. Ela entra na fatura automaticamente na data da cobrança.
               </div>
             ) : (
               <Button

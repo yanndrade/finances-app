@@ -132,7 +132,7 @@ export function CardsView({
   }, [selectedScope, detailCurrentInvoice, clearInvoiceItemsState]);
 
   useEffect(() => {
-    if (isAggregateView || !detailCurrentInvoice) {
+    if (isAggregateView || !detailCurrentInvoice || detailCurrentInvoice.total_amount <= 0) {
       clearInvoicePaymentsState();
       return;
     }

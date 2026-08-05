@@ -318,6 +318,36 @@ export function App() {
   }, [investmentGoalPercent, selectedMonth]);
 
   useEffect(() => {
+    let lastCalendarDate = new Date().toDateString();
+
+    const refreshOnReturn = () => {
+      lastCalendarDate = new Date().toDateString();
+      void refreshDataRef.current({ month: selectedMonth });
+    };
+
+    const refreshWhenCalendarDayChanges = () => {
+      const nextCalendarDate = new Date().toDateString();
+      if (nextCalendarDate === lastCalendarDate) return;
+      lastCalendarDate = nextCalendarDate;
+      void refreshDataRef.current({ month: selectedMonth });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshOnReturn();
+    };
+
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const intervalId = window.setInterval(refreshWhenCalendarDayChanges, 60_000);
+
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(intervalId);
+    };
+  }, [selectedMonth]);
+
+  useEffect(() => {
     storeCategoryOptions(categoryOptions);
   }, [categoryOptions]);
 

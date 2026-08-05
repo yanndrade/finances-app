@@ -41,6 +41,7 @@ class CardPurchaseProjector(Protocol):
         self,
         *,
         card_id: str | None = None,
+        forecast_month: str | None = None,
     ) -> list[dict[str, str | int]]: ...
     def list_invoice_items(
         self,
@@ -246,9 +247,13 @@ class CardPurchaseService:
         self,
         *,
         card_id: str | None = None,
+        forecast_month: str | None = None,
     ) -> list[dict[str, str | int]]:
         self._sync_projections()
-        return self._projector.list_invoices(card_id=card_id)
+        return self._projector.list_invoices(
+            card_id=card_id,
+            forecast_month=forecast_month,
+        )
 
     def list_invoice_items(
         self,
@@ -258,7 +263,7 @@ class CardPurchaseService:
         self._sync_projections()
         if not invoice_id.strip():
             raise CardPurchaseServiceError("invoice_id is required.")
-        if self._find_invoice(invoice_id) is None:
+        if self._find_invoice(invoice_id, include_forecast=True) is None:
             raise InvoiceNotFoundError(f"Invoice '{invoice_id}' was not found.")
         return self._projector.list_invoice_items(invoice_id=invoice_id)
 
@@ -331,8 +336,15 @@ class CardPurchaseService:
     def _find_invoice(
         self,
         invoice_id: str,
+        *,
+        include_forecast: bool = False,
     ) -> dict[str, str | int] | None:
-        for invoice in self._projector.list_invoices():
+        forecast_month = None
+        if include_forecast and ":" in invoice_id:
+            candidate = invoice_id.rsplit(":", 1)[1]
+            if len(candidate) == 7 and candidate[4] == "-":
+                forecast_month = candidate
+        for invoice in self._projector.list_invoices(forecast_month=forecast_month):
             if invoice["invoice_id"] == invoice_id:
                 return invoice
         return None

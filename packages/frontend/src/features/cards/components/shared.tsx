@@ -104,6 +104,12 @@ export function EmptySurface({ message }: { message: string }) {
 
 export function renderStatusBadge(status: string) {
   switch (status) {
+    case "forecast":
+      return (
+        <Badge className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-1 text-primary hover:bg-primary/5">
+          Prevista
+        </Badge>
+      );
     case "paid":
       return (
         <Badge className="rounded-lg border-none bg-success/10 px-3 py-1 text-success hover:bg-success/10">
@@ -175,7 +181,11 @@ export function formatCurrencyInput(value: string) {
 }
 
 export function getDisplayedInvoiceAmount(invoice: InvoiceSummary) {
-  return invoice.status === "partial" ? invoice.remaining_amount : invoice.total_amount;
+  return invoice.expected_total_amount ?? invoice.total_amount;
+}
+
+export function getExpectedRemainingAmount(invoice: InvoiceSummary) {
+  return invoice.expected_remaining_amount ?? invoice.remaining_amount;
 }
 
 export function getCardPadding(uiDensity: UiDensity) {

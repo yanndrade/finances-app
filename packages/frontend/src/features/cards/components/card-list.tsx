@@ -32,6 +32,8 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
       {activeCards.map((card) => {
         const currentInvoice = invoicesByCard.get(card.card_id);
         const invoiceAmount = currentInvoice ? getDisplayedInvoiceAmount(currentInvoice) : 0;
+        const forecastAmount = currentInvoice?.forecast_amount ?? 0;
+        const launchedAmount = currentInvoice?.total_amount ?? 0;
         const futureInstallments = card.future_installment_total ?? 0;
         const remainingAmount = currentInvoice?.remaining_amount ?? 0;
 
@@ -61,6 +63,18 @@ export function CardList({ activeCards, invoicesByCard, onSelectCard, onOpenHist
               <p className="mt-0.5 text-base font-black tracking-tight text-foreground">
                 {formatCurrency(invoiceAmount)}
               </p>
+              {forecastAmount > 0 ? (
+                <p className="text-[11px] font-medium text-primary">
+                  {formatCurrency(launchedAmount)} lançado + {formatCurrency(forecastAmount)} previsto
+                </p>
+              ) : (
+                <>
+                  <span className="sr-only">Em aberto</span>
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    {formatCurrency(remainingAmount)}
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Barra de limite — cresce para preencher o espaço disponível */}

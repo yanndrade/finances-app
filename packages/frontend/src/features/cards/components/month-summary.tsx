@@ -7,9 +7,17 @@ type MonthSummaryProps = {
 };
 
 export function MonthSummary({ invoices, totalLimitCommitted }: MonthSummaryProps) {
-  const totalFaturas = invoices.reduce((acc, inv) => acc + inv.total_amount, 0);
+  const totalFaturas = invoices.reduce(
+    (acc, inv) => acc + (inv.expected_total_amount ?? inv.total_amount),
+    0,
+  );
+  const totalLancado = invoices.reduce((acc, inv) => acc + inv.total_amount, 0);
+  const totalPrevisto = invoices.reduce((acc, inv) => acc + (inv.forecast_amount ?? 0), 0);
   const totalPago = invoices.reduce((acc, inv) => acc + inv.paid_amount, 0);
-  const totalEmAberto = invoices.reduce((acc, inv) => acc + inv.remaining_amount, 0);
+  const totalEmAberto = invoices.reduce(
+    (acc, inv) => acc + (inv.expected_remaining_amount ?? inv.remaining_amount),
+    0,
+  );
   const limitPct = totalLimitCommitted > 0
     ? Math.round((totalFaturas / totalLimitCommitted) * 100)
     : 0;
@@ -18,9 +26,11 @@ export function MonthSummary({ invoices, totalLimitCommitted }: MonthSummaryProp
     <div className="flex items-baseline gap-6 pb-5 border-b border-border/40">
       {/* Dominant: A pagar */}
       <div className="flex flex-col gap-0.5">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">A pagar</p>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Total esperado
+        </p>
         <p className="text-4xl font-black tracking-tight text-foreground tabular-nums">
-          {formatCurrency(totalEmAberto)}
+          {formatCurrency(totalFaturas)}
         </p>
       </div>
 
@@ -29,7 +39,22 @@ export function MonthSummary({ invoices, totalLimitCommitted }: MonthSummaryProp
         <div className="flex flex-col gap-0.5">
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Total do mês</p>
           <p className="text-lg font-bold text-foreground tabular-nums">
-            {formatCurrency(totalFaturas)}
+            {formatCurrency(totalLancado)}
+          </p>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-primary">Assinaturas previstas</p>
+          <p className="text-lg font-bold text-primary tabular-nums">
+            {formatCurrency(totalPrevisto)}
+          </p>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="sr-only">A pagar</span>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Em aberto
+          </p>
+          <p className="text-lg font-bold text-foreground tabular-nums">
+            {formatCurrency(totalEmAberto)}
           </p>
         </div>
         <div className="flex flex-col gap-0.5">

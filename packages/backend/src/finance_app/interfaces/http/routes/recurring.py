@@ -28,6 +28,7 @@ class CreateRecurringRuleRequest(BaseModel):
     payment_method: PaymentMethod
     category_id: str = Field(min_length=1)
     description: str | None = None
+    card_start_month: str | None = None
 
 
 class UpdateRecurringRuleRequest(BaseModel):
@@ -40,6 +41,7 @@ class UpdateRecurringRuleRequest(BaseModel):
     category_id: str | None = Field(default=None, min_length=1)
     description: str | None = None
     is_active: bool | None = None
+    card_start_month: str | None = None
 
 
 def build_recurring_router(recurring_service: RecurringService) -> APIRouter:
@@ -66,6 +68,7 @@ def build_recurring_router(recurring_service: RecurringService) -> APIRouter:
                 payment_method=payload.payment_method,
                 category_id=payload.category_id,
                 description=payload.description,
+                card_start_month=payload.card_start_month,
             )
         except AccountNotFoundError as exc:
             raise HTTPException(
@@ -131,6 +134,16 @@ def build_recurring_router(recurring_service: RecurringService) -> APIRouter:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
             ) from exc
+        except RecurringServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.post("/api/recurring-card-charges/sync")
+    def sync_recurring_card_charges() -> dict[str, str | int]:
+        try:
+            return recurring_service.synchronize_card_charges()
         except RecurringServiceError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

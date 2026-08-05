@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Calendar, ChevronDown, ChevronRight, Clock, ExternalLink, Receipt } from "lucide-react";
+import { ArrowLeft, Calendar, CalendarClock, ChevronDown, ChevronRight, Clock, ExternalLink, Layers3, Receipt } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 import { Button } from "../../../components/ui/button";
@@ -36,6 +36,7 @@ import { cn } from "../../../lib/utils";
 import {
   accountName,
   getDisplayedInvoiceAmount,
+  getExpectedRemainingAmount,
   getInvoiceCycleDates,
   MetricPanel,
   MiniMetric,
@@ -157,8 +158,9 @@ export function CardDetail({
   }
 
   const displayedInvoiceAmount = getDisplayedInvoiceAmount(invoice);
+  const forecastAmount = invoice.forecast_amount ?? 0;
   const progress = invoice.total_amount > 0 ? Math.min((invoice.paid_amount / invoice.total_amount) * 100, 100) : 0;
-  const isPaidFull = invoice.remaining_amount <= 0;
+  const isPaidFull = invoice.remaining_amount <= 0 && forecastAmount <= 0;
   const progressLabel = isPaidFull ? 100 : Math.min(Math.round(progress), 99);
   const { closingDate, dueDate } = getInvoiceCycleDates(invoice, card);
 
@@ -260,8 +262,10 @@ export function CardDetail({
 
               {/* Band 2: compact metrics row */}
               <div className="mt-4 flex flex-wrap gap-6 border-t border-slate-50 pt-4">
+                <MiniMetric label="Já lançado" value={formatCurrency(invoice.total_amount)} />
+                <MiniMetric label="Previsto" value={formatCurrency(forecastAmount)} />
                 <MiniMetric label="Pago" value={formatCurrency(invoice.paid_amount)} />
-                <MiniMetric label="Em aberto" value={formatCurrency(invoice.remaining_amount)} />
+                <MiniMetric label="Em aberto" value={formatCurrency(getExpectedRemainingAmount(invoice))} />
                 <MetricPanel
                   icon={<Calendar className="h-4 w-4" />}
                   label="Fechamento"
@@ -320,16 +324,32 @@ export function CardDetail({
                           className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-slate-50 transition-colors"
                         >
                           <span className="w-12 shrink-0 text-[12px] font-bold text-slate-400 tabular-nums">
-                            {format(parseISO(item.purchase_date), "dd MMM")}
+                            {item.scheduled_date || item.purchase_date
+                              ? format(parseISO(item.scheduled_date ?? item.purchase_date!), "dd MMM")
+                              : "—"}
                           </span>
-                          <span className="flex-1 truncate text-sm font-bold text-slate-900">
+                          <span className={cn(
+                            "flex min-w-0 flex-1 items-center gap-2 truncate text-sm font-bold",
+                            item.lifecycle_status === "forecast" ? "text-primary" : "text-slate-900",
+                          )}>
+                            {item.lifecycle_status === "forecast" ? <CalendarClock className="h-3.5 w-3.5 shrink-0" /> : null}
                             {item.description || "Compra no cartão"}
                           </span>
-                          {item.installments_count > 1 && (
-                            <span className="shrink-0 text-[12px] font-bold text-slate-400 tabular-nums">
-                              {item.installment_number}/{item.installments_count}
+                          {item.installments_count && item.installments_count > 1 && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-finance-transfer/10 px-2 py-1 text-[12px] font-bold text-finance-transfer tabular-nums">
+                              <Layers3 className="h-3 w-3" />
+                              Parcela {item.installment_number}/{item.installments_count}
                             </span>
                           )}
+                          {item.lifecycle_status === "forecast" ? (
+                            <span className="shrink-0 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] font-bold text-primary">
+                              Assinatura prevista
+                            </span>
+                          ) : item.origin_type === "recurring" ? (
+                            <span className="shrink-0 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] font-bold text-primary">
+                              Assinatura
+                            </span>
+                          ) : null}
                           <span className="shrink-0 text-sm font-black text-slate-900 tabular-nums">
                             {formatCurrency(item.amount)}
                           </span>
@@ -499,7 +519,10 @@ export function CardDetail({
                                     {item.description || "Compra parcelada"}
                                   </span>
                                   <span className="shrink-0 text-[12px] font-bold text-slate-400 tabular-nums">
-                                    {item.installment_number}/{item.installments_count}
+                                    <span className="inline-flex items-center gap-1 text-finance-transfer">
+                                      <Layers3 className="h-3 w-3" />
+                                      Parcela {item.installment_number}/{item.installments_count}
+                                    </span>
                                   </span>
                                   <span className="shrink-0 text-xs font-black text-slate-900 tabular-nums">
                                     {formatCurrency(item.amount)}

@@ -85,9 +85,11 @@ class InvoiceProjection:
     remaining_amount: int
     purchase_count: int
     status: str
+    forecast_amount: int = 0
+    forecast_count: int = 0
 
-    def to_dict(self) -> dict[str, str | int]:
-        return {
+    def to_dict(self, *, include_forecast_fields: bool = False) -> dict[str, str | int]:
+        data: dict[str, str | int] = {
             "invoice_id": self.invoice_id,
             "card_id": self.card_id,
             "reference_month": self.reference_month,
@@ -99,6 +101,16 @@ class InvoiceProjection:
             "purchase_count": self.purchase_count,
             "status": self.status,
         }
+        if include_forecast_fields or self.forecast_amount > 0 or self.status == "forecast":
+            data.update(
+                {
+                    "forecast_amount": self.forecast_amount,
+                    "forecast_count": self.forecast_count,
+                    "expected_total_amount": self.total_amount + self.forecast_amount,
+                    "expected_remaining_amount": self.remaining_amount + self.forecast_amount,
+                }
+            )
+        return data
 
 
 @dataclass(frozen=True)
@@ -125,20 +137,22 @@ class InvoicePaymentProjection:
 class InvoiceItemProjection:
     invoice_item_id: str
     invoice_id: str
-    purchase_id: str
+    purchase_id: str | None
     card_id: str
-    purchase_date: str
+    purchase_date: str | None
+    scheduled_date: str | None
     category_id: str
     title: str | None
     description: str | None
     origin_type: str | None
     group_id: str | None
-    installment_number: int
-    installments_count: int
+    installment_number: int | None
+    installments_count: int | None
     amount: int
+    lifecycle_status: str
 
-    def to_dict(self) -> dict[str, str | int | None]:
-        return {
+    def to_dict(self, *, include_metadata: bool = True) -> dict[str, str | int | None]:
+        data: dict[str, str | int | None] = {
             "invoice_item_id": self.invoice_item_id,
             "invoice_id": self.invoice_id,
             "purchase_id": self.purchase_id,
@@ -153,6 +167,10 @@ class InvoiceItemProjection:
             "installments_count": self.installments_count,
             "amount": self.amount,
         }
+        if include_metadata:
+            data["scheduled_date"] = self.scheduled_date
+            data["lifecycle_status"] = self.lifecycle_status
+        return data
 
 
 @dataclass(frozen=True)
@@ -304,9 +322,10 @@ class RecurringRuleProjection:
     category_id: str
     description: str | None
     is_active: bool
+    card_start_month: str | None = None
 
     def to_dict(self) -> dict[str, str | int | bool | None]:
-        return {
+        data: dict[str, str | int | bool | None] = {
             "rule_id": self.rule_id,
             "name": self.name,
             "amount": self.amount,
@@ -318,6 +337,9 @@ class RecurringRuleProjection:
             "description": self.description,
             "is_active": self.is_active,
         }
+        if self.card_start_month is not None:
+            data["card_start_month"] = self.card_start_month
+        return data
 
 
 @dataclass(frozen=True)

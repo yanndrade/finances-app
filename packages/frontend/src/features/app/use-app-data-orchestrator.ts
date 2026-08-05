@@ -13,6 +13,7 @@ import {
   fetchInvoices,
   fetchPendings,
   fetchRecurringRules,
+  syncRecurringCardCharges,
   fetchTransactions,
   type AccountSummary,
   type CardSummary,
@@ -88,6 +89,9 @@ export function useAppDataOrchestrator({
   );
   const [loading, setLoading] = useState(true);
   const latestRefreshIdRef = useRef(0);
+  const refreshDataRef = useRef<(options?: RefreshOptions) => Promise<void>>(
+    async () => undefined,
+  );
 
   const refreshData = useCallback(
     async (options?: RefreshOptions) => {
@@ -105,6 +109,16 @@ export function useAppDataOrchestrator({
 
       setLoading(true);
 
+      void syncRecurringCardCharges()
+        .then((result) => {
+          if (result.posted_count > 0) {
+            void refreshDataRef.current({ month });
+          }
+        })
+        .catch(() => {
+          // Data refresh remains usable when an older/local backend does not expose the sync endpoint yet.
+        });
+
       try {
         const [
           nextCards,
@@ -121,7 +135,7 @@ export function useAppDataOrchestrator({
           nextInvestmentMovements,
         ] = await Promise.all([
           fetchCards(),
-          fetchInvoices(),
+          fetchInvoices(undefined, month),
           fetchDashboardSummary(month),
           fetchAccounts(),
           fetchTransactions(transactionApiFilters),
@@ -134,7 +148,7 @@ export function useAppDataOrchestrator({
             goalPercent: activeGoalPercent,
           }),
           fetchInvestmentCurrent(),
-          fetchInvestmentSnapshots(),
+          fetchInvestmentSnapshots().catch(() => []),
           fetchInvestmentHistory({
             view: activeInvestmentView,
             from: toIsoFromDate(activeFromDate, false),
@@ -190,6 +204,8 @@ export function useAppDataOrchestrator({
       transactionFilters,
     ],
   );
+
+  refreshDataRef.current = refreshData;
 
   return {
     dashboard,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from threading import RLock
 from typing import Protocol
 
 from finance_app.domain.events import NewEvent
@@ -76,6 +77,7 @@ class RecurringService:
         self._projector = projector
         self._account_reader = account_reader
         self._card_reader = card_reader
+        self._sync_lock = RLock()
 
     def create_rule(
         self,
@@ -89,6 +91,7 @@ class RecurringService:
         payment_method: str,
         category_id: str,
         description: str | None = None,
+        card_start_month: str | None = None,
     ) -> dict[str, str | int | bool | None]:
         self._sync_projections()
         if self._find_rule(rule_id) is not None:
@@ -108,6 +111,10 @@ class RecurringService:
 
         normalized_account_id = self._normalize_optional_text(account_id)
         normalized_card_id = self._normalize_optional_text(card_id)
+        normalized_start_month = self._normalize_start_month(
+            card_start_month,
+            payment_method=payment_method,
+        )
         self._validate_payment_target(
             account_id=normalized_account_id,
             card_id=normalized_card_id,
@@ -127,6 +134,7 @@ class RecurringService:
                 "category_id": category_id,
                 "description": description,
                 "is_active": True,
+                "card_start_month": normalized_start_month,
             },
         )
 
@@ -155,6 +163,7 @@ class RecurringService:
         category_id: str | None | object = UNSET,
         description: str | None | object = UNSET,
         is_active: bool | None | object = UNSET,
+        card_start_month: str | None | object = UNSET,
     ) -> dict[str, str | int | bool | None]:
         self._sync_projections()
         existing = self._find_rule(rule_id)
@@ -184,6 +193,11 @@ class RecurringService:
                 description if description is not UNSET else existing["description"]
             ),
             "is_active": is_active if is_active is not UNSET else bool(existing["is_active"]),
+            "card_start_month": (
+                card_start_month
+                if card_start_month is not UNSET
+                else existing.get("card_start_month")
+            ),
         }
 
         self._validate_rule_payload(
@@ -198,6 +212,10 @@ class RecurringService:
 
         normalized_account_id = self._normalize_optional_text(merged["account_id"])
         normalized_card_id = self._normalize_optional_text(merged["card_id"])
+        normalized_start_month = self._normalize_start_month(
+            merged["card_start_month"],
+            payment_method=str(merged["payment_method"]),
+        )
         self._validate_payment_target(
             account_id=normalized_account_id,
             card_id=normalized_card_id,
@@ -214,6 +232,7 @@ class RecurringService:
             "category_id": merged["category_id"],
             "description": merged["description"],
             "is_active": merged["is_active"],
+            "card_start_month": normalized_start_month,
         }
         existing_comparable = {
             "name": existing["name"],
@@ -225,6 +244,7 @@ class RecurringService:
             "category_id": existing["category_id"],
             "description": existing["description"],
             "is_active": existing["is_active"],
+            "card_start_month": existing.get("card_start_month"),
         }
         if all(existing_comparable[key] == value for key, value in comparable.items()):
             return existing
@@ -242,6 +262,7 @@ class RecurringService:
                 "category_id": str(merged["category_id"]),
                 "description": self._normalize_optional_text(merged["description"]),
                 "is_active": bool(merged["is_active"]),
+                "card_start_month": normalized_start_month,
             },
         )
         updated = self._find_rule(rule_id)
@@ -253,6 +274,74 @@ class RecurringService:
         self._validate_month(month)
         self._projector.materialize_month_pendings(month=month)
         return self._projector.list_pendings(month=month)
+
+    def synchronize_card_charges(self) -> dict[str, str | int]:
+        with self._sync_lock:
+            self._sync_projections()
+            today = date.today()
+            current_month = today.strftime("%Y-%m")
+            rules = self._projector.list_recurring_rules(is_active=True)
+            posted_count = 0
+
+            for rule in rules:
+                if str(rule["payment_method"]) != "CARD":
+                    continue
+
+                start_month = self._normalize_start_month(
+                    rule.get("card_start_month"),
+                    payment_method="CARD",
+                )
+                if start_month is None:
+                    start_month = current_month
+                    self._append_event(
+                        "RecurringRuleUpdated",
+                        {
+                            "id": str(rule["rule_id"]),
+                            "name": str(rule["name"]),
+                            "amount": int(rule["amount"]),
+                            "due_day": int(rule["due_day"]),
+                            "account_id": rule.get("account_id"),
+                            "card_id": rule.get("card_id"),
+                            "payment_method": str(rule["payment_method"]),
+                            "category_id": str(rule["category_id"]),
+                            "description": rule.get("description"),
+                            "is_active": bool(rule["is_active"]),
+                            "card_start_month": start_month,
+                        },
+                    )
+                    rule = next(
+                        item
+                        for item in self._projector.list_recurring_rules()
+                        if item["rule_id"] == rule["rule_id"]
+                    )
+
+                month = max(start_month, "0000-01")
+                while month <= current_month:
+                    self._projector.materialize_month_pendings(month=month)
+                    for pending in self._projector.list_pendings(month=month):
+                        if pending["rule_id"] != rule["rule_id"]:
+                            continue
+                        if str(pending["status"]) != "pending":
+                            continue
+                        if str(pending["payment_method"]) != "CARD":
+                            continue
+                        if str(pending["due_date"]) > today.isoformat():
+                            continue
+                        try:
+                            self.confirm_pending(str(pending["pending_id"]))
+                        except PendingAlreadyConfirmedError:
+                            # Another sync worker may have won the race after the
+                            # pending list was read. Deterministic IDs keep this a
+                            # harmless no-op.
+                            continue
+                        posted_count += 1
+                    month = self._next_month_key(month)
+
+            return {
+                "as_of_date": today.isoformat(),
+                "processed_date": today.isoformat(),
+                "posted_count": posted_count,
+            }
 
     def confirm_pending(self, pending_id: str) -> dict[str, str | int | None]:
         self._sync_projections()
@@ -403,6 +492,20 @@ class RecurringService:
         if normalized_card_id is not None:
             raise RecurringServiceError("card_id must be empty for non-card recurring rules.")
 
+    def _normalize_start_month(
+        self,
+        value: object | None,
+        *,
+        payment_method: str,
+    ) -> str | None:
+        if payment_method != "CARD":
+            return None
+        if value is None or not str(value).strip():
+            return None
+        month = str(value).strip()
+        self._validate_month(month)
+        return month
+
     def _validate_month(self, month: str) -> None:
         try:
             datetime.strptime(month, "%Y-%m")
@@ -423,6 +526,13 @@ class RecurringService:
         if len(parts) < 2:
             return None
         return parts[-1]
+
+    @staticmethod
+    def _next_month_key(month: str) -> str:
+        year, month_number = (int(part) for part in month.split("-"))
+        if month_number == 12:
+            return f"{year + 1:04d}-01"
+        return f"{year:04d}-{month_number + 1:02d}"
 
     def _validate_payment_target(
         self,

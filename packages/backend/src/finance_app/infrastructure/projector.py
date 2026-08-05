@@ -9,7 +9,9 @@ from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from finance_app.domain.cards import (
+    InvoiceCycleAllocation,
     PurchaseInstallmentAllocation,
+    allocate_invoice_cycle,
     allocate_purchase_installments,
 )
 from finance_app.domain.events import StoredEvent
@@ -44,8 +46,8 @@ CARD_PURCHASE_SOURCE_EVENT_TYPES = (
     "CardPurchaseCreated",
     "CardPurchaseUpdated",
 )
-CURRENT_PROJECTION_SCHEMA_VERSION = 5
-COMPATIBLE_PROJECTION_SCHEMA_VERSIONS = {5}
+CURRENT_PROJECTION_SCHEMA_VERSION = 6
+COMPATIBLE_PROJECTION_SCHEMA_VERSIONS = {6}
 
 
 class ProjectionBase(DeclarativeBase):
@@ -212,6 +214,7 @@ class RecurringRuleProjectionRecord(ProjectionBase):
     category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    card_start_month: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class PendingProjectionRecord(ProjectionBase):
@@ -904,10 +907,11 @@ class Projector:
         self,
         *,
         card_id: str | None = None,
+        forecast_month: str | None = None,
     ) -> list[dict[str, str | int]]:
         with self._lock:
             self.bootstrap()
-            with self._session_factory() as session:
+            with self._session_factory.begin() as session:
                 query = session.query(InvoiceProjectionRecord)
                 if card_id is not None:
                     query = query.filter(InvoiceProjectionRecord.card_id == card_id)
@@ -916,22 +920,117 @@ class Projector:
                     InvoiceProjectionRecord.reference_month.desc(),
                     InvoiceProjectionRecord.invoice_id.desc(),
                 ).all()
+                forecast_by_invoice = self._forecast_by_invoice(
+                    session,
+                    forecast_month=forecast_month,
+                    card_id=card_id,
+                )
+                result = []
+                for row in rows:
+                    forecast_amount, forecast_count = forecast_by_invoice.pop(
+                        row.invoice_id,
+                        (0, 0),
+                    )
+                    result.append(
+                        InvoiceProjection(
+                            invoice_id=row.invoice_id,
+                            card_id=row.card_id,
+                            reference_month=row.reference_month,
+                            closing_date=row.closing_date,
+                            due_date=row.due_date,
+                            total_amount=row.total_amount,
+                            paid_amount=row.paid_amount,
+                            remaining_amount=row.remaining_amount,
+                            purchase_count=row.purchase_count,
+                            status=row.status,
+                            forecast_amount=forecast_amount,
+                            forecast_count=forecast_count,
+                        ).to_dict(
+                            include_forecast_fields=(
+                                forecast_month is not None
+                                or forecast_amount > 0
+                                or row.status == "forecast"
+                            )
+                        )
+                    )
+                for invoice_id, (forecast_amount, forecast_count) in forecast_by_invoice.items():
+                    next_card_id, reference_month = invoice_id.split(":", 1)
+                    card = session.get(CardProjectionRecord, next_card_id)
+                    if card is None:
+                        continue
+                    cycle = self._invoice_cycle_for_reference_month(
+                        reference_month=reference_month,
+                        closing_day=card.closing_day,
+                        due_day=card.due_day,
+                    )
+                    result.append(
+                        InvoiceProjection(
+                            invoice_id=invoice_id,
+                            card_id=next_card_id,
+                            reference_month=reference_month,
+                            closing_date=cycle.closing_date,
+                            due_date=cycle.due_date,
+                            total_amount=0,
+                            paid_amount=0,
+                            remaining_amount=0,
+                            purchase_count=0,
+                            status="forecast",
+                            forecast_amount=forecast_amount,
+                            forecast_count=forecast_count,
+                        ).to_dict()
+                    )
 
-        return [
-            InvoiceProjection(
-                invoice_id=row.invoice_id,
-                card_id=row.card_id,
-                reference_month=row.reference_month,
-                closing_date=row.closing_date,
-                due_date=row.due_date,
-                total_amount=row.total_amount,
-                paid_amount=row.paid_amount,
-                remaining_amount=row.remaining_amount,
-                purchase_count=row.purchase_count,
-                status=row.status,
-            ).to_dict()
-            for row in rows
-        ]
+                result.sort(
+                    key=lambda invoice: (
+                        str(invoice["reference_month"]),
+                        str(invoice["invoice_id"]),
+                    ),
+                    reverse=True,
+                )
+                return result
+
+    def _forecast_by_invoice(
+        self,
+        session: Session,
+        *,
+        forecast_month: str | None,
+        card_id: str | None,
+    ) -> dict[str, tuple[int, int]]:
+        if forecast_month is None:
+            return {}
+
+        previous_month = self._previous_month_key(forecast_month)
+        self._ensure_month_pendings(session, month=forecast_month)
+        self._ensure_month_pendings(session, month=previous_month)
+        pending_rows = (
+            session.query(PendingProjectionRecord)
+            .filter(PendingProjectionRecord.month.in_((previous_month, forecast_month)))
+            .filter(PendingProjectionRecord.payment_method == "CARD")
+            .filter(PendingProjectionRecord.status == "pending")
+            .all()
+        )
+        totals: dict[str, tuple[int, int]] = {}
+        for pending in pending_rows:
+            if not self._pending_is_forecast_eligible(session, pending):
+                continue
+            if card_id is not None and pending.card_id != card_id:
+                continue
+            if pending.card_id is None:
+                continue
+            card = session.get(CardProjectionRecord, pending.card_id)
+            if card is None:
+                continue
+            cycle = allocate_invoice_cycle(
+                purchase_date=pending.due_date + "T12:00:00Z",
+                closing_day=card.closing_day,
+                due_day=card.due_day,
+            )
+            if cycle.reference_month != forecast_month:
+                continue
+            invoice_id = f"{pending.card_id}:{forecast_month}"
+            amount, count = totals.get(invoice_id, (0, 0))
+            totals[invoice_id] = (amount + pending.amount, count + 1)
+        return totals
 
     def list_invoice_items(
         self,
@@ -969,6 +1068,7 @@ class Projector:
                         "description": row.description,
                         "origin_type": row.origin_type,
                         "group_id": row.group_id,
+                        "lifecycle_status": row.lifecycle_status,
                     }
                     for row in (
                         session.query(UnifiedMovementRecord)
@@ -980,14 +1080,19 @@ class Projector:
                         .all()
                     )
                 }
+                forecast_rows = self._forecast_pendings_for_invoice(
+                    session,
+                    invoice_id=invoice_id,
+                )
 
-        return [
+        items = [
             InvoiceItemProjection(
                 invoice_item_id=row.installment_id,
                 invoice_id=row.invoice_id,
                 purchase_id=row.purchase_id,
                 card_id=row.card_id,
                 purchase_date=row.purchase_date,
+                scheduled_date=None,
                 category_id=row.category_id,
                 title=(
                     movement_meta.get(row.installment_id, {}).get("title")
@@ -1011,9 +1116,91 @@ class Projector:
                 installment_number=row.installment_number,
                 installments_count=row.installments_count,
                 amount=row.amount,
-            ).to_dict()
+                lifecycle_status=movement_meta.get(
+                    row.installment_id, {}
+                ).get("lifecycle_status", "pending"),
+            ).to_dict(include_metadata=False)
             for row in rows
         ]
+        items.extend(
+            InvoiceItemProjection(
+                invoice_item_id=pending.pending_id,
+                invoice_id=invoice_id,
+                purchase_id=None,
+                card_id=str(pending.card_id),
+                purchase_date=None,
+                scheduled_date=pending.due_date,
+                category_id=pending.category_id,
+                title=pending.name,
+                description=self._invoice_item_description(
+                    title=pending.name,
+                    description=pending.description,
+                    origin_type="recurring",
+                ),
+                origin_type="recurring",
+                group_id=pending.rule_id,
+                installment_number=None,
+                installments_count=None,
+                amount=pending.amount,
+                lifecycle_status="forecast",
+            ).to_dict()
+            for pending in forecast_rows
+        )
+        return items
+
+    def _forecast_pendings_for_invoice(
+        self,
+        session: Session,
+        *,
+        invoice_id: str,
+    ) -> list[PendingProjectionRecord]:
+        parts = invoice_id.rsplit(":", 1)
+        if len(parts) != 2:
+            return []
+        card_id, reference_month = parts
+        previous_month = self._previous_month_key(reference_month)
+        self._ensure_month_pendings(session, month=reference_month)
+        self._ensure_month_pendings(session, month=previous_month)
+        rows = (
+            session.query(PendingProjectionRecord)
+            .filter(PendingProjectionRecord.card_id == card_id)
+            .filter(PendingProjectionRecord.payment_method == "CARD")
+            .filter(PendingProjectionRecord.status == "pending")
+            .filter(PendingProjectionRecord.month.in_((previous_month, reference_month)))
+            .order_by(
+                PendingProjectionRecord.due_date.desc(),
+                PendingProjectionRecord.pending_id.desc(),
+            )
+            .all()
+        )
+        card = session.get(CardProjectionRecord, card_id)
+        if card is None:
+            return []
+        return [
+            row
+            for row in rows
+            if self._pending_is_forecast_eligible(session, row)
+            if allocate_invoice_cycle(
+                purchase_date=row.due_date + "T12:00:00Z",
+                closing_day=card.closing_day,
+                due_day=card.due_day,
+            ).reference_month
+            == reference_month
+        ]
+
+    @staticmethod
+    def _pending_is_forecast_eligible(
+        session: Session,
+        pending: PendingProjectionRecord,
+    ) -> bool:
+        rule = session.get(RecurringRuleProjectionRecord, pending.rule_id)
+        if rule is None:
+            return False
+        if rule.card_start_month is not None:
+            return True
+        # Legacy card rules are activated from the current backend month when
+        # the automatic sync first sees them; never forecast an earlier month.
+        return pending.month >= date.today().strftime("%Y-%m")
 
     def list_invoice_payments(
         self,
@@ -2202,6 +2389,7 @@ class Projector:
                 category_id=row.category_id,
                 description=row.description,
                 is_active=row.is_active,
+                card_start_month=row.card_start_month,
             ).to_dict()
             for row in rows
         ]
@@ -3262,6 +3450,7 @@ class Projector:
                 category_id=str(payload["category_id"]),
                 description=_optional_string(payload.get("description")),
                 is_active=bool(payload.get("is_active", True)),
+                card_start_month=_optional_string(payload.get("card_start_month")),
             )
         )
 
@@ -3285,6 +3474,29 @@ class Projector:
         existing.category_id = str(payload["category_id"])
         existing.description = _optional_string(payload.get("description"))
         existing.is_active = bool(payload.get("is_active", True))
+        if "card_start_month" in payload:
+            existing.card_start_month = _optional_string(payload.get("card_start_month"))
+
+        pendings = (
+            session.query(PendingProjectionRecord)
+            .filter(PendingProjectionRecord.rule_id == rule_id)
+            .filter(PendingProjectionRecord.status == "pending")
+            .all()
+        )
+        for pending in pendings:
+            if (
+                not existing.is_active
+                or (
+                    existing.payment_method == "CARD"
+                    and existing.card_start_month is not None
+                    and pending.month < existing.card_start_month
+                )
+            ):
+                self._remove_unified_movement(session, movement_id=pending.pending_id)
+                session.delete(pending)
+                continue
+            self._sync_pending_fields(pending, rule=existing, month=pending.month)
+            self._upsert_pending_unified_movement(session, pending=pending)
 
     def _apply_budget_updated(
         self,
@@ -4423,40 +4635,85 @@ class Projector:
             existing.occurred_at = f"{allocation.closing_date}T00:00:00Z"
 
     def _ensure_month_pendings(self, session: Session, *, month: str) -> None:
-        rows: Sequence[RecurringRuleProjectionRecord] = (
-            session.query(RecurringRuleProjectionRecord)
-            .filter(RecurringRuleProjectionRecord.is_active.is_(True))
-            .order_by(RecurringRuleProjectionRecord.rule_id.asc())
+        rows: Sequence[RecurringRuleProjectionRecord] = session.query(
+            RecurringRuleProjectionRecord
+        ).order_by(RecurringRuleProjectionRecord.rule_id.asc()).all()
+        rules_by_id = {row.rule_id: row for row in rows}
+
+        existing_pendings = (
+            session.query(PendingProjectionRecord)
+            .filter(PendingProjectionRecord.month == month)
+            .filter(PendingProjectionRecord.status == "pending")
             .all()
         )
+        for pending in existing_pendings:
+            rule = rules_by_id.get(pending.rule_id)
+            if (
+                rule is None
+                or not rule.is_active
+                or (
+                    rule.card_start_month is not None
+                    and month < rule.card_start_month
+                    and rule.payment_method == "CARD"
+                )
+            ):
+                self._remove_unified_movement(session, movement_id=pending.pending_id)
+                session.delete(pending)
+                continue
+
+            self._sync_pending_fields(pending, rule=rule, month=month)
+            self._upsert_pending_unified_movement(session, pending=pending)
 
         for row in rows:
+            if not row.is_active:
+                continue
+            if (
+                row.card_start_month is not None
+                and month < row.card_start_month
+                and row.payment_method == "CARD"
+            ):
+                continue
             pending_id = f"{row.rule_id}:{month}"
             if session.get(PendingProjectionRecord, pending_id) is not None:
                 continue
 
             _pending_due_date = self._due_date_for_month(month, row.due_day)
-            session.add(
-                PendingProjectionRecord(
-                    pending_id=pending_id,
-                    rule_id=row.rule_id,
-                    month=month,
-                    name=row.name,
-                    amount=row.amount,
-                    due_date=_pending_due_date,
-                    account_id=row.account_id,
-                    card_id=row.card_id,
-                    payment_method=row.payment_method,
-                    category_id=row.category_id,
-                    description=row.description,
-                    status="pending",
-                    transaction_id=None,
-                    confirmed_at=None,
-                )
+            pending = PendingProjectionRecord(
+                pending_id=pending_id,
+                rule_id=row.rule_id,
+                month=month,
+                name=row.name,
+                amount=row.amount,
+                due_date=_pending_due_date,
+                account_id=row.account_id,
+                card_id=row.card_id,
+                payment_method=row.payment_method,
+                category_id=row.category_id,
+                description=row.description,
+                status="pending",
+                transaction_id=None,
+                confirmed_at=None,
             )
-            pending = session.get(PendingProjectionRecord, pending_id)
-            if pending is not None:
-                self._upsert_pending_unified_movement(session, pending=pending)
+            session.add(pending)
+            self._upsert_pending_unified_movement(session, pending=pending)
+
+        session.flush()
+
+    def _sync_pending_fields(
+        self,
+        pending: PendingProjectionRecord,
+        *,
+        rule: RecurringRuleProjectionRecord,
+        month: str,
+    ) -> None:
+        pending.name = rule.name
+        pending.amount = rule.amount
+        pending.due_date = self._due_date_for_month(month, rule.due_day)
+        pending.account_id = rule.account_id
+        pending.card_id = rule.card_id
+        pending.payment_method = rule.payment_method
+        pending.category_id = rule.category_id
+        pending.description = rule.description
 
     def _pending_to_dict(
         self,
@@ -4501,6 +4758,28 @@ class Projector:
     def _due_date_for_month(self, month: str, due_day: int) -> str:
         parsed_month = datetime.strptime(month, "%Y-%m")
         return date(parsed_month.year, parsed_month.month, due_day).isoformat()
+
+    @staticmethod
+    def _invoice_cycle_for_reference_month(
+        *,
+        reference_month: str,
+        closing_day: int,
+        due_day: int,
+    ) -> InvoiceCycleAllocation:
+        year, month = (int(part) for part in reference_month.split("-"))
+        closing_date = date(year, month, closing_day)
+        due_year, due_month = year, month
+        if due_day < closing_day:
+            if due_month == 12:
+                due_year += 1
+                due_month = 1
+            else:
+                due_month += 1
+        return InvoiceCycleAllocation(
+            reference_month=reference_month,
+            closing_date=closing_date.isoformat(),
+            due_date=date(due_year, due_month, due_day).isoformat(),
+        )
 
     def _income_totals_by_month(self, *, session: Session) -> dict[str, int]:
         rows: Sequence[TransactionProjectionRecord] = (
@@ -5309,6 +5588,7 @@ class Projector:
             "category_id",
             "description",
             "is_active",
+            "card_start_month",
         }
         if recurring_rule_columns != expected_recurring_rule_columns:
             return True

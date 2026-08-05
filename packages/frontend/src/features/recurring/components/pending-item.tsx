@@ -30,6 +30,7 @@ export function PendingItem({
   isSubmitting,
 }: PendingItemProps) {
   const isConfirmed = pending.status === "confirmed";
+  const isCardRecurring = pending.payment_method === "CARD";
   const canUndoPayment =
     isConfirmed &&
     pending.payment_method !== "CARD" &&
@@ -71,6 +72,11 @@ export function PendingItem({
         <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
           {isConfirmed ? (
             <>
+              {isCardRecurring ? (
+                <span className="inline-flex items-center rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
+                  Na fatura
+                </span>
+              ) : null}
               {canUndoPayment ? (
                 <button
                   type="button"
@@ -89,6 +95,10 @@ export function PendingItem({
                 Ver no histórico
               </button>
             </>
+          ) : isCardRecurring ? (
+            <span className="inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
+              Agendada no cartão
+            </span>
           ) : (
             <button
               disabled={isSubmitting}

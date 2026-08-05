@@ -26,7 +26,19 @@ type RuleFormState = {
   cardId: string;
   categoryId: string;
   description: string;
+  cardStartMonth: string;
 };
+
+type CardStartOption = "current" | "next";
+
+function getMonthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getNextMonthKey(date: Date): string {
+  const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  return getMonthKey(next);
+}
 
 type RuleFormSheetProps = {
   isOpen: boolean;
@@ -63,6 +75,7 @@ function buildEmptyRuleForm(
     cardId: cards[0]?.card_id ?? "",
     categoryId: categories[0]?.value ?? "",
     description: "",
+    cardStartMonth: getMonthKey(new Date()),
   };
 }
 
@@ -76,6 +89,7 @@ function ruleToFormState(rule: RecurringRuleSummary): RuleFormState {
     cardId: rule.card_id ?? "",
     categoryId: rule.category_id,
     description: rule.description ?? "",
+    cardStartMonth: rule.card_start_month ?? getMonthKey(new Date()),
   };
 }
 
@@ -95,14 +109,24 @@ export function RuleFormSheet({
   const [formState, setFormState] = useState<RuleFormState>(() =>
     buildEmptyRuleForm(accounts, cards, categories)
   );
+  const [cardStartOption, setCardStartOption] = useState<CardStartOption>("current");
 
   useEffect(() => {
     if (isOpen) {
       setFormError(null);
       if (ruleToEdit) {
         setFormState(ruleToFormState(ruleToEdit));
+        const currentMonth = getMonthKey(new Date());
+        setCardStartOption(
+          ruleToEdit.card_start_month === getNextMonthKey(new Date())
+            ? "next"
+            : ruleToEdit.card_start_month === currentMonth
+              ? "current"
+              : "current",
+        );
       } else {
         setFormState(buildEmptyRuleForm(accounts, cards, categories));
+        setCardStartOption("next");
       }
     }
   }, [isOpen, ruleToEdit, accounts, cards, categories]);
@@ -113,6 +137,8 @@ export function RuleFormSheet({
 
     const amountInCents = toCents(formState.amount);
     const dueDay = Number.parseInt(formState.dueDay, 10);
+    const today = new Date();
+    const chargeDateHasArrived = dueDay <= today.getDate();
 
     if (!formState.name.trim()) {
       setFormError("Informe um nome para o gasto fixo.");
@@ -148,6 +174,12 @@ export function RuleFormSheet({
       cardId: formState.paymentMethod === "CARD" ? formState.cardId : undefined,
       categoryId: formState.categoryId,
       description: formState.description.trim() || undefined,
+      cardStartMonth:
+        formState.paymentMethod === "CARD"
+          ? chargeDateHasArrived && cardStartOption === "next"
+            ? getNextMonthKey(today)
+            : formState.cardStartMonth || getMonthKey(today)
+          : undefined,
     };
 
     if (ruleToEdit === null) {
@@ -211,7 +243,7 @@ export function RuleFormSheet({
 
                 <label className="block space-y-2">
                   <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
-                    Vencimento
+                    {formState.paymentMethod === "CARD" ? "Dia da cobrança" : "Vencimento"}
                   </span>
                   <input
                     className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -293,6 +325,40 @@ export function RuleFormSheet({
                 </label>
               )}
 
+              {formState.paymentMethod === "CARD" && Number.parseInt(formState.dueDay, 10) <= new Date().getDate() ? (
+                <fieldset className="space-y-3 rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                  <legend className="px-1 text-xs font-black uppercase tracking-[0.14em] text-primary">
+                    Esta cobrança já chegou neste mês
+                  </legend>
+                  <label className="flex cursor-pointer items-start gap-3 text-sm text-foreground">
+                    <input
+                      checked={cardStartOption === "current"}
+                      name="card-start-month"
+                      onChange={() => setCardStartOption("current")}
+                      type="radio"
+                      value="current"
+                    />
+                    <span>
+                      <span className="block font-bold">Lançar neste mês</span>
+                      <span className="block text-xs text-muted-foreground">A assinatura entra na fatura quando sincronizar.</span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 text-sm text-foreground">
+                    <input
+                      checked={cardStartOption === "next"}
+                      name="card-start-month"
+                      onChange={() => setCardStartOption("next")}
+                      type="radio"
+                      value="next"
+                    />
+                    <span>
+                      <span className="block font-bold">Começar no próximo mês</span>
+                      <span className="block text-xs text-muted-foreground">Evita duplicar uma cobrança que já aconteceu.</span>
+                    </span>
+                  </label>
+                </fieldset>
+              ) : null}
+
               <label className="block space-y-2">
                 <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
                   Categoria
@@ -356,7 +422,19 @@ export function RuleFormSheet({
               className="w-full"
               disabled={isSubmitting}
               onClick={async () => {
-                await onToggleRuleStatus(ruleToEdit);
+                if (!ruleToEdit.is_active && formState.paymentMethod === "CARD") {
+                  const today = new Date();
+                  const dueDay = Number.parseInt(formState.dueDay, 10);
+                  await onUpdateRule(ruleToEdit.rule_id, {
+                    isActive: true,
+                    cardStartMonth:
+                      dueDay <= today.getDate() && cardStartOption === "next"
+                        ? getNextMonthKey(today)
+                        : formState.cardStartMonth || getMonthKey(today),
+                  });
+                } else {
+                  await onToggleRuleStatus(ruleToEdit);
+                }
                 onOpenChange(false);
               }}
             >
