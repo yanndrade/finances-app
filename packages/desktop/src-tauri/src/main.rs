@@ -20,11 +20,14 @@ use std::time::{Duration, Instant};
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::{
-    Foundation::HANDLE,
+    Foundation::{LocalFree, HANDLE},
+    Security::Cryptography::{
+        CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+    },
     System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
         SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
@@ -41,6 +44,8 @@ const BACKEND_BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 const TRAY_EVENT_QUICK_ADD: &str = "desktop://quick-add";
 const TRAY_EVENT_LOCK: &str = "desktop://lock";
 const AUTOSTART_ENTRY_NAME: &str = "MeuCofri";
+const PLUGGY_CREDENTIALS_FILE_NAME: &str = "pluggy-credentials.bin";
+const DATA_DIR_ENV: &str = "MEUCOFRI_DATA_DIR";
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -103,6 +108,21 @@ impl RuntimeState {
             backend_process.terminate();
         }
     }
+
+    fn set_backend(&self, backend_process: BackendProcess) -> Result<(), String> {
+        let mut guard = self
+            .backend_process
+            .lock()
+            .map_err(|_| "backend process state is unavailable".to_string())?;
+        *guard = Some(backend_process);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct PluggyCredentials {
+    client_id: String,
+    client_secret: String,
 }
 
 struct BackendProcess {
@@ -177,6 +197,37 @@ fn set_autostart_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+#[tauri::command]
+fn get_pluggy_credentials_configured(app: AppHandle) -> Result<bool, String> {
+    read_pluggy_credentials(&app)
+        .map(|credentials| credentials.is_some())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn set_pluggy_credentials(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+    client_id: String,
+    client_secret: String,
+) -> Result<(), String> {
+    let credentials = validate_pluggy_credentials(client_id, client_secret)?;
+    write_pluggy_credentials(&app, &credentials).map_err(|error| error.to_string())?;
+    restart_backend_process(&app, &state)
+}
+
+#[tauri::command]
+fn clear_pluggy_credentials(app: AppHandle, state: State<'_, RuntimeState>) -> Result<(), String> {
+    let path = resolve_pluggy_credentials_path(&app).map_err(|error| error.to_string())?;
+    match std::fs::remove_file(path) {
+        Ok(()) => restart_backend_process(&app, &state),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            restart_backend_process(&app, &state)
+        }
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 #[tauri::command]
@@ -266,6 +317,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_autostart_enabled,
             set_autostart_enabled,
+            get_pluggy_credentials_configured,
+            set_pluggy_credentials,
+            clear_pluggy_credentials,
             open_existing_reimbursement_pdf,
             save_reimbursement_pdf
         ])
@@ -416,7 +470,10 @@ fn show_main_window(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) {
         let backend_dir = resolve_dev_backend_dir()?;
-        let startup_log_path = resolve_backend_startup_log_path(None);
+        // Without an override the dev backend keeps using its own working
+        // directory, which is the repository database.
+        let data_dir_override = resolve_data_dir_override();
+        let startup_log_path = resolve_backend_startup_log_path(data_dir_override.as_deref());
         let startup_log_file = open_startup_log_file(&startup_log_path)?;
         let stdout_log_file = startup_log_file.try_clone()?;
         let mut command = Command::new("uv");
@@ -432,6 +489,10 @@ fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std:
             .stdin(Stdio::null())
             .stdout(Stdio::from(stdout_log_file))
             .stderr(Stdio::from(startup_log_file));
+        if let Some(data_dir) = data_dir_override.as_deref() {
+            apply_backend_data_dir(&mut command, data_dir)?;
+        }
+        apply_pluggy_credentials(app, &mut command);
         apply_backend_spawn_options(&mut command);
         let child = command.spawn()?;
         return Ok(BackendProcess::new(child, startup_log_path));
@@ -442,14 +503,12 @@ fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std:
         .parent()
         .ok_or("backend executable directory is missing")?
         .to_path_buf();
+    // Deliberately not overridable: the installed app must never be pointed
+    // somewhere else by a variable left over in the environment.
     let backend_data_dir = resolve_release_data_dir(app, &working_dir);
     let startup_log_path = resolve_backend_startup_log_path(Some(&backend_data_dir));
     let startup_log_file = open_startup_log_file(&startup_log_path)?;
     let stdout_log_file = startup_log_file.try_clone()?;
-    let certificate_dir = backend_data_dir.join("certs");
-    std::fs::create_dir_all(&certificate_dir)?;
-    let projection_database_path = backend_data_dir.join("app.db");
-    let event_database_path = backend_data_dir.join("events.db");
 
     let mut command = Command::new(&backend_path);
     command
@@ -460,19 +519,175 @@ fn spawn_backend_process(app: &AppHandle) -> Result<BackendProcess, Box<dyn std:
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout_log_file))
         .stderr(Stdio::from(startup_log_file))
-        .env(
-            "FINANCE_APP_DATABASE_PATH",
-            projection_database_path.as_os_str(),
-        )
-        .env(
-            "FINANCE_APP_EVENT_DATABASE_PATH",
-            event_database_path.as_os_str(),
-        )
-        .env("FINANCE_APP_CERT_DIR", certificate_dir.as_os_str())
         .current_dir(working_dir);
+    apply_backend_data_dir(&mut command, &backend_data_dir)?;
+    apply_pluggy_credentials(app, &mut command);
     apply_backend_spawn_options(&mut command);
     let child = command.spawn()?;
     Ok(BackendProcess::new(child, startup_log_path))
+}
+
+fn restart_backend_process(app: &AppHandle, state: &RuntimeState) -> Result<(), String> {
+    state.stop_backend();
+
+    let mut backend_process = spawn_backend_process(app).map_err(|error| error.to_string())?;
+    if let Err(error) = wait_for_backend_ready(&mut backend_process) {
+        backend_process.terminate();
+        return Err(error.to_string());
+    }
+
+    state.set_backend(backend_process)
+}
+
+fn apply_pluggy_credentials(app: &AppHandle, command: &mut Command) {
+    match read_pluggy_credentials(app) {
+        Ok(Some(credentials)) => {
+            command
+                .env("PLUGGY_CLIENT_ID", credentials.client_id)
+                .env("PLUGGY_CLIENT_SECRET", credentials.client_secret);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("Unable to load protected Pluggy credentials: {error}");
+        }
+    }
+}
+
+fn validate_pluggy_credentials(
+    client_id: String,
+    client_secret: String,
+) -> Result<PluggyCredentials, String> {
+    let client_id = client_id.trim().to_string();
+    let client_secret = client_secret.trim().to_string();
+    if client_id.is_empty() || client_secret.is_empty() {
+        return Err("client id and client secret are required".to_string());
+    }
+
+    Ok(PluggyCredentials {
+        client_id,
+        client_secret,
+    })
+}
+
+fn resolve_pluggy_credentials_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let data_dir = app
+        .path()
+        .app_local_data_dir()
+        .or_else(|_| app.path().app_data_dir())?;
+    Ok(data_dir.join(PLUGGY_CREDENTIALS_FILE_NAME))
+}
+
+fn write_pluggy_credentials(
+    app: &AppHandle,
+    credentials: &PluggyCredentials,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let plaintext = serde_json::to_vec(&serde_json::json!({
+        "client_id": credentials.client_id,
+        "client_secret": credentials.client_secret,
+    }))?;
+    let encrypted = protect_data(&plaintext)?;
+    let path = resolve_pluggy_credentials_path(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, encrypted)?;
+    Ok(())
+}
+
+fn read_pluggy_credentials(
+    app: &AppHandle,
+) -> Result<Option<PluggyCredentials>, Box<dyn std::error::Error>> {
+    let path = resolve_pluggy_credentials_path(app)?;
+    let encrypted = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let plaintext = unprotect_data(&encrypted)?;
+    let value: serde_json::Value = serde_json::from_slice(&plaintext)?;
+    let client_id = value
+        .get("client_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("protected Pluggy client id is missing")?;
+    let client_secret = value
+        .get("client_secret")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("protected Pluggy client secret is missing")?;
+
+    Ok(Some(validate_pluggy_credentials(
+        client_id.to_string(),
+        client_secret.to_string(),
+    )?))
+}
+
+#[cfg(target_os = "windows")]
+fn protect_data(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: u32::try_from(data.len())?,
+        pbData: data.as_ptr() as *mut u8,
+    };
+    let mut output: CRYPT_INTEGER_BLOB = unsafe { zeroed() };
+    let result = unsafe {
+        CryptProtectData(
+            &input,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if result == 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+
+    let protected =
+        unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() };
+    unsafe {
+        LocalFree(output.pbData.cast());
+    }
+    Ok(protected)
+}
+
+#[cfg(target_os = "windows")]
+fn unprotect_data(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: u32::try_from(data.len())?,
+        pbData: data.as_ptr() as *mut u8,
+    };
+    let mut output: CRYPT_INTEGER_BLOB = unsafe { zeroed() };
+    let result = unsafe {
+        CryptUnprotectData(
+            &input,
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if result == 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+
+    let plaintext =
+        unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() };
+    unsafe {
+        LocalFree(output.pbData.cast());
+    }
+    Ok(plaintext)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn protect_data(_data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    Err("protected Pluggy credentials are only supported on Windows".into())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn unprotect_data(_data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    Err("protected Pluggy credentials are only supported on Windows".into())
 }
 
 fn apply_backend_spawn_options(command: &mut Command) {
@@ -555,6 +770,55 @@ fn resolve_dev_backend_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
         .join("backend")
         .canonicalize()?;
     Ok(backend_dir)
+}
+
+/// Points the dev backend at a data directory other than the repository one.
+///
+/// The shell is the only thing that holds the DPAPI-protected Pluggy
+/// credentials, so driving a throwaway copy of the databases otherwise means
+/// starting the backend by hand, without them. Only the dev build reads this:
+/// the installed app always uses its own data directory. A relative value is
+/// resolved against the current directory.
+fn parse_data_dir_override(raw: Option<&str>, base: &Path) -> Option<PathBuf> {
+    let trimmed = raw?.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let path = PathBuf::from(trimmed);
+    Some(if path.is_absolute() {
+        path
+    } else {
+        base.join(path)
+    })
+}
+
+fn resolve_data_dir_override() -> Option<PathBuf> {
+    let raw = std::env::var(DATA_DIR_ENV).ok();
+    let base = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    parse_data_dir_override(raw.as_deref(), &base)
+}
+
+/// Tells the backend where its databases and certificates live.
+fn apply_backend_data_dir(
+    command: &mut Command,
+    data_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let projection_database_path = data_dir.join("app.db");
+    let event_database_path = data_dir.join("events.db");
+    let certificate_dir = data_dir.join("certs");
+    std::fs::create_dir_all(&certificate_dir)?;
+    command
+        .env(
+            "FINANCE_APP_DATABASE_PATH",
+            projection_database_path.as_os_str(),
+        )
+        .env(
+            "FINANCE_APP_EVENT_DATABASE_PATH",
+            event_database_path.as_os_str(),
+        )
+        .env("FINANCE_APP_CERT_DIR", certificate_dir.as_os_str());
+    Ok(())
 }
 
 fn resolve_release_data_dir(app: &AppHandle, working_dir: &Path) -> PathBuf {
@@ -707,7 +971,45 @@ fn is_backend_health_response_ok(response: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_backend_health_response_ok, RuntimeState, TrayAction};
+    use super::{
+        is_backend_health_response_ok, parse_data_dir_override, protect_data, unprotect_data,
+        validate_pluggy_credentials, RuntimeState, TrayAction,
+    };
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn data_dir_override_is_absent_unless_the_variable_carries_a_path() {
+        let base = Path::new("C:\\repo");
+
+        assert_eq!(parse_data_dir_override(None, base), None);
+        assert_eq!(parse_data_dir_override(Some(""), base), None);
+        assert_eq!(parse_data_dir_override(Some("   "), base), None);
+    }
+
+    #[test]
+    fn data_dir_override_resolves_a_relative_path_against_the_current_directory() {
+        let base = Path::new("C:\\repo");
+
+        assert_eq!(
+            parse_data_dir_override(Some(" .sandbox "), base),
+            Some(PathBuf::from("C:\\repo\\.sandbox")),
+        );
+    }
+
+    #[test]
+    fn data_dir_override_keeps_an_absolute_path_untouched() {
+        let base = Path::new("C:\\repo");
+        let absolute = if cfg!(windows) {
+            "C:\\elsewhere\\sandbox"
+        } else {
+            "/elsewhere/sandbox"
+        };
+
+        assert_eq!(
+            parse_data_dir_override(Some(absolute), base),
+            Some(PathBuf::from(absolute)),
+        );
+    }
 
     #[test]
     fn tray_action_mapping_works_for_known_ids() {
@@ -734,5 +1036,28 @@ mod tests {
         assert!(!is_backend_health_response_ok(
             "HTTP/1.1 200 OK\r\n\r\n{\"status\":\"ok\"}"
         ));
+    }
+
+    #[test]
+    fn pluggy_credentials_require_both_values() {
+        assert!(validate_pluggy_credentials("client-id".into(), "".into()).is_err());
+        assert!(validate_pluggy_credentials("".into(), "client-secret".into()).is_err());
+    }
+
+    #[test]
+    fn pluggy_credentials_are_trimmed() {
+        let credentials =
+            validate_pluggy_credentials(" client-id ".into(), " client-secret ".into()).unwrap();
+        assert_eq!(credentials.client_id, "client-id");
+        assert_eq!(credentials.client_secret, "client-secret");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_protected_data_round_trip() {
+        let plaintext = b"local-pluggy-secret";
+        let encrypted = protect_data(plaintext).unwrap();
+        assert_ne!(encrypted, plaintext);
+        assert_eq!(unprotect_data(&encrypted).unwrap(), plaintext);
     }
 }

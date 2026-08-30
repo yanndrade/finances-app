@@ -6,6 +6,21 @@ $desktopPath = Join-Path $repoRoot "packages\desktop"
 $frontendPort = 43173
 $backendExecutablePath = Join-Path $repoRoot "packages\backend\.venv\Scripts\backend.exe"
 
+# The Tauri runtime starts from the desktop package, so a relative override
+# would resolve against it instead of the repository root.
+if ($env:MEUCOFRI_DATA_DIR) {
+    $dataDir = $env:MEUCOFRI_DATA_DIR.Trim()
+
+    if ($dataDir -and -not [System.IO.Path]::IsPathRooted($dataDir)) {
+        $dataDir = Join-Path $repoRoot $dataDir
+    }
+
+    if ($dataDir) {
+        $env:MEUCOFRI_DATA_DIR = $dataDir
+        Write-Host "Backend data directory override: $dataDir"
+    }
+}
+
 if (-not (Test-Path $frontendPath)) {
     throw "Frontend package not found at $frontendPath"
 }
