@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 
 import { QuickAddComposer } from "./quick-add-composer";
 
-import type { AccountSummary, CardSummary } from "../lib/api";
+import type {
+  AccountSummary,
+  CardHolderSummary,
+  CardSummary,
+} from "../lib/api";
 import type { CategoryOption } from "../lib/categories";
 
 type MatchMediaController = {
@@ -39,6 +43,21 @@ const CARDS: CardSummary[] = [
     payment_account_id: "acc-1",
     is_active: true,
     future_installment_total: 0,
+  },
+];
+
+const HOLDERS: CardHolderSummary[] = [
+  {
+    holder_id: "holder-sergio",
+    card_id: "card-1",
+    name: "Sergio Mello",
+    last_four: "6186",
+    is_primary: false,
+    sub_limit: null,
+    reimbursable_person_id: null,
+    is_active: true,
+    spent_open_invoice: 0,
+    spent_future_installments: 0,
   },
 ];
 
@@ -138,6 +157,8 @@ function renderComposer(options?: {
   categories?: CategoryOption[];
   onCreateCategory?: (label: string) => boolean;
   onRemoveCategory?: (categoryId: string) => void;
+  holdersByCard?: Record<string, CardHolderSummary[]>;
+  presetDraft?: Parameters<typeof QuickAddComposer>[0]["presetDraft"];
 }) {
   const onSubmitTransaction = vi.fn(() => Promise.resolve());
   const onSubmitTransfer = vi.fn(() => Promise.resolve());
@@ -151,6 +172,8 @@ function renderComposer(options?: {
       onClose={vi.fn()}
       accounts={ACCOUNTS}
       cards={CARDS}
+      holdersByCard={options?.holdersByCard}
+      presetDraft={options?.presetDraft}
       invoices={options?.invoices ?? []}
       preset={options?.preset}
       presetInvoiceId={options?.presetInvoiceId}
@@ -322,6 +345,58 @@ describe("QuickAddComposer", () => {
           installmentsCount: 1,
         }),
       );
+    });
+  });
+
+  it("attributes a card purchase to the holder who carries the card", async () => {
+    installMatchMedia(false);
+    const user = userEvent.setup();
+    const { onSubmitCardPurchase } = renderComposer({
+      holdersByCard: { "card-1": HOLDERS },
+    });
+
+    await user.type(screen.getByPlaceholderText("0,00"), "5367");
+    await user.selectOptions(screen.getByLabelText(/modo de pagamento/i), "CARD");
+    await user.selectOptions(screen.getByLabelText(/portador/i), "holder-sergio");
+    await user.type(screen.getByLabelText(/^descrição$/i), "Pizzaria{Enter}");
+
+    await waitFor(() => {
+      expect(onSubmitCardPurchase).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cardId: "card-1",
+          holderId: "holder-sergio",
+        }),
+      );
+    });
+  });
+
+  it("offers no holder field on a card that has none", async () => {
+    installMatchMedia(false);
+    const user = userEvent.setup();
+    renderComposer();
+
+    await user.selectOptions(screen.getByLabelText(/modo de pagamento/i), "CARD");
+
+    expect(screen.queryByLabelText(/portador/i)).not.toBeInTheDocument();
+  });
+
+  it("opens on the holder a reviewed proposal was attributed to", async () => {
+    // The import resolves the holder from the card's last four digits, and the
+    // review has to show that before it is written, not silently keep it.
+    installMatchMedia(false);
+    renderComposer({
+      preset: "expense_card",
+      holdersByCard: { "card-1": HOLDERS },
+      presetDraft: {
+        amount: "53.67",
+        description: "99Food *Pizzaria Brocado",
+        cardId: "card-1",
+        holderId: "holder-sergio",
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/portador/i)).toHaveValue("holder-sergio");
     });
   });
 

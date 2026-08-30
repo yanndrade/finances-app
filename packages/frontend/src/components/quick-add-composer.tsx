@@ -36,6 +36,7 @@ import type {
   InvestmentMovementPayload,
   InvoicePaymentPayload,
   InvoiceSummary,
+  CardHolderSummary,
   TransferPayload,
   RecurringRulePayload,
 } from "../lib/api";
@@ -76,6 +77,8 @@ export type QuickAddDraft = {
   categoryId?: string;
   personId?: string;
   cardId?: string;
+  /** Which physical card on it — an additional's spend is not the titular's. */
+  holderId?: string;
   accountId?: string;
   /** Where a transfer lands. */
   toAccountId?: string;
@@ -191,6 +194,12 @@ type QuickAddComposerProps = {
   presetInvoiceId?: string;
   accounts: AccountSummary[];
   cards: CardSummary[];
+  /**
+   * The people carrying each card, by card id. An additional card is a holder
+   * on the titular's card rather than a card of its own, so this is the only
+   * way to say whose plastic made a purchase.
+   */
+  holdersByCard?: Record<string, CardHolderSummary[]>;
   invoices: InvoiceSummary[];
   categories?: CategoryOption[];
   onCreateCategory?: (label: string) => boolean;
@@ -218,6 +227,7 @@ export function QuickAddComposer({
   presetDraft,
   accounts,
   cards,
+  holdersByCard,
   invoices,
   categories: externalCategories,
   onCreateCategory,
@@ -263,6 +273,7 @@ export function QuickAddComposer({
   const [personId, setPersonId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [cardId, setCardId] = useState("");
+  const [holderId, setHolderId] = useState("");
   const [composerMode, setComposerMode] = useState<ComposerMode>("quick");
 
   const activeTab = TAB_CONFIG.find((t) => t.type === entryType) ?? TAB_CONFIG[0];
@@ -291,6 +302,19 @@ export function QuickAddComposer({
       setCardId(cards[0].card_id);
     }
   }, [isOpen, cards, cardId]);
+
+  const cardHolders = useMemo(
+    () => (holdersByCard?.[cardId] ?? []).filter((holder) => holder.is_active),
+    [holdersByCard, cardId],
+  );
+
+  useEffect(() => {
+    // Switching cards leaves behind a holder who carries the other one, and a
+    // purchase attributed to them would land on a card they do not hold.
+    if (holderId && !cardHolders.some((holder) => holder.holder_id === holderId)) {
+      setHolderId("");
+    }
+  }, [cardHolders, holderId]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -416,6 +440,7 @@ export function QuickAddComposer({
     }
     if (presetDraft.personId !== undefined) setPersonId(presetDraft.personId);
     if (presetDraft.cardId) setCardId(presetDraft.cardId);
+    if (presetDraft.holderId !== undefined) setHolderId(presetDraft.holderId);
     if (presetDraft.toAccountId) {
       dispatchQuickAdd({
         type: "toAccountChanged",
@@ -464,6 +489,7 @@ export function QuickAddComposer({
     setAmount("");
     setDescription("");
     setPersonId("");
+    setHolderId("");
     setCategoryId("");
     setComposerMode("quick");
     dispatchQuickAdd({
@@ -749,6 +775,7 @@ export function QuickAddComposer({
           categoryId: categoryId || "other",
           purchaseDate: `${date}T12:00:00Z`,
           installmentsCount: parseInt(installments, 10) || 1,
+          holderId,
         };
         const trimmedPersonId = personId.trim();
         if (trimmedPersonId.length > 0) {
@@ -1068,6 +1095,27 @@ export function QuickAddComposer({
                 />
                 <FieldError message={validationErrors.installments} />
               </div>
+              {cardHolders.length > 0 ? (
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="quick-add-holder">Portador</Label>
+                  <select
+                    id="quick-add-holder"
+                    aria-label="Portador"
+                    className={QUICK_ADD_SELECT_CLASS_NAME}
+                    onChange={(event) => setHolderId(event.target.value)}
+                    value={holderId}
+                  >
+                    <option value="">Titular</option>
+                    {cardHolders.map((holder) => (
+                      <option key={holder.holder_id} value={holder.holder_id}>
+                        {holder.last_four
+                          ? `${holder.name} · final ${holder.last_four}`
+                          : holder.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
               <div className="md:col-span-2 space-y-2">
                 <Label htmlFor="quick-add-person-card">Pessoa relacionada</Label>
                 <Input

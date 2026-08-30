@@ -26,6 +26,7 @@ import {
   createAccount,
   createCard,
   createCardPurchase,
+  fetchCardHolders,
   createCashTransaction,
   createInvestmentMovement,
   createPluggyConnectToken,
@@ -71,6 +72,7 @@ import {
   type AccountSummary,
   type AccountPayload,
   type AccountUpdatePayload,
+  type CardHolderSummary,
   type CardSummary,
   type CardPayload,
   type CardPurchasePayload,
@@ -247,6 +249,7 @@ function draftFromInboxEntry(entry: PluggyInboxEntry): QuickAddDraft {
     categoryId: text("category_id") ?? "",
     personId: text("person_id") ?? "",
     cardId: text("card_id"),
+    holderId: text("holder_id") ?? "",
     // A transfer names its side of the move; every other kind has one account.
     accountId: text("from_account_id") ?? text("account_id"),
     toAccountId: text("to_account_id"),
@@ -330,6 +333,12 @@ export function App() {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Who carries each card. An additional card is a holder on the titular's
+  // card rather than a card of its own, so without this the composer has no
+  // way to say — or to show — whose plastic a purchase came from.
+  const [holdersByCard, setHoldersByCard] = useState<
+    Record<string, CardHolderSummary[]>
+  >({});
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [quickAddPreset, setQuickAddPreset] = useState<
@@ -853,6 +862,34 @@ export function App() {
       throw new Error("Não foi possível atualizar a conta.");
     }
   }
+
+  useEffect(() => {
+    if (cards.length === 0) {
+      setHoldersByCard({});
+      return;
+    }
+
+    // A card whose holders fail to load simply has none to offer, which is the
+    // same shape as a card with no additionals: the composer falls back to the
+    // titular rather than blocking the launch.
+    let isCurrent = true;
+    void (async () => {
+      const loaded = await Promise.all(
+        cards.map(async (card) => {
+          try {
+            return [card.card_id, await fetchCardHolders(card.card_id)] as const;
+          } catch {
+            return [card.card_id, [] as CardHolderSummary[]] as const;
+          }
+        }),
+      );
+      if (isCurrent) setHoldersByCard(Object.fromEntries(loaded));
+    })();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [cards, refreshKey]);
 
   // The import queue only carries ids; a transfer or a bill payment is only
   // readable once they are names.
@@ -1906,6 +1943,7 @@ export function App() {
             presetDraft={quickAddDraft}
             accounts={accounts}
             cards={cards}
+            holdersByCard={holdersByCard}
             invoices={invoices}
             categories={categoryOptions}
             onCreateCategory={handleCreateCategory}
@@ -1949,10 +1987,11 @@ export function App() {
                   category_id: payload.categoryId,
                   person_id: payload.personId || null,
                   card_id: payload.cardId,
-                  // Left out on purpose: the composer has no holder field, so
-                  // sending it would erase the holder the backend resolved
-                  // from the card's last four digits.
-                  ...(payload.holderId ? { holder_id: payload.holderId } : {}),
+                  // Sent even when empty: the composer seeds it with whatever
+                  // the backend resolved from the card's last four digits, so
+                  // an empty value here is the reviewer moving the purchase to
+                  // the titular, not the field going unanswered.
+                  holder_id: payload.holderId || null,
                   purchase_date: payload.purchaseDate,
                   amount: payload.amountInCents,
                   installments_count: payload.installmentsCount,
