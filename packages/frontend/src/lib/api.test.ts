@@ -52,6 +52,28 @@ describe("api timestamp normalization", () => {
     });
   });
 
+  it("creates a Pluggy Connect token for the local owner", async () => {
+    const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
+      new Response(JSON.stringify({ accessToken: "connect-token" }), {
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      api.createPluggyConnectToken("meucofri-owner"),
+    ).resolves.toEqual({ accessToken: "connect-token" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/pluggy/connect-token",
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      clientUserId: "meucofri-owner",
+    });
+  });
+
   it("omits payment_account_id when creating a card without conta padrao", async () => {
     const fetchMock = vi.fn<(typeof fetch)>().mockResolvedValue(
       new Response(

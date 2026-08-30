@@ -46,7 +46,13 @@
     />
 
     <InstallExecuteSequence>
-      <Custom Action="CleanupAppDataDirectories" After="RemoveFiles">REMOVE="ALL"</Custom>
+      <!--
+        MSI sets REMOVE=ALL while uninstalling the previous version during a
+        major upgrade, which is what every app update is. UPGRADINGPRODUCTCODE
+        tells that apart from a real uninstall, so the databases survive an
+        update and are only removed when the user actually uninstalls.
+      -->
+      <Custom Action="CleanupAppDataDirectories" After="RemoveFiles">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
     </InstallExecuteSequence>
   </Fragment>
 </Wix>

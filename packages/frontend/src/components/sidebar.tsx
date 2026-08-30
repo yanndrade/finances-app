@@ -1,7 +1,9 @@
 import {
   CreditCard,
   Home,
+  Inbox,
   LineChart,
+  Link2,
   PanelLeftClose,
   PanelLeftOpen,
   Repeat,
@@ -20,6 +22,8 @@ export type AppView =
   | "fixedExpenses"
   | "accounts"
   | "cards"
+  | "import"
+  | "openFinance"
   | "settings";
 
 type NavigationItem = {
@@ -40,6 +44,8 @@ type SidebarProps = {
   isCollapsed: boolean;
   onNavigate: (view: AppView) => void;
   onToggleCollapse: () => void;
+  /** Entries waiting for review, shown as a badge on the import item. */
+  importPendingCount?: number;
 };
 
 // Flat list kept for mobile and backward-compat exports
@@ -87,6 +93,20 @@ export const DESKTOP_NAV_ITEMS: NavigationItem[] = [
     icon: Wallet2,
   },
   {
+    id: "import",
+    label: "Importar",
+    shortLabel: "Importar",
+    description: "Lançamentos da Pluggy aguardando revisão",
+    icon: Inbox,
+  },
+  {
+    id: "openFinance",
+    label: "Open Finance",
+    shortLabel: "Open Finance",
+    description: "Conexões e para onde cada conta importa",
+    icon: Link2,
+  },
+  {
     id: "investments",
     label: "Patrimônio & investimentos",
     shortLabel: "Patrimônio",
@@ -110,6 +130,8 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "fixedExpenses", label: "Gastos fixos", shortLabel: "Fixos", description: "Regras recorrentes e pendências do mês", icon: Repeat },
       { id: "cards", label: "Cartões", shortLabel: "Cartões", description: "Faturas, limite e ciclo de pagamento", icon: CreditCard },
       { id: "accounts", label: "Contas", shortLabel: "Contas", description: "Saldos e status da carteira", icon: Wallet2 },
+      { id: "import", label: "Importar", shortLabel: "Importar", description: "Lançamentos da Pluggy aguardando revisão", icon: Inbox },
+      { id: "openFinance", label: "Open Finance", shortLabel: "Open Finance", description: "Conexões e para onde cada conta importa", icon: Link2 },
     ],
   },
   {
@@ -141,6 +163,7 @@ export function Sidebar({
   isCollapsed,
   onNavigate,
   onToggleCollapse,
+  importPendingCount = 0,
 }: SidebarProps) {
   return (
     <nav
@@ -202,6 +225,14 @@ export function Sidebar({
                         <Icon aria-hidden="true" className="nav-item__icon" />
                         {!isCollapsed && (
                           <span className="nav-item__label">{item.label}</span>
+                        )}
+                        {item.id === "import" && importPendingCount > 0 && (
+                          <span
+                            className="nav-item__badge"
+                            aria-label={`${importPendingCount} lançamentos para revisar`}
+                          >
+                            {importPendingCount > 99 ? "99+" : importPendingCount}
+                          </span>
                         )}
                       </span>
                       {!isCollapsed && isActive && (

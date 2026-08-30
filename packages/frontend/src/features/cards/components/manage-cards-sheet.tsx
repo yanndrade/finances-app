@@ -1,4 +1,4 @@
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, UserRoundPlus } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import {
@@ -20,6 +20,7 @@ type ManageCardsSheetProps = {
   onAddCard: () => void;
   onEditCard: (card: CardSummary) => void;
   onToggleCardActive: (card: CardSummary) => void;
+  onConvertCard: (card: CardSummary) => void;
 };
 
 export function ManageCardsSheet({
@@ -30,6 +31,7 @@ export function ManageCardsSheet({
   onAddCard,
   onEditCard,
   onToggleCardActive,
+  onConvertCard,
 }: ManageCardsSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -105,6 +107,17 @@ export function ManageCardsSheet({
                     >
                       {card.is_active ? "Desativar" : "Reativar"}
                     </Button>
+                    {card.is_active ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="col-span-2 h-10 rounded-xl font-bold text-slate-600"
+                        onClick={() => onConvertCard(card)}
+                      >
+                        <UserRoundPlus className="mr-2 h-4 w-4 text-slate-400" />
+                        Transformar em adicional de outro cartão
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ))

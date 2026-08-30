@@ -44,6 +44,37 @@ class CardProjection:
 
 
 @dataclass(frozen=True)
+class CardHolderProjection:
+    """A person carrying a card that shares the titular's limit and invoice.
+
+    An additional card is not a Card of its own: the issuer bills a single
+    invoice against a single shared limit, so the holder only attributes spend
+    and carries an optional informative sub-limit.
+    """
+
+    holder_id: str
+    card_id: str
+    name: str
+    last_four: str | None
+    is_primary: bool
+    sub_limit: int | None
+    reimbursable_person_id: str | None
+    is_active: bool
+
+    def to_dict(self) -> dict[str, str | int | bool | None]:
+        return {
+            "holder_id": self.holder_id,
+            "card_id": self.card_id,
+            "name": self.name,
+            "last_four": self.last_four,
+            "is_primary": self.is_primary,
+            "sub_limit": self.sub_limit,
+            "reimbursable_person_id": self.reimbursable_person_id,
+            "is_active": self.is_active,
+        }
+
+
+@dataclass(frozen=True)
 class CardPurchaseProjection:
     purchase_id: str
     purchase_date: str
@@ -56,9 +87,10 @@ class CardPurchaseProjection:
     reference_month: str
     closing_date: str
     due_date: str
+    holder_id: str | None = None
 
     def to_dict(self) -> dict[str, str | int | None]:
-        return {
+        data: dict[str, str | int | None] = {
             "purchase_id": self.purchase_id,
             "purchase_date": self.purchase_date,
             "amount": self.amount,
@@ -71,6 +103,11 @@ class CardPurchaseProjection:
             "closing_date": self.closing_date,
             "due_date": self.due_date,
         }
+        # Omitted when absent, so a purchase belonging to the titular keeps the
+        # shape it had before holders existed.
+        if self.holder_id is not None:
+            data["holder_id"] = self.holder_id
+        return data
 
 
 @dataclass(frozen=True)
@@ -150,6 +187,7 @@ class InvoiceItemProjection:
     installments_count: int | None
     amount: int
     lifecycle_status: str
+    holder_id: str | None = None
 
     def to_dict(self, *, include_metadata: bool = True) -> dict[str, str | int | None]:
         data: dict[str, str | int | None] = {
@@ -167,6 +205,10 @@ class InvoiceItemProjection:
             "installments_count": self.installments_count,
             "amount": self.amount,
         }
+        # Omitted when absent, so an item bought by the titular keeps the shape
+        # it had before holders existed.
+        if self.holder_id is not None:
+            data["holder_id"] = self.holder_id
         if include_metadata:
             data["scheduled_date"] = self.scheduled_date
             data["lifecycle_status"] = self.lifecycle_status
@@ -187,9 +229,10 @@ class CardInstallmentProjection:
     installments_count: int
     amount: int
     invoice_id: str
+    holder_id: str | None = None
 
     def to_dict(self) -> dict[str, str | int | None]:
-        return {
+        data: dict[str, str | int | None] = {
             "installment_id": self.installment_id,
             "purchase_id": self.purchase_id,
             "card_id": self.card_id,
@@ -203,6 +246,9 @@ class CardInstallmentProjection:
             "amount": self.amount,
             "invoice_id": self.invoice_id,
         }
+        if self.holder_id is not None:
+            data["holder_id"] = self.holder_id
+        return data
 
 
 @dataclass(frozen=True)

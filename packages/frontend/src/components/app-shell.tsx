@@ -23,6 +23,7 @@ type AppShellProps = {
   uiDensity: UiDensity;
   month?: string;
   onMonthChange?: (month: string) => void;
+  importPendingCount?: number;
 };
 
 export function AppShell({
@@ -37,6 +38,7 @@ export function AppShell({
   onOpenCommandPalette,
   children,
   uiDensity,
+  importPendingCount,
   month,
   onMonthChange,
 }: AppShellProps) {
@@ -154,6 +156,7 @@ export function AppShell({
         isCollapsed={isCollapsed}
         onNavigate={onNavigate}
         onToggleCollapse={handleToggleCollapse}
+        importPendingCount={importPendingCount}
       />
 
       <div className="app-workspace">

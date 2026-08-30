@@ -5,16 +5,21 @@ from dataclasses import dataclass
 from finance_app.application.accounts import AccountService
 from finance_app.application.budgets import BudgetService
 from finance_app.application.card_purchases import CardPurchaseService
+from finance_app.application.card_conversion import CardConversionService
 from finance_app.application.cards import CardService
 from finance_app.application.investments import InvestmentService
 from finance_app.application.invoice_payments import InvoicePaymentService
 from finance_app.application.movements import MovementService
+from finance_app.application.pluggy import PluggyService
+from finance_app.application.pluggy_inbox import PluggyInboxService
 from finance_app.application.recurring import RecurringService
 from finance_app.application.reimbursements import ReimbursementService
 from finance_app.application.transactions import TransactionService
 from finance_app.application.transfers import TransferService
 from finance_app.infrastructure.event_store import EventStore
 from finance_app.infrastructure.projector import Projector
+from finance_app.infrastructure.pluggy import PluggyHttpGateway, get_connector_ids
+from finance_app.infrastructure.pluggy_store import PluggyStore
 from finance_app.infrastructure.security import SecurityStore
 
 
@@ -23,6 +28,7 @@ class AppServices:
     account_service: AccountService
     card_service: CardService
     card_purchase_service: CardPurchaseService
+    card_conversion_service: CardConversionService
     invoice_payment_service: InvoicePaymentService
     reimbursement_service: ReimbursementService
     recurring_service: RecurringService
@@ -31,6 +37,8 @@ class AppServices:
     transaction_service: TransactionService
     transfer_service: TransferService
     movement_service: MovementService
+    pluggy_service: PluggyService
+    pluggy_inbox_service: PluggyInboxService
     security_store: SecurityStore
     event_store: EventStore
     projector: Projector
@@ -93,11 +101,40 @@ def build_services(
         projector=projector,
         account_reader=account_service,
     )
+    card_conversion_service = CardConversionService(
+        card_service=card_service,
+        card_purchase_service=card_purchase_service,
+        invoice_payment_service=invoice_payment_service,
+    )
     security_store = SecurityStore(database_url=database_url)
+    pluggy_store = PluggyStore(database_url=database_url)
+    pluggy_inbox_service = PluggyInboxService(
+        store=pluggy_store,
+        account_service=account_service,
+        card_service=card_service,
+        card_purchase_service=card_purchase_service,
+        transaction_service=transaction_service,
+        invoice_payment_service=invoice_payment_service,
+        transfer_service=transfer_service,
+        investment_service=investment_service,
+        recurring_service=recurring_service,
+    )
+    pluggy_service = PluggyService(
+        gateway=PluggyHttpGateway.from_environment(),
+        store=pluggy_store,
+        account_service=account_service,
+        card_service=card_service,
+        card_purchase_service=card_purchase_service,
+        transaction_service=transaction_service,
+        investment_service=investment_service,
+        inbox_service=pluggy_inbox_service,
+        connector_ids=get_connector_ids,
+    )
     return AppServices(
         account_service=account_service,
         card_service=card_service,
         card_purchase_service=card_purchase_service,
+        card_conversion_service=card_conversion_service,
         invoice_payment_service=invoice_payment_service,
         reimbursement_service=reimbursement_service,
         recurring_service=recurring_service,
@@ -106,6 +143,8 @@ def build_services(
         transaction_service=transaction_service,
         transfer_service=transfer_service,
         movement_service=movement_service,
+        pluggy_service=pluggy_service,
+        pluggy_inbox_service=pluggy_inbox_service,
         security_store=security_store,
         event_store=event_store,
         projector=projector,

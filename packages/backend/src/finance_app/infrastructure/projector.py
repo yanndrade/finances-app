@@ -26,6 +26,7 @@ from finance_app.domain.projections import (
     AccountProjection,
     BalanceStateProjection,
     BudgetProjection,
+    CardHolderProjection,
     CardInstallmentProjection,
     CardProjection,
     CardPurchaseProjection,
@@ -46,8 +47,9 @@ CARD_PURCHASE_SOURCE_EVENT_TYPES = (
     "CardPurchaseCreated",
     "CardPurchaseUpdated",
 )
-CURRENT_PROJECTION_SCHEMA_VERSION = 6
-COMPATIBLE_PROJECTION_SCHEMA_VERSIONS = {6}
+# 7 adds card holders and the holder_id column on card purchases/installments.
+CURRENT_PROJECTION_SCHEMA_VERSION = 7
+COMPATIBLE_PROJECTION_SCHEMA_VERSIONS = {7}
 
 
 class ProjectionBase(DeclarativeBase):
@@ -94,6 +96,19 @@ class CardProjectionRecord(ProjectionBase):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+class CardHolderProjectionRecord(ProjectionBase):
+    __tablename__ = "card_holders"
+
+    holder_id: Mapped[str] = mapped_column(String, primary_key=True)
+    card_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    last_four: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sub_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reimbursable_person_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
 class CardPurchaseProjectionRecord(ProjectionBase):
     __tablename__ = "card_purchases"
 
@@ -102,6 +117,7 @@ class CardPurchaseProjectionRecord(ProjectionBase):
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     card_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    holder_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     installments_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     invoice_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
@@ -116,6 +132,7 @@ class CardPurchaseInstallmentRecord(ProjectionBase):
     installment_id: Mapped[str] = mapped_column(String, primary_key=True)
     purchase_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     card_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    holder_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     purchase_date: Mapped[str] = mapped_column(String, nullable=False, index=True)
     category_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     installment_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -899,6 +916,7 @@ class Projector:
                 reference_month=row.reference_month,
                 closing_date=row.closing_date,
                 due_date=row.due_date,
+                holder_id=row.holder_id,
             ).to_dict()
             for row in rows
         ]
@@ -1119,6 +1137,7 @@ class Projector:
                 lifecycle_status=movement_meta.get(
                     row.installment_id, {}
                 ).get("lifecycle_status", "pending"),
+                holder_id=row.holder_id,
             ).to_dict(include_metadata=False)
             for row in rows
         ]
@@ -1306,7 +1325,103 @@ class Projector:
                 installments_count=row.installments_count,
                 amount=row.amount,
                 invoice_id=row.invoice_id,
+                holder_id=row.holder_id,
             ).to_dict()
+            for row in rows
+        ]
+
+    def list_card_holders(
+        self,
+        *,
+        card_id: str | None = None,
+    ) -> list[dict[str, str | int | bool | None]]:
+        """List holders with how much of the shared limit each one is carrying.
+
+        The open invoice of a card is its earliest unsettled one; everything
+        scheduled after it counts as future installments. A purchase with no
+        holder belongs to the titular, which keeps every pre-holder purchase
+        attributed correctly.
+        """
+        with self._lock:
+            self.bootstrap()
+            with self._session_factory() as session:
+                holder_query = session.query(CardHolderProjectionRecord)
+                if card_id is not None:
+                    holder_query = holder_query.filter(
+                        CardHolderProjectionRecord.card_id == card_id
+                    )
+                rows = holder_query.order_by(
+                    CardHolderProjectionRecord.is_primary.desc(),
+                    CardHolderProjectionRecord.name.asc(),
+                ).all()
+
+                primary_holder_by_card = {
+                    holder.card_id: holder.holder_id
+                    for holder in session.query(CardHolderProjectionRecord)
+                    .filter(CardHolderProjectionRecord.is_primary.is_(True))
+                    .all()
+                }
+
+                invoice_query = session.query(InvoiceProjectionRecord)
+                if card_id is not None:
+                    invoice_query = invoice_query.filter(
+                        InvoiceProjectionRecord.card_id == card_id
+                    )
+                unsettled_months: dict[str, list[str]] = {}
+                for invoice in invoice_query.all():
+                    if invoice.status == "paid":
+                        continue
+                    unsettled_months.setdefault(invoice.card_id, []).append(
+                        invoice.reference_month
+                    )
+                open_month_by_card = {
+                    invoice_card_id: min(months)
+                    for invoice_card_id, months in unsettled_months.items()
+                }
+                unsettled_by_card = {
+                    invoice_card_id: set(months)
+                    for invoice_card_id, months in unsettled_months.items()
+                }
+
+                spent_open: dict[str, int] = {}
+                spent_future: dict[str, int] = {}
+                installment_query = session.query(CardPurchaseInstallmentRecord)
+                if card_id is not None:
+                    installment_query = installment_query.filter(
+                        CardPurchaseInstallmentRecord.card_id == card_id
+                    )
+                for installment in installment_query.all():
+                    unsettled = unsettled_by_card.get(installment.card_id, set())
+                    if installment.reference_month not in unsettled:
+                        continue
+                    holder_key = installment.holder_id or primary_holder_by_card.get(
+                        installment.card_id
+                    )
+                    if holder_key is None:
+                        continue
+                    open_month = open_month_by_card.get(installment.card_id)
+                    bucket = (
+                        spent_open
+                        if installment.reference_month == open_month
+                        else spent_future
+                    )
+                    bucket[holder_key] = bucket.get(holder_key, 0) + installment.amount
+
+        return [
+            {
+                **CardHolderProjection(
+                    holder_id=row.holder_id,
+                    card_id=row.card_id,
+                    name=row.name,
+                    last_four=row.last_four,
+                    is_primary=row.is_primary,
+                    sub_limit=row.sub_limit,
+                    reimbursable_person_id=row.reimbursable_person_id,
+                    is_active=row.is_active,
+                ).to_dict(),
+                "spent_open_invoice": spent_open.get(row.holder_id, 0),
+                "spent_future_installments": spent_future.get(row.holder_id, 0),
+            }
             for row in rows
         ]
 
@@ -2879,6 +2994,14 @@ class Projector:
             self._apply_card_updated(session, event.payload)
             return
 
+        if event.type == "CardHolderUpserted":
+            self._apply_card_holder_upserted(session, event.payload)
+            return
+
+        if event.type == "CardHolderRemoved":
+            self._apply_card_holder_removed(session, event.payload)
+            return
+
         if event.type == "CardPurchaseCreated":
             self._apply_card_purchase_created(session, event.payload)
             return
@@ -2937,6 +3060,10 @@ class Projector:
 
         if event.type == "InvoicePaymentUpdated":
             self._apply_invoice_payment_updated(session, event.payload)
+            return
+
+        if event.type == "InvoicePaymentReassigned":
+            self._apply_invoice_payment_reassigned(session, event.payload)
             return
 
         if event.type in {"IncomeCreated", "ExpenseCreated"}:
@@ -3082,6 +3209,49 @@ class Projector:
         existing.payment_account_id = str(payload["payment_account_id"])
         existing.is_active = bool(payload.get("is_active", True))
 
+    def _apply_card_holder_upserted(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        holder_id = str(payload["id"])
+        card_id = str(payload["card_id"])
+        existing = session.get(CardHolderProjectionRecord, holder_id)
+
+        if existing is None:
+            existing = CardHolderProjectionRecord(
+                holder_id=holder_id,
+                card_id=card_id,
+                name=str(payload["name"]),
+            )
+            session.add(existing)
+
+        existing.card_id = card_id
+        existing.name = str(payload["name"])
+        existing.last_four = _optional_string(payload.get("last_four"))
+        existing.is_primary = bool(payload.get("is_primary", False))
+        existing.sub_limit = (
+            int(payload["sub_limit"]) if payload.get("sub_limit") is not None else None
+        )
+        existing.reimbursable_person_id = _optional_string(
+            payload.get("reimbursable_person_id")
+        )
+        existing.is_active = bool(payload.get("is_active", True))
+
+    def _apply_card_holder_removed(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        holder_id = str(payload["id"])
+        existing = session.get(CardHolderProjectionRecord, holder_id)
+        if existing is None:
+            return
+
+        # Purchases keep pointing at the holder for history; clearing them would
+        # silently reattribute past spend to the titular.
+        session.delete(existing)
+
     def _apply_card_purchase_created(
         self,
         session: Session,
@@ -3111,6 +3281,7 @@ class Projector:
         reference_month = first_allocation.reference_month
         invoice_id = f"{card_id}:{reference_month}"
 
+        _purchase_holder_id = _optional_string(payload.get("holder_id"))
         session.add(
             CardPurchaseProjectionRecord(
                 purchase_id=purchase_id,
@@ -3118,6 +3289,7 @@ class Projector:
                 amount=int(payload["amount"]),
                 category_id=str(payload["category_id"]),
                 card_id=card_id,
+                holder_id=_purchase_holder_id,
                 description=_optional_string(payload.get("description")),
                 installments_count=int(payload.get("installments_count", 1)),
                 invoice_id=invoice_id,
@@ -3164,6 +3336,7 @@ class Projector:
                     installment_id=installment_id,
                     purchase_id=purchase_id,
                     card_id=card_id,
+                    holder_id=_purchase_holder_id,
                     purchase_date=str(payload["purchase_date"]),
                     category_id=str(payload["category_id"]),
                     installment_number=allocation.installment_number,
@@ -3251,6 +3424,11 @@ class Projector:
             if "person_id" in payload
             else current_person_id
         )
+        new_holder_id = (
+            _optional_string(payload.get("holder_id"))
+            if "holder_id" in payload
+            else existing.holder_id
+        )
         if (
             new_purchase_date == existing.purchase_date
             and new_amount == existing.amount
@@ -3259,6 +3437,7 @@ class Projector:
             and new_card_id == existing.card_id
             and new_description == existing.description
             and new_person_id == current_person_id
+            and new_holder_id == existing.holder_id
         ):
             return
 
@@ -3295,6 +3474,7 @@ class Projector:
         existing.amount = new_amount
         existing.category_id = new_category_id
         existing.card_id = new_card_id
+        existing.holder_id = new_holder_id
         existing.description = new_description
         existing.installments_count = new_installments_count
         existing.invoice_id = f"{new_card_id}:{first_allocation.reference_month}"
@@ -3339,6 +3519,7 @@ class Projector:
                     installment_id=installment_id,
                     purchase_id=purchase_id,
                     card_id=new_card_id,
+                    holder_id=new_holder_id,
                     purchase_date=new_purchase_date,
                     category_id=new_category_id,
                     installment_number=allocation.installment_number,
@@ -3989,6 +4170,72 @@ class Projector:
         )
         if transaction is not None:
             transaction.account_id = new_account_id
+
+    def _apply_invoice_payment_reassigned(
+        self,
+        session: Session,
+        payload: dict[str, object],
+    ) -> None:
+        """Move a payment to another card's invoice for the same cycle.
+
+        Used when an additional card that was modelled as a separate card is
+        folded into its titular: the issuer always billed one invoice, so the
+        payments have to land on the merged one.
+        """
+        payment_id = str(payload["id"])
+        existing = session.get(InvoicePaymentProjectionRecord, payment_id)
+        if existing is None:
+            return
+
+        new_invoice_id = str(payload["invoice_id"])
+        previous_invoice_id = existing.invoice_id
+        if new_invoice_id == previous_invoice_id:
+            return
+
+        new_invoice = session.get(InvoiceProjectionRecord, new_invoice_id)
+        if new_invoice is None:
+            return
+
+        existing.invoice_id = new_invoice_id
+        existing.card_id = new_invoice.card_id
+        session.flush()
+
+        # The settled amount is clamped at payment time and never stored, so
+        # both invoices are recomputed from their payments instead of undoing
+        # a delta that cannot be recovered.
+        for invoice_id in (previous_invoice_id, new_invoice_id):
+            self._recompute_invoice_settlement(session, invoice_id=invoice_id)
+            self._sync_card_purchase_invoice_lifecycle(
+                session,
+                invoice_id=invoice_id,
+            )
+
+        transaction = session.get(
+            TransactionProjectionRecord,
+            f"{payment_id}:invoice-payment",
+        )
+        if transaction is not None:
+            transaction.description = f"Pagamento de fatura {new_invoice_id}"
+
+    def _recompute_invoice_settlement(
+        self,
+        session: Session,
+        *,
+        invoice_id: str,
+    ) -> None:
+        invoice = session.get(InvoiceProjectionRecord, invoice_id)
+        if invoice is None:
+            return
+
+        paid_total = sum(
+            payment.amount
+            for payment in session.query(InvoicePaymentProjectionRecord)
+            .filter(InvoicePaymentProjectionRecord.invoice_id == invoice_id)
+            .all()
+        )
+        invoice.paid_amount = min(paid_total, invoice.total_amount)
+        invoice.remaining_amount = max(invoice.total_amount - invoice.paid_amount, 0)
+        self._sync_invoice_status(invoice)
 
     def _apply_transaction_created(
         self,
@@ -5449,6 +5696,7 @@ class Projector:
             "amount",
             "category_id",
             "card_id",
+            "holder_id",
             "description",
             "installments_count",
             "invoice_id",
@@ -5471,6 +5719,7 @@ class Projector:
             "installment_id",
             "purchase_id",
             "card_id",
+            "holder_id",
             "purchase_date",
             "category_id",
             "installment_number",
