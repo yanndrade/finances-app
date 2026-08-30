@@ -81,6 +81,37 @@ function payloadNumber(entry: PluggyInboxEntry, key: string): number | null {
 }
 
 /**
+ * What the charge was before conversion, on a purchase abroad. The description
+ * rarely says a charge came from another country, and the converted value is
+ * the only figure that reaches the ledger, so the original and the rate that
+ * produced it are worth showing next to it.
+ */
+function describeOriginalCurrency(entry: PluggyInboxEntry): string | null {
+  const currency = payloadString(entry, "original_currency");
+  const original = payloadNumber(entry, "original_amount");
+  if (!currency || !original) return null;
+
+  // The default symbol, not the narrow one: narrow renders USD as "$", which
+  // beside a column of reais reads as the amount that was actually billed.
+  // An unrecognised code is a RangeError, and one bad charge must not take the
+  // whole queue down with it.
+  let value: string;
+  try {
+    value = new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency,
+    }).format(original / 100);
+  } catch {
+    value = `${currency} ${(original / 100).toFixed(2)}`;
+  }
+  const rate = entry.amount / original;
+  return `${value} · câmbio ${rate.toLocaleString("pt-BR", {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  })}`;
+}
+
+/**
  * What the entry would do, for the kinds where the amount and description do
  * not say it: which invoice a payment settles, and which way money moves.
  */
@@ -225,10 +256,12 @@ export function ImportView({
   }
 
   function handleAccept(entry: PluggyInboxEntry) {
-    // A kind the composer covers is reviewed there, where category and person
-    // can still be changed. The rest have nothing left to decide.
+    // Every kind is reviewed in the composer, opened on the entry's own type:
+    // an income proposal has an account to confirm just as a card purchase has
+    // a category, and reading the proposal back in the form it will be written
+    // in is what makes a wrong guess visible before it is written.
     const remember = remembered[entry.entry_id] ?? false;
-    if (onReview && needsCategory(entry)) {
+    if (onReview && isAcceptable(entry)) {
       onReview(entry, remember);
       return;
     }
@@ -419,6 +452,7 @@ function EntryRow({
   const installments = payloadNumber(entry, "installments_count") ?? 1;
   const personId = payloadString(entry, "person_id");
   const destination = describeDestination(entry, names);
+  const originalCurrency = describeOriginalCurrency(entry);
 
   return (
     <div
@@ -469,6 +503,9 @@ function EntryRow({
               <Badge variant="secondary">{installments}x</Badge>
             ) : null}
             {entry.revised ? <Badge variant="outline">Revisado</Badge> : null}
+            {originalCurrency ? (
+              <Badge variant="outline">{originalCurrency}</Badge>
+            ) : null}
             {entry.proposal.source_status === "PENDING" ? (
               <Badge variant="outline">Fatura aberta</Badge>
             ) : null}

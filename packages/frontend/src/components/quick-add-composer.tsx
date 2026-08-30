@@ -63,6 +63,7 @@ export type QuickAddPreset =
   | "investment_purchase"
   | "investment_reinvestment"
   | "investment_withdrawal"
+  | "investment_sale"
   | "expense_card";
 
 /**
@@ -76,6 +77,8 @@ export type QuickAddDraft = {
   personId?: string;
   cardId?: string;
   accountId?: string;
+  /** Where a transfer lands. */
+  toAccountId?: string;
   date?: string;
   installments?: string;
 };
@@ -388,6 +391,10 @@ export function QuickAddComposer({
         dispatchQuickAdd({ type: "entryTypeChanged", entryType: "investment" });
         dispatchQuickAdd({ type: "investmentModeChanged", mode: "withdrawal" });
         return;
+      case "investment_sale":
+        dispatchQuickAdd({ type: "entryTypeChanged", entryType: "investment" });
+        dispatchQuickAdd({ type: "investmentModeChanged", mode: "sale" });
+        return;
       default:
         return;
     }
@@ -409,6 +416,12 @@ export function QuickAddComposer({
     }
     if (presetDraft.personId !== undefined) setPersonId(presetDraft.personId);
     if (presetDraft.cardId) setCardId(presetDraft.cardId);
+    if (presetDraft.toAccountId) {
+      dispatchQuickAdd({
+        type: "toAccountChanged",
+        accountId: presetDraft.toAccountId,
+      });
+    }
     if (presetDraft.accountId) {
       dispatchQuickAdd({
         type: "accountChanged",

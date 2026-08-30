@@ -125,7 +125,9 @@ describe("ImportView", () => {
     expect(accept).not.toHaveBeenCalled();
   });
 
-  it("accepts a kind with nothing left to decide without opening anything", async () => {
+  it("reviews a kind without a category in the composer too", async () => {
+    // The composer opens on the entry's own type, so the accounts a transfer
+    // moves between are confirmed the same way a category is.
     const accept = vi
       .spyOn(api, "acceptPluggyEntry")
       .mockResolvedValue(buildEntry({ decision: "accepted" }));
@@ -148,8 +150,36 @@ describe("ImportView", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: /aceitar$/i }));
 
-    await waitFor(() => expect(accept).toHaveBeenCalledWith("entry-1", {}, false));
-    expect(onReview).not.toHaveBeenCalled();
+    expect(onReview).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "transfer" }),
+      false,
+    );
+    expect(accept).not.toHaveBeenCalled();
+  });
+
+  it("shows what a purchase abroad cost before conversion", async () => {
+    renderView([
+      buildEntry({
+        title: "Spaceship.Com* Xzusfs",
+        amount: 45_51,
+        kind: "card_purchase",
+        proposal: {
+          payload: {
+            amount: 45_51,
+            card_id: "card-nubank",
+            category_id: "outros",
+            original_currency: "USD",
+            original_amount: 8_48,
+          },
+          skip_reason: null,
+        },
+      }),
+    ]);
+
+    // The reais are what enters the ledger; the dollars say why the number
+    // does not match the receipt.
+    await screen.findByText(/R\$\s?45,51/);
+    await screen.findByText(/US\$\s?8,48.*câmbio\s5,3667/);
   });
 
   it("no longer asks for a category in the row itself", async () => {

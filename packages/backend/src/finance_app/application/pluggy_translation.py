@@ -12,6 +12,10 @@ Two mismatches with the app's model shape most of what happens here:
   purchase and the siblings are recorded only so a re-sync stays idempotent.
 * Pluggy's ``PENDING`` covers both an open invoice and a future installment.
   Neither has hit the balance yet, so neither becomes a proposal.
+* A purchase abroad is reported twice over: ``amount`` in the currency it was
+  made in and ``amountInAccountCurrency`` in the currency the issuer bills. The
+  app keeps a single ledger in the account's currency, so the converted figure
+  is the one that becomes the entry and the original is carried alongside it.
 """
 
 from __future__ import annotations
@@ -55,6 +59,11 @@ PLUGGY_CATEGORY_HINTS: dict[str, str] = {
 }
 
 _PAYMENT_METHODS = {"PIX": "PIX", "TED": "OTHER", "DOC": "OTHER", "BOLETO": "OTHER"}
+
+# The currency every local account and card is kept in. A transaction reported
+# in anything else is a purchase abroad and has to be converted before it can
+# join the ledger.
+ACCOUNT_CURRENCY = "BRL"
 
 # Pluggy reports other investment transaction types (transfers between
 # custodians, amortisations); only the two that move money are imported.
@@ -210,7 +219,7 @@ def _investment_movement(
         if occurred_on < link.import_since:
             return None
 
-    amount = _abs_cents(transaction.get("amount"))
+    amount = _local_abs_cents(transaction)
     if amount <= 0:
         return None
 
@@ -233,6 +242,7 @@ def _investment_movement(
         # so the class is left for the user the same way a category is.
         "asset_class": None,
         "description": description,
+        **_foreign_fields(transaction),
     }
     return _build(
         transaction,
@@ -292,7 +302,7 @@ def _translate_bank(
 ) -> list[StagedProposal]:
     proposals: list[StagedProposal] = []
     for transaction in transactions:
-        amount = _abs_cents(transaction.get("amount"))
+        amount = _local_abs_cents(transaction)
         if amount <= 0:
             continue
         is_credit = str(transaction.get("type") or "").upper() == "CREDIT"
@@ -308,6 +318,7 @@ def _translate_bank(
             "category_id": _category_hint(transaction),
             "description": description,
             "person_id": None,
+            **_foreign_fields(transaction),
         }
         proposals.append(
             _build(
@@ -332,8 +343,8 @@ def _translate_credit(
     for transaction in transactions:
         # On a credit account a negative amount reduces what is owed, so it is a
         # bill payment rather than a purchase.
-        if _signed_cents(transaction.get("amount")) < 0:
-            amount = _abs_cents(transaction.get("amount"))
+        if _local_signed_cents(transaction) < 0:
+            amount = _local_abs_cents(transaction)
             proposals.append(
                 _build(
                     transaction,
@@ -368,12 +379,7 @@ def _translate_credit(
         first = ordered[0]
         metadata = _credit_metadata(first)
         total_installments = _installment_total(first) or len(ordered)
-        # Most connectors omit totalAmount, so the purchase total is the
-        # instalment times the count. Instalments can differ by a cent, which
-        # is why the amount is still editable before the entry is accepted.
-        total_amount = _abs_cents(metadata.get("totalAmount")) or (
-            _abs_cents(first.get("amount")) * total_installments
-        )
+        total_amount = _installment_total_amount(first, total_installments)
         if total_amount <= 0:
             proposals.extend(
                 _card_purchase(item, link, installments=1) for item in ordered
@@ -398,7 +404,7 @@ def _translate_credit(
                     sibling,
                     link,
                     kind="card_installment_covered",
-                    amount=_abs_cents(sibling.get("amount")),
+                    amount=_local_abs_cents(sibling),
                     title=_text(sibling.get("description")),
                     payload={},
                     group_key=group_key,
@@ -607,7 +613,7 @@ def _card_purchase(
     purchase_date: Any = None,
     group_key: str | None = None,
 ) -> StagedProposal:
-    amount = amount_override or _abs_cents(transaction.get("amount"))
+    amount = amount_override or _local_abs_cents(transaction)
     description = _text(transaction.get("description")) or _text(
         transaction.get("descriptionRaw")
     )
@@ -626,6 +632,7 @@ def _card_purchase(
         "description": description,
         "person_id": holder.get("reimbursable_person_id")
         or link.holder_reimbursable_person_id,
+        **_foreign_fields(transaction),
     }
     return _build(
         transaction,
@@ -699,6 +706,12 @@ def _content_hash(transaction: dict[str, Any], *, amount: int, kind: str) -> str
     parts = [
         kind,
         str(amount),
+        # An issuer settles a purchase abroad at the rate of the day the bill
+        # closes, so the converted value moves between PENDING and POSTED. The
+        # original pair is what says the revision is a new rate and not a new
+        # charge.
+        str(_foreign_currency(transaction) or ""),
+        str(_abs_cents(transaction.get("amount"))),
         str(transaction.get("status") or ""),
         str(_date_only(transaction.get("date"))),
         _normalize(_text(transaction.get("description"))),
@@ -746,6 +759,22 @@ def _strip_installment_marker(value: str | None) -> str | None:
 def _credit_metadata(transaction: dict[str, Any]) -> dict[str, Any]:
     metadata = transaction.get("creditCardMetadata")
     return metadata if isinstance(metadata, dict) else {}
+
+
+def _installment_total_amount(transaction: dict[str, Any], count: int) -> int:
+    """The whole purchase, from an installment of it.
+
+    Most connectors omit ``totalAmount``, so the total is the instalment times
+    the count. It is also skipped on a purchase abroad, where it is denominated
+    in the original currency and the converted instalments are the only figures
+    in the account's. Instalments can differ by a cent either way, which is why
+    the amount is still editable before the entry is accepted.
+    """
+    if _foreign_currency(transaction) is None:
+        declared = _abs_cents(_credit_metadata(transaction).get("totalAmount"))
+        if declared > 0:
+            return declared
+    return _local_abs_cents(transaction) * count
 
 
 def _installment_number(transaction: dict[str, Any]) -> int | None:
@@ -818,6 +847,58 @@ def _text(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _foreign_currency(transaction: dict[str, Any]) -> str | None:
+    """The currency a purchase was made in, when it is not the account's.
+
+    ``None`` for the ordinary domestic case, including a transaction that names
+    a foreign currency but carries no conversion: without the converted figure
+    there is nothing to import but the original, and guessing a rate would put
+    an invented number in the ledger.
+    """
+    code = _text(transaction.get("currencyCode"))
+    if code is None or code.upper() == ACCOUNT_CURRENCY:
+        return None
+    if _abs_cents(transaction.get("amountInAccountCurrency")) <= 0:
+        return None
+    return code.upper()
+
+
+def _local_signed_cents(transaction: dict[str, Any]) -> int:
+    """What the transaction is worth in the account's own currency.
+
+    ``amount`` is denominated in ``currencyCode``, so on a purchase abroad it is
+    the dollar figure — importing it would post roughly a fifth of what the
+    issuer will actually bill. Only the magnitude comes from the converted
+    field: the sign is what separates a purchase from a bill payment, and
+    ``amount`` is the field that always carries it.
+    """
+    signed = _signed_cents(transaction.get("amount"))
+    if _foreign_currency(transaction) is None:
+        return signed
+    converted = _abs_cents(transaction.get("amountInAccountCurrency"))
+    return -converted if signed < 0 else converted
+
+
+def _local_abs_cents(transaction: dict[str, Any]) -> int:
+    return abs(_local_signed_cents(transaction))
+
+
+def _foreign_fields(transaction: dict[str, Any]) -> dict[str, Any]:
+    """What the purchase looked like before conversion.
+
+    Carried on the proposal so the review can show "US$ 8,48" next to the
+    reais: the description alone rarely says a charge came from abroad, and the
+    converted value is the only thing that would otherwise reach the ledger.
+    """
+    currency = _foreign_currency(transaction)
+    if currency is None:
+        return {}
+    return {
+        "original_currency": currency,
+        "original_amount": _abs_cents(transaction.get("amount")),
+    }
 
 
 def _signed_cents(value: Any) -> int:

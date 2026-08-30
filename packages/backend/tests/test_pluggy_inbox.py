@@ -338,6 +338,163 @@ def test_installments_are_rebuilt_even_when_the_issuer_omits_the_total(
     assert entry["title"] == "Vindi  *Investidor10"
 
 
+def test_a_purchase_abroad_is_staged_in_reais(tmp_path: Path) -> None:
+    """The real shape of a card charge in dollars.
+
+    ``amount`` is the dollar figure; the issuer bills
+    ``amountInAccountCurrency``. Staging the former would post a fifth of the
+    charge.
+    """
+    pluggy, inbox, _ = _setup(
+        tmp_path,
+        accounts=[{"id": CARD_ID, "type": "CREDIT", "name": "Cartão", "number": "6186"}],
+        transactions={
+            CARD_ID: [
+                _card_transaction(
+                    description="Spaceship.Com* Xzusfs",
+                    currencyCode="USD",
+                    amount=8.48,
+                    amountInAccountCurrency=45.51,
+                )
+            ]
+        },
+    )
+    pluggy.sync_item(ITEM_ID)
+    _link_all(pluggy)
+    pluggy.sync_item(ITEM_ID)
+
+    entry = _pending(inbox)[0]
+    assert entry["amount"] == 45_51
+    payload = entry["proposal"]["payload"]
+    assert payload["amount"] == 45_51
+    # And what it was before conversion, so the review can show both.
+    assert payload["original_currency"] == "USD"
+    assert payload["original_amount"] == 8_48
+
+
+def test_a_domestic_purchase_carries_no_original_currency(tmp_path: Path) -> None:
+    pluggy, inbox, _ = _setup(
+        tmp_path,
+        accounts=[{"id": CARD_ID, "type": "CREDIT", "name": "Cartão", "number": "4321"}],
+        transactions={CARD_ID: [_card_transaction(currencyCode="BRL")]},
+    )
+    pluggy.sync_item(ITEM_ID)
+    _link_all(pluggy)
+    pluggy.sync_item(ITEM_ID)
+
+    payload = _pending(inbox)[0]["proposal"]["payload"]
+    assert payload["amount"] == 200_00
+    assert "original_currency" not in payload
+
+
+def test_a_foreign_amount_without_a_conversion_stays_as_reported(
+    tmp_path: Path,
+) -> None:
+    """Nothing to convert with, so nothing is invented.
+
+    Making up a rate would put a number in the ledger that no statement backs.
+    """
+    pluggy, inbox, _ = _setup(
+        tmp_path,
+        accounts=[{"id": CARD_ID, "type": "CREDIT", "name": "Cartão", "number": "4321"}],
+        transactions={
+            CARD_ID: [
+                _card_transaction(
+                    currencyCode="USD",
+                    amount=8.48,
+                    amountInAccountCurrency=None,
+                )
+            ]
+        },
+    )
+    pluggy.sync_item(ITEM_ID)
+    _link_all(pluggy)
+    pluggy.sync_item(ITEM_ID)
+
+    payload = _pending(inbox)[0]["proposal"]["payload"]
+    assert payload["amount"] == 8_48
+    assert "original_currency" not in payload
+
+
+def test_a_bill_payment_abroad_keeps_its_direction(tmp_path: Path) -> None:
+    """The converted figure is unsigned, so the sign still comes from amount."""
+    pluggy, inbox, _ = _setup(
+        tmp_path,
+        accounts=[{"id": CARD_ID, "type": "CREDIT", "name": "Cartão", "number": "4321"}],
+        transactions={
+            CARD_ID: [
+                _card_transaction(
+                    description="Estorno",
+                    currencyCode="USD",
+                    amount=-8.48,
+                    amountInAccountCurrency=45.51,
+                )
+            ]
+        },
+    )
+    pluggy.sync_item(ITEM_ID)
+    _link_all(pluggy)
+    pluggy.sync_item(ITEM_ID)
+
+    entry = _pending(inbox)[0]
+    assert entry["kind"] == "invoice_payment"
+    assert entry["amount"] == 45_51
+
+
+def test_installments_abroad_total_the_converted_instalments(tmp_path: Path) -> None:
+    """``totalAmount`` is in dollars, so only the converted legs can be summed."""
+    parcels = []
+    for number in (1, 2):
+        transaction = _installment(number, total=2, amount=10.00)
+        transaction["currencyCode"] = "USD"
+        transaction["amountInAccountCurrency"] = 53.67
+        parcels.append(transaction)
+
+    pluggy, inbox, _ = _setup(
+        tmp_path,
+        accounts=[{"id": CARD_ID, "type": "CREDIT", "name": "Cartão", "number": "4321"}],
+        transactions={CARD_ID: parcels},
+    )
+    pluggy.sync_item(ITEM_ID)
+    _link_all(pluggy)
+    pluggy.sync_item(ITEM_ID)
+
+    entries = _pending(inbox)
+    assert len(entries) == 1
+    assert entries[0]["amount"] == 107_34
+
+
+def test_a_new_conversion_rate_reopens_an_accepted_purchase(tmp_path: Path) -> None:
+    """The issuer settles at the rate of the day the bill closes."""
+    gateway_transactions = [
+        _card_transaction(
+            currencyCode="USD",
+            amount=8.48,
+            amountInAccountCurrency=45.51,
+        )
+    ]
+    pluggy, inbox, _ = _setup(
+        tmp_path,
+        accounts=[{"id": CARD_ID, "type": "CREDIT", "name": "Cartão", "number": "4321"}],
+        transactions={CARD_ID: gateway_transactions},
+    )
+    pluggy.sync_item(ITEM_ID)
+    _link_all(pluggy)
+    pluggy.sync_item(ITEM_ID)
+
+    entry = _pending(inbox)[0]
+    inbox.accept(entry["entry_id"], overrides={"category_id": "outros"})
+    assert _pending(inbox) == []
+
+    gateway_transactions[0]["amountInAccountCurrency"] = 46.10
+    pluggy.sync_item(ITEM_ID)
+
+    reopened = _pending(inbox)
+    assert len(reopened) == 1
+    assert reopened[0]["revised"] is True
+    assert reopened[0]["amount"] == 46_10
+
+
 def test_card_number_attributes_the_purchase_to_a_holder(tmp_path: Path) -> None:
     pluggy, inbox, services = _setup(
         tmp_path,

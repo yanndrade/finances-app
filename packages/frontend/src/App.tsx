@@ -201,14 +201,44 @@ const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
   text: "",
 };
 
+function proposalText(
+  entry: PluggyInboxEntry,
+  key: string,
+): string | undefined {
+  const value = entry.proposal.payload[key];
+  return typeof value === "string" && value ? value : undefined;
+}
+
+/**
+ * The composer's shape for the kind of entry being reviewed.
+ *
+ * A proposal already knows what it is — income, a bill payment, a sale of an
+ * asset — so opening every one of them as an expense makes the reviewer undo
+ * the guess before they can confirm anything.
+ */
+function presetForInboxEntry(entry: PluggyInboxEntry): QuickAddPreset {
+  switch (entry.kind) {
+    case "card_purchase":
+      return "expense_card";
+    case "transfer":
+      return "transfer_internal";
+    case "invoice_payment":
+      return "transfer_invoice_payment";
+    case "investment_movement":
+      return proposalText(entry, "movement_type") === "venda"
+        ? "investment_sale"
+        : "investment_purchase";
+    default:
+      return proposalText(entry, "transaction_type") === "income"
+        ? "income"
+        : "expense";
+  }
+}
+
 /** Turns a proposal into the composer's starting values. */
 function draftFromInboxEntry(entry: PluggyInboxEntry): QuickAddDraft {
-  const payload = entry.proposal.payload;
-  const text = (key: string) => {
-    const value = payload[key];
-    return typeof value === "string" && value ? value : undefined;
-  };
-  const count = payload.installments_count;
+  const text = (key: string) => proposalText(entry, key);
+  const count = entry.proposal.payload.installments_count;
 
   return {
     // The composer takes the amount as typed, in reais.
@@ -217,11 +247,15 @@ function draftFromInboxEntry(entry: PluggyInboxEntry): QuickAddDraft {
     categoryId: text("category_id") ?? "",
     personId: text("person_id") ?? "",
     cardId: text("card_id"),
-    accountId: text("account_id"),
-    date: (text("purchase_date") ?? text("occurred_at") ?? entry.occurred_at).slice(
-      0,
-      10,
-    ),
+    // A transfer names its side of the move; every other kind has one account.
+    accountId: text("from_account_id") ?? text("account_id"),
+    toAccountId: text("to_account_id"),
+    date: (
+      text("purchase_date") ??
+      text("paid_at") ??
+      text("occurred_at") ??
+      entry.occurred_at
+    ).slice(0, 10),
     installments: typeof count === "number" && count > 1 ? String(count) : undefined,
   };
 }
@@ -1759,8 +1793,13 @@ export function App() {
                 remember,
               });
               setQuickAddDraft(draftFromInboxEntry(entry));
-              setQuickAddPreset(
-                entry.kind === "card_purchase" ? "expense_card" : "expense",
+              setQuickAddPreset(presetForInboxEntry(entry));
+              // The bill the payment was matched to, so the composer opens on
+              // it instead of on whichever invoice happens to be first.
+              setQuickAddInvoiceId(
+                entry.kind === "invoice_payment"
+                  ? proposalText(entry, "invoice_id")
+                  : undefined,
               );
               setIsQuickAddOpen(true);
             }}
@@ -1890,6 +1929,18 @@ export function App() {
               await handleTransactionSubmit(payload);
             }}
             onSubmitTransfer={async (payload) => {
+              if (reviewingEntry) {
+                await acceptReviewedEntry({
+                  from_account_id: payload.fromAccountId,
+                  to_account_id: payload.toAccountId,
+                  amount: payload.amountInCents,
+                  description: payload.description,
+                  ...(payload.occurredAt
+                    ? { occurred_at: payload.occurredAt }
+                    : {}),
+                });
+                return;
+              }
               await handleTransferSubmit(payload);
             }}
             onSubmitCardPurchase={async (payload) => {
@@ -1915,9 +1966,40 @@ export function App() {
               await handleCreateRecurringRule(payload);
             }}
             onSubmitInvoicePayment={async (payload) => {
+              if (reviewingEntry) {
+                await acceptReviewedEntry({
+                  invoice_id: payload.invoiceId,
+                  account_id: payload.accountId,
+                  amount: payload.amountInCents,
+                  paid_at: payload.paidAt,
+                });
+                return;
+              }
               await handlePayInvoice(payload);
             }}
             onSubmitInvestmentMovement={async (payload) => {
+              if (reviewingEntry) {
+                await acceptReviewedEntry({
+                  movement_type: payload.type,
+                  account_id: payload.accountId,
+                  occurred_at: payload.occurredAt,
+                  // What the movement is worth, which for a buy or a sell —
+                  // the only two Pluggy proposes — is both of the figures
+                  // below. Absent on a kind the review retyped into something
+                  // that has neither, where the staged amount still stands.
+                  amount: payload.investedAmountInCents ?? payload.cashAmountInCents,
+                  description: payload.description,
+                  // Left out on purpose: the composer has no ticker field, so
+                  // sending it would erase the asset the proposal came with.
+                  cash_amount: payload.cashAmountInCents,
+                  invested_amount: payload.investedAmountInCents,
+                  contribution_amount: payload.contributionAmountInCents,
+                  dividend_amount: payload.dividendAmountInCents,
+                  reinvested_dividend_amount:
+                    payload.reinvestedDividendAmountInCents,
+                });
+                return;
+              }
               await handleCreateInvestmentMovement(payload);
             }}
             isSubmitting={isSubmitting}

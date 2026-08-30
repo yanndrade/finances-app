@@ -500,10 +500,19 @@ class PluggyInboxService:
             movement_type=str(payload["movement_type"]),
             account_id=str(account_id),
             description=payload.get("description"),
-            # Both compra and venda derive their direction from the type, so the
-            # service only needs the value that moved.
-            cash_amount=amount,
-            invested_amount=amount,
+            # A buy and a sell derive their direction from the type, so the
+            # value that moved is all the service needs. The review can retype
+            # the movement as a dividend or a contribution, which splits that
+            # value across different fields — so anything it sent explicitly
+            # wins over the single figure Pluggy reported.
+            cash_amount=_amount_field(payload, "cash_amount", amount),
+            invested_amount=_amount_field(payload, "invested_amount", amount),
+            contribution_amount=_amount_field(payload, "contribution_amount"),
+            dividend_amount=_amount_field(payload, "dividend_amount"),
+            reinvested_dividend_amount=_amount_field(
+                payload,
+                "reinvested_dividend_amount",
+            ),
             asset_ticker=payload.get("asset_ticker"),
             asset_class=payload.get("asset_class"),
         )
@@ -745,6 +754,21 @@ def _proposal_from_entry(entry: Any) -> StagedProposal:
         match_kind=entry.match_kind,
         skip_reason=entry.proposal.get("skip_reason"),
     )
+
+
+def _amount_field(
+    payload: dict[str, Any],
+    key: str,
+    default: int | None = None,
+) -> int | None:
+    """One of the movement's value fields, as the review left it."""
+    value = payload.get(key)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _parse_moment(value: str | None) -> datetime | None:
