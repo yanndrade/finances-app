@@ -474,6 +474,21 @@ button {
     white-space: nowrap;
 }
 
+.nav-item__badge {
+    margin-left: auto;
+    min-width: 1.35rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: var(--color-primary, #2563eb);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.35rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
 .nav-item__description {
     display: block;
     font-size: 0.82rem;

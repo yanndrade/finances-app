@@ -70,6 +70,39 @@ export async function setAutostartEnabled(enabled: boolean): Promise<void> {
   await invoke("set_autostart_enabled", { enabled });
 }
 
+export async function getPluggyCredentialsConfigured(): Promise<boolean> {
+  if (!isTauriEnvironment()) {
+    return false;
+  }
+
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("get_pluggy_credentials_configured");
+}
+
+export async function setPluggyCredentials(
+  clientId: string,
+  clientSecret: string,
+): Promise<void> {
+  if (!isTauriEnvironment()) {
+    throw new Error("Configure as chaves no aplicativo desktop instalado.");
+  }
+
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("set_pluggy_credentials", {
+    clientId,
+    clientSecret,
+  });
+}
+
+export async function clearPluggyCredentials(): Promise<void> {
+  if (!isTauriEnvironment()) {
+    return;
+  }
+
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("clear_pluggy_credentials");
+}
+
 export async function checkForAppUpdate(): Promise<DesktopUpdateCheckResult> {
   if (!isTauriEnvironment()) {
     return {

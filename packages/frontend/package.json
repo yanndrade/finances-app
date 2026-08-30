@@ -29,6 +29,8 @@
     "date-fns": "^4.1.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.576.0",
+    "pluggy-connect-sdk": "^2.14.2",
+    "pluggy-js": "^0.19.3",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",
     "react-day-picker": "^9.14.0",

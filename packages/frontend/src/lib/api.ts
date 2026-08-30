@@ -351,12 +351,72 @@ export type CardSummary = {
   future_installment_total: number;
 };
 
+/**
+ * A person carrying a card. An additional card shares the titular's limit and
+ * invoice, so a holder only attributes spend and carries an optional
+ * informative sub-limit.
+ */
+export type CardHolderSummary = {
+  holder_id: string;
+  card_id: string;
+  name: string;
+  last_four: string | null;
+  is_primary: boolean;
+  sub_limit: number | null;
+  reimbursable_person_id: string | null;
+  is_active: boolean;
+  spent_open_invoice: number;
+  spent_future_installments: number;
+};
+
+export type CardConversionPreview = {
+  card_id: string;
+  card_name: string;
+  target_card_id: string;
+  target_card_name: string;
+  purchase_count: number;
+  purchase_total: number;
+  payment_count: number;
+  payment_total: number;
+  cycle_matches: boolean;
+};
+
+export type CardConversionResult = {
+  card_id: string;
+  target_card_id: string;
+  holder_id: string;
+  purchases_moved: number;
+  payments_reassigned: number;
+  payments_orphaned: string[];
+};
+
+export type CardConversionPayload = {
+  targetCardId: string;
+  holderId: string;
+  holderName: string;
+  lastFour?: string | null;
+  subLimitInCents?: number | null;
+  reimbursablePersonId?: string | null;
+};
+
+export type CardHolderPayload = {
+  holderId: string;
+  name: string;
+  lastFour?: string | null;
+  isPrimary?: boolean;
+  subLimitInCents?: number | null;
+  reimbursablePersonId?: string | null;
+  isActive?: boolean;
+};
+
 export type CardPurchaseSummary = {
   purchase_id: string;
   purchase_date: string;
   amount: number;
   category_id: string;
   card_id: string;
+  /** Absent when the purchase belongs to the card's titular. */
+  holder_id?: string | null;
   description: string | null;
   installments_count: number;
   invoice_id: string;
@@ -378,6 +438,8 @@ export type CardInstallmentSummary = {
   installments_count: number;
   amount: number;
   invoice_id: string;
+  /** Absent when the installment belongs to the card's titular. */
+  holder_id?: string | null;
 };
 
 export type InvoiceSummary = {
@@ -422,6 +484,8 @@ export type InvoiceItemSummary = {
   installments_count: number | null;
   amount: number;
   lifecycle_status?: "forecast" | "pending" | "cleared" | string;
+  /** Absent when the titular bought it. */
+  holder_id?: string | null;
 };
 
 export type TransactionSummary = {
@@ -494,6 +558,7 @@ export type CardPurchasePayload = {
   categoryId: string;
   description?: string;
   personId?: string;
+  holderId?: string;
 };
 
 export type CardPurchaseUpdatePayload = {
@@ -504,6 +569,7 @@ export type CardPurchaseUpdatePayload = {
   cardId?: string;
   description?: string | null;
   personId?: string | null;
+  holderId?: string | null;
 };
 
 export type InvoicePaymentPayload = {
@@ -630,6 +696,153 @@ export type LanPairingResult = {
   device_id: string;
   device_token: string;
   paired_at: string;
+};
+
+export type PluggyConnectToken = {
+  accessToken: string;
+};
+
+export type PluggyItemPayload = {
+  id: string;
+  status?: string;
+  executionStatus?: string;
+  connector?: { name?: string };
+  error?: {
+    code?: string;
+    message?: string;
+    providerMessage?: string;
+  } | null;
+};
+
+export type PluggyItemState = {
+  item_id: string;
+  client_user_id: string;
+  connector_name: string | null;
+  status: string | null;
+  execution_status: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  provider_message: string | null;
+  created_at: string;
+  updated_at: string;
+  last_synced_at: string | null;
+};
+
+export type PluggyRecovery = {
+  available: boolean;
+  items: PluggyItemState[];
+};
+
+export type PluggyStatus = {
+  connected: boolean;
+  items: PluggyItemState[];
+  /** Connectors the backend allows. Empty means no restriction. */
+  connector_ids?: number[];
+  last_synced_at: string | null;
+};
+
+export type PluggySyncResult = {
+  item_id?: string;
+  status?: string;
+  /** A sync only discovers accounts; nothing is imported without review. */
+  accounts_discovered?: number;
+  accounts_linked?: number;
+  accounts_pending?: number;
+  entries_staged?: number;
+  entries_pending?: number;
+  entries_duplicates?: number;
+  /** Why transactions produced no proposal, keyed by reason. */
+  entries_skipped?: Record<string, number>;
+  synced?: number;
+  failed?: number;
+  items?: PluggySyncResult[];
+  detail?: string;
+};
+
+/** Where a Pluggy account should land locally, plus the auto-match hint. */
+export type PluggyLinkSuggestion = {
+  kind: "account" | "card" | "holder";
+  id: string;
+  card_id?: string;
+  label: string;
+  reason: "last_four" | "name";
+};
+
+export type PluggyDiscoveredAccount = {
+  pluggy_account_id: string;
+  item_id: string;
+  kind: "bank" | "credit" | "investment";
+  display_name: string | null;
+  number: string | null;
+  brand: string | null;
+  holder_type: string | null;
+  /** Tells apart two accounts a bank reports with the same name and number. */
+  subtype: string | null;
+  balance: number | null;
+  credit_limit: number | null;
+  local_account_id: string | null;
+  local_card_id: string | null;
+  local_holder_id: string | null;
+  ignored: boolean;
+  import_since: string | null;
+  is_linked: boolean;
+  suggestion: PluggyLinkSuggestion | null;
+};
+
+/** A proposed entry waiting for review; nothing is written until accepted. */
+export type PluggyInboxEntry = {
+  entry_id: string;
+  item_id: string;
+  pluggy_account_id: string;
+  external_id: string;
+  kind:
+    | "bank_transaction"
+    | "card_purchase"
+    | "card_installment_covered"
+    | "invoice_payment"
+    | "invoice_payment_covered"
+    | "transfer"
+    | "transfer_covered"
+    | "investment_movement";
+  group_key: string | null;
+  occurred_at: string;
+  amount: number;
+  title: string | null;
+  proposal: {
+    payload: Record<string, unknown>;
+    /** Pluggy's own status: PENDING means the bill has not closed. */
+    source_status?: string | null;
+    /** Name of the fixed expense this purchase would confirm. */
+    settles_pending?: string | null;
+    /** Holder whose card made the purchase; absent for the titular. */
+    holder_name?: string | null;
+    skip_reason: string | null;
+  };
+  match_kind: "new" | "duplicate_of_local" | "covered_by_group";
+  matched_local_id: string | null;
+  decision: "pending" | "accepted" | "ignored" | "duplicate";
+  decided_at: string | null;
+  created_local_id: string | null;
+  revised: boolean;
+  account_label: string | null;
+};
+
+export type PluggyInboxPage = {
+  entries: PluggyInboxEntry[];
+  pending_total: number;
+};
+
+export type PluggyAcceptBatchResult = {
+  accepted: string[];
+  failed: { entry_id: string; detail: string }[];
+};
+
+export type PluggyAccountLinkPayload = {
+  localAccountId?: string | null;
+  localCardId?: string | null;
+  localHolderId?: string | null;
+  ignored?: boolean;
+  importSince?: string | null;
 };
 
 export type RecurringRulePayload = {
@@ -1213,6 +1426,75 @@ export async function createRecurringRule(
   });
 }
 
+export async function fetchCardHolders(
+  cardId: string,
+): Promise<CardHolderSummary[]> {
+  return requestJson<CardHolderSummary[]>(
+    `/api/cards/${encodeURIComponent(cardId)}/holders`,
+  );
+}
+
+export async function upsertCardHolder(
+  cardId: string,
+  payload: CardHolderPayload,
+): Promise<CardHolderSummary> {
+  return requestJson<CardHolderSummary>(
+    `/api/cards/${encodeURIComponent(cardId)}/holders/${encodeURIComponent(payload.holderId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        id: payload.holderId,
+        name: payload.name,
+        last_four: payload.lastFour || null,
+        is_primary: payload.isPrimary ?? false,
+        sub_limit: payload.subLimitInCents ?? null,
+        reimbursable_person_id: payload.reimbursablePersonId || null,
+        is_active: payload.isActive ?? true,
+      }),
+    },
+  );
+}
+
+export async function removeCardHolder(
+  cardId: string,
+  holderId: string,
+): Promise<void> {
+  await requestJson<void>(
+    `/api/cards/${encodeURIComponent(cardId)}/holders/${encodeURIComponent(holderId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function previewCardConversion(
+  cardId: string,
+  targetCardId: string,
+): Promise<CardConversionPreview> {
+  const query = new URLSearchParams({ target_card_id: targetCardId });
+  return requestJson<CardConversionPreview>(
+    `/api/cards/${encodeURIComponent(cardId)}/convert-to-holder/preview?${query}`,
+  );
+}
+
+export async function convertCardToHolder(
+  cardId: string,
+  payload: CardConversionPayload,
+): Promise<CardConversionResult> {
+  return requestJson<CardConversionResult>(
+    `/api/cards/${encodeURIComponent(cardId)}/convert-to-holder`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        target_card_id: payload.targetCardId,
+        holder_id: payload.holderId,
+        holder_name: payload.holderName,
+        last_four: payload.lastFour || null,
+        sub_limit: payload.subLimitInCents ?? null,
+        reimbursable_person_id: payload.reimbursablePersonId || null,
+      }),
+    },
+  );
+}
+
 export async function updateCard(
   cardId: string,
   payload: CardUpdatePayload,
@@ -1281,6 +1563,7 @@ export async function createCardPurchase(
       card_id: payload.cardId,
       description: payload.description || undefined,
       person_id: payload.personId || undefined,
+      holder_id: payload.holderId || undefined,
     }),
   });
 }
@@ -1308,6 +1591,9 @@ export async function updateCardPurchase(
       : {}),
     ...(payload.personId !== undefined
       ? { person_id: payload.personId || null }
+      : {}),
+    ...(payload.holderId !== undefined
+      ? { holder_id: payload.holderId || null }
       : {}),
   };
 
@@ -1806,6 +2092,202 @@ export async function resetApplicationData(): Promise<{
 }> {
   return requestJson<{ status: string; message: string }>("/api/dev/reset", {
     method: "POST",
+  });
+}
+
+export async function createPluggyConnectToken(
+  clientUserId: string,
+  itemId?: string,
+): Promise<PluggyConnectToken> {
+  return requestJson<PluggyConnectToken>("/api/pluggy/connect-token", {
+    method: "POST",
+    body: JSON.stringify(itemId ? { clientUserId, itemId } : { clientUserId }),
+  });
+}
+
+export async function registerPluggyItem(
+  item: PluggyItemPayload,
+  clientUserId: string,
+  errorMessage?: string,
+): Promise<PluggyItemState> {
+  return requestJson<PluggyItemState>("/api/pluggy/items", {
+    method: "POST",
+    body: JSON.stringify({
+      itemId: item.id,
+      clientUserId,
+      item,
+      errorMessage,
+    }),
+  });
+}
+
+export async function linkPluggyItem(
+  itemId: string,
+  clientUserId: string,
+): Promise<PluggyItemState> {
+  return requestJson<PluggyItemState>("/api/pluggy/items/link", {
+    method: "POST",
+    body: JSON.stringify({ itemId, clientUserId }),
+  });
+}
+
+export async function recoverPluggyItems(
+  clientUserId: string,
+): Promise<PluggyRecovery> {
+  return requestJson<PluggyRecovery>("/api/pluggy/items/recover", {
+    method: "POST",
+    body: JSON.stringify({ clientUserId }),
+  });
+}
+
+export async function fetchPluggyAccounts(): Promise<PluggyDiscoveredAccount[]> {
+  const response = await requestJson<{ accounts: PluggyDiscoveredAccount[] }>(
+    "/api/pluggy/accounts",
+  );
+  return response.accounts;
+}
+
+/** A physical card seen spending on a Pluggy credit account. */
+export type PluggyCardNumber = {
+  last_four: string;
+  purchase_count: number;
+  total_amount: number;
+  last_seen_at: string;
+  sample_description: string | null;
+  holder_id: string | null;
+  holder_name: string | null;
+};
+
+export async function fetchPluggyCardNumbers(
+  pluggyAccountId: string,
+): Promise<{ card_numbers: PluggyCardNumber[]; local_card_id: string | null }> {
+  return requestJson(
+    `/api/pluggy/accounts/${encodeURIComponent(pluggyAccountId)}/card-numbers`,
+  );
+}
+
+export async function linkPluggyAccount(
+  pluggyAccountId: string,
+  payload: PluggyAccountLinkPayload,
+): Promise<PluggyDiscoveredAccount> {
+  return requestJson<PluggyDiscoveredAccount>(
+    `/api/pluggy/accounts/${encodeURIComponent(pluggyAccountId)}/link`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        localAccountId: payload.localAccountId ?? null,
+        localCardId: payload.localCardId ?? null,
+        localHolderId: payload.localHolderId ?? null,
+        ignored: payload.ignored ?? false,
+        importSince: payload.importSince ?? null,
+      }),
+    },
+  );
+}
+
+export async function fetchPluggyInbox(options?: {
+  decision?: string;
+  kind?: string;
+  accountId?: string;
+  includeCovered?: boolean;
+}): Promise<PluggyInboxPage> {
+  const params = new URLSearchParams();
+  params.set("decision", options?.decision ?? "pending");
+  if (options?.kind) params.set("kind", options.kind);
+  if (options?.accountId) params.set("account_id", options.accountId);
+  if (options?.includeCovered) params.set("include_covered", "true");
+  return requestJson<PluggyInboxPage>(`/api/pluggy/inbox?${params}`);
+}
+
+/** What a description always means, taught by the user. Only pre-fills. */
+export type PluggyImportRule = {
+  rule_id: string;
+  match_value: string;
+  label: string | null;
+  set_category_id: string | null;
+  set_person_id: string | null;
+  set_card_id: string | null;
+  set_holder_id: string | null;
+  set_account_id: string | null;
+  hit_count: number;
+};
+
+export async function fetchPluggyRules(): Promise<PluggyImportRule[]> {
+  const response = await requestJson<{ rules: PluggyImportRule[] }>(
+    "/api/pluggy/rules",
+  );
+  return response.rules;
+}
+
+export async function savePluggyRule(payload: {
+  matchValue?: string | null;
+  label?: string | null;
+  setCategoryId?: string | null;
+  setPersonId?: string | null;
+}): Promise<PluggyImportRule> {
+  return requestJson<PluggyImportRule>("/api/pluggy/rules", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePluggyRule(ruleId: string): Promise<void> {
+  await requestJson(`/api/pluggy/rules/${encodeURIComponent(ruleId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function acceptPluggyEntry(
+  entryId: string,
+  overrides?: Record<string, unknown>,
+  /** Teach what this description means, for the next one like it. */
+  remember = false,
+): Promise<PluggyInboxEntry> {
+  return requestJson<PluggyInboxEntry>(
+    `/api/pluggy/inbox/${encodeURIComponent(entryId)}/accept`,
+    {
+      method: "POST",
+      body: JSON.stringify({ overrides: overrides ?? null, remember }),
+    },
+  );
+}
+
+export async function ignorePluggyEntry(
+  entryId: string,
+): Promise<PluggyInboxEntry> {
+  return requestJson<PluggyInboxEntry>(
+    `/api/pluggy/inbox/${encodeURIComponent(entryId)}/ignore`,
+    { method: "POST" },
+  );
+}
+
+export async function linkPluggyEntry(
+  entryId: string,
+  localId: string,
+): Promise<PluggyInboxEntry> {
+  return requestJson<PluggyInboxEntry>(
+    `/api/pluggy/inbox/${encodeURIComponent(entryId)}/link`,
+    { method: "POST", body: JSON.stringify({ localId }) },
+  );
+}
+
+export async function acceptPluggyEntryBatch(
+  entryIds: string[],
+): Promise<PluggyAcceptBatchResult> {
+  return requestJson<PluggyAcceptBatchResult>(
+    "/api/pluggy/inbox/accept-batch",
+    { method: "POST", body: JSON.stringify({ entryIds }) },
+  );
+}
+
+export async function fetchPluggyStatus(): Promise<PluggyStatus> {
+  return requestJson<PluggyStatus>("/api/pluggy/status");
+}
+
+export async function syncPluggyItem(itemId?: string): Promise<PluggySyncResult> {
+  return requestJson<PluggySyncResult>("/api/pluggy/sync", {
+    method: "POST",
+    body: JSON.stringify(itemId ? { itemId } : {}),
   });
 }
 

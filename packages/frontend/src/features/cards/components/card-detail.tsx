@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Calendar, CalendarClock, ChevronDown, ChevronRight, Clock, ExternalLink, Layers3, Receipt } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -22,6 +22,7 @@ import {
 } from "../../../components/ui/select";
 import type {
   AccountSummary,
+  CardHolderSummary,
   CardInstallmentSummary,
   CardSummary,
   InvoicePaymentUpdatePayload,
@@ -30,9 +31,11 @@ import type {
   InvoiceSummary,
   TransactionFilters,
 } from "../../../lib/api";
+import { fetchCardHolders } from "../../../lib/api";
 import { formatCurrency, formatDateTime } from "../../../lib/format";
 import type { QuickAddPreset } from "../../../components/quick-add-composer";
 import { cn } from "../../../lib/utils";
+import { CardHoldersPanel } from "./card-holders-panel";
 import {
   accountName,
   getDisplayedInvoiceAmount,
@@ -70,6 +73,7 @@ type CardDetailProps = {
     paymentId: string,
     payload: InvoicePaymentUpdatePayload,
   ) => Promise<void>;
+  onError: (message: string) => void;
 };
 
 // Group future installments by reference_month
@@ -103,11 +107,35 @@ export function CardDetail({
   onOpenQuickAdd,
   onSelectInvoice,
   onUpdateInvoicePayment,
+  onError,
 }: CardDetailProps) {
+  const [holders, setHolders] = useState<CardHolderSummary[]>([]);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [editingPayment, setEditingPayment] = useState<InvoicePaymentSummary | null>(null);
   const [editingPaymentAccountId, setEditingPaymentAccountId] = useState("");
+
+  // An additional's spend sits on the titular's invoice, so the line has to say
+  // whose card it was. The titular's own purchases carry no holder and no chip.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const loaded = await fetchCardHolders(card.card_id);
+        if (!cancelled) setHolders(loaded);
+      } catch {
+        // The chip is a label: without it the line still reads correctly.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [card.card_id]);
+
+  const holderNames = useMemo(
+    () => new Map(holders.map((holder) => [holder.holder_id, holder.name])),
+    [holders],
+  );
 
   function toggleMonth(month: string) {
     setExpandedMonths((prev) => {
@@ -335,6 +363,11 @@ export function CardDetail({
                             {item.lifecycle_status === "forecast" ? <CalendarClock className="h-3.5 w-3.5 shrink-0" /> : null}
                             {item.description || "Compra no cartão"}
                           </span>
+                          {item.holder_id && holderNames.has(item.holder_id) ? (
+                            <span className="shrink-0 rounded-md border border-slate-200 bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">
+                              {holderNames.get(item.holder_id)}
+                            </span>
+                          ) : null}
                           {item.installments_count && item.installments_count > 1 && (
                             <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-finance-transfer/10 px-2 py-1 text-[12px] font-bold text-finance-transfer tabular-nums">
                               <Layers3 className="h-3 w-3" />
@@ -518,6 +551,11 @@ export function CardDetail({
                                   <span className="flex-1 truncate text-xs font-bold text-slate-700">
                                     {item.description || "Compra parcelada"}
                                   </span>
+                                  {item.holder_id && holderNames.has(item.holder_id) ? (
+                                    <span className="shrink-0 rounded-md border border-slate-200 bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">
+                                      {holderNames.get(item.holder_id)}
+                                    </span>
+                                  ) : null}
                                   <span className="shrink-0 text-[12px] font-bold text-slate-400 tabular-nums">
                                     <span className="inline-flex items-center gap-1 text-finance-transfer">
                                       <Layers3 className="h-3 w-3" />
@@ -629,6 +667,8 @@ export function CardDetail({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CardHoldersPanel card={card} onError={onError} />
     </div>
   );
 }

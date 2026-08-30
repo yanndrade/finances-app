@@ -1,11 +1,14 @@
 import "./styles.css";
 
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "./components/app-shell";
 import { CommandPalette } from "./components/command-palette";
 import { ErrorBoundary } from "./components/error-boundary";
-import type { QuickAddPreset } from "./components/quick-add-composer";
+import type {
+  QuickAddDraft,
+  QuickAddPreset,
+} from "./components/quick-add-composer";
 import type { AppView } from "./components/sidebar";
 import { ToastViewport, type AppToast } from "./components/toast-viewport";
 import { useAppDataOrchestrator } from "./features/app/use-app-data-orchestrator";
@@ -25,11 +28,14 @@ import {
   createCardPurchase,
   createCashTransaction,
   createInvestmentMovement,
+  createPluggyConnectToken,
   createRecurringRule,
   createTransfer,
   fetchAuthorizedLanDevices,
   fetchBackupSnapshot,
   fetchLanSecurityState,
+  fetchPluggyInbox,
+  fetchPluggyStatus,
   fetchSecurityState,
   issueLanPairToken,
   lockApplication,
@@ -37,13 +43,21 @@ import {
   pairLanDevice,
   payInvoice,
   resetApplicationData,
+  linkPluggyItem,
+  recoverPluggyItems,
+  acceptPluggyEntry,
+  registerPluggyItem,
   revokeAuthorizedLanDevice,
   setLanSecurityEnabled,
   setSecurityPassword,
+  syncPluggyItem,
   type SecurityState,
   type AuthorizedLanDevice,
   type LanPairTokenSession,
   type LanSecurityState,
+  type PluggyInboxEntry,
+  type PluggyItemPayload,
+  type PluggyStatus,
   unlockApplication,
   updateAccount,
   updateCard,
@@ -99,11 +113,14 @@ import {
 } from "./lib/theme";
 import {
   checkForAppUpdate,
+  clearPluggyCredentials,
   getAutostartEnabled,
+  getPluggyCredentialsConfigured,
   installAppUpdate,
   isTauriEnvironment,
   listenDesktopEvent,
   setAutostartEnabled,
+  setPluggyCredentials,
   type DesktopUpdateInfo,
 } from "./lib/desktop";
 import { useMediaQuery } from "./lib/use-media-query";
@@ -133,6 +150,16 @@ const DashboardView = lazy(async () => {
 const FixedExpensesView = lazy(async () => {
   const module = await import("./features/recurring/fixed-expenses-view");
   return { default: module.FixedExpensesView };
+});
+
+const ImportView = lazy(async () => {
+  const module = await import("./features/import/import-view");
+  return { default: module.ImportView };
+});
+
+const OpenFinanceView = lazy(async () => {
+  const module = await import("./features/open-finance/open-finance-view");
+  return { default: module.OpenFinanceView };
 });
 
 const SettingsView = lazy(async () => {
@@ -174,6 +201,31 @@ const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
   text: "",
 };
 
+/** Turns a proposal into the composer's starting values. */
+function draftFromInboxEntry(entry: PluggyInboxEntry): QuickAddDraft {
+  const payload = entry.proposal.payload;
+  const text = (key: string) => {
+    const value = payload[key];
+    return typeof value === "string" && value ? value : undefined;
+  };
+  const count = payload.installments_count;
+
+  return {
+    // The composer takes the amount as typed, in reais.
+    amount: (entry.amount / 100).toFixed(2),
+    description: entry.title ?? text("description") ?? "",
+    categoryId: text("category_id") ?? "",
+    personId: text("person_id") ?? "",
+    cardId: text("card_id"),
+    accountId: text("account_id"),
+    date: (text("purchase_date") ?? text("occurred_at") ?? entry.occurred_at).slice(
+      0,
+      10,
+    ),
+    installments: typeof count === "number" && count > 1 ? String(count) : undefined,
+  };
+}
+
 const VIEW_META: Record<
   AppView,
   {
@@ -205,6 +257,14 @@ const VIEW_META: Record<
     title: "Cartões",
     description: "Faturas, ciclos e compras.",
   },
+  import: {
+    title: "Importar",
+    description: "Lançamentos da Pluggy aguardando revisão.",
+  },
+  openFinance: {
+    title: "Open Finance",
+    description: "Conexões e para onde cada conta, cartão e investimento entra.",
+  },
   fixedExpenses: {
     title: "Gastos fixos",
     description: "Cadastro, revisão e confirmação das recorrências.",
@@ -221,6 +281,10 @@ const TOAST_DURATION_MS = {
 } as const;
 const DIAGNOSTIC_TOAST_DURATION_MS = 20_000;
 const MOBILE_QUERY = "(max-width: 900px)";
+// MeuCofri is single-user by design, so the Pluggy end-user identifier is a
+// constant. A per-device identifier would make the same person look like a new
+// user on every browser and orphan the connection when site data is cleared.
+const PLUGGY_CLIENT_USER_ID = "meucofri-owner";
 
 export function App() {
   const isMobileViewport = useMediaQuery(MOBILE_QUERY);
@@ -261,6 +325,28 @@ export function App() {
   const [lockPassword, setLockPassword] = useState("");
   const [desktopAutostartEnabled, setDesktopAutostartEnabled] = useState(false);
   const [desktopAutostartLoading, setDesktopAutostartLoading] = useState(true);
+  const [pluggyCredentialsConfigured, setPluggyCredentialsConfigured] =
+    useState(false);
+  const [pluggyCredentialsLoading, setPluggyCredentialsLoading] = useState(
+    isTauriEnvironment(),
+  );
+  const [pluggyStatus, setPluggyStatus] = useState<PluggyStatus | null>(null);
+  const [pluggySyncing, setPluggySyncing] = useState(false);
+  // Bumped after a sync or a pairing so the links panel refetches.
+  const [pluggyAccountsRefreshToken, setPluggyAccountsRefreshToken] =
+    useState(0);
+  const [pluggyInboxPending, setPluggyInboxPending] = useState(0);
+  const [pluggyInboxRefreshToken, setPluggyInboxRefreshToken] = useState(0);
+  // Set while the composer is being used to review an imported entry: the
+  // submit then accepts that entry instead of creating a fresh one, so the
+  // backend keeps resolving the holder and settling a fixed expense.
+  const [reviewingEntry, setReviewingEntry] = useState<{
+    entryId: string;
+    kind: string;
+    remember?: boolean;
+  } | null>(null);
+  const [quickAddDraft, setQuickAddDraft] = useState<QuickAddDraft | null>(null);
+  const pluggyAutoSyncStartedRef = useRef(false);
   const [desktopUpdateInfo, setDesktopUpdateInfo] =
     useState<DesktopUpdateInfo | null>(null);
   const [desktopUpdateSupported, setDesktopUpdateSupported] =
@@ -455,6 +541,40 @@ export function App() {
     }
   }
 
+  async function refreshPluggyCredentialsState(): Promise<void> {
+    if (!isTauriEnvironment()) {
+      setPluggyCredentialsConfigured(false);
+      setPluggyCredentialsLoading(false);
+      return;
+    }
+
+    setPluggyCredentialsLoading(true);
+    try {
+      setPluggyCredentialsConfigured(await getPluggyCredentialsConfigured());
+    } catch (error) {
+      showErrorToast(error);
+    } finally {
+      setPluggyCredentialsLoading(false);
+    }
+  }
+
+  async function refreshPluggyInboxCount(): Promise<void> {
+    try {
+      const page = await fetchPluggyInbox();
+      setPluggyInboxPending(page.pending_total);
+    } catch {
+      // The inbox is desktop-only and optional; a failure here must not break
+      // the rest of the app.
+      setPluggyInboxPending(0);
+    }
+  }
+
+  async function refreshPluggyStatusState(): Promise<PluggyStatus> {
+    const status = await fetchPluggyStatus();
+    setPluggyStatus(status);
+    return status;
+  }
+
   async function refreshDesktopUpdateState(options?: {
     showUpToDateToast?: boolean;
     showAvailableToast?: boolean;
@@ -491,8 +611,31 @@ export function App() {
     void refreshSecurityState();
     void refreshLanSecurityState();
     void refreshDesktopAutostartState();
+    void refreshPluggyCredentialsState();
+    void refreshPluggyStatusState().catch(() => undefined);
     void refreshDesktopUpdateState();
   }, []);
+
+  useEffect(() => {
+    if (
+      pluggyCredentialsLoading ||
+      !pluggyCredentialsConfigured ||
+      pluggyAutoSyncStartedRef.current
+    ) {
+      return;
+    }
+    pluggyAutoSyncStartedRef.current = true;
+    void refreshPluggyInboxCount();
+    void refreshPluggyStatusState()
+      .then((status) => {
+        if (status.connected) {
+          // Silent and non-blocking: the badge is what tells the user there is
+          // something to review.
+          return handleSyncPluggy({ silent: true });
+        }
+      })
+      .catch(() => undefined);
+  }, [pluggyCredentialsConfigured, pluggyCredentialsLoading]);
 
   useEffect(() => {
     const currentUrl = new URL(globalThis.location.href);
@@ -676,6 +819,15 @@ export function App() {
       throw new Error("Não foi possível atualizar a conta.");
     }
   }
+
+  // The import queue only carries ids; a transfer or a bill payment is only
+  // readable once they are names.
+  const importNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const account of accounts) names[account.account_id] = account.name;
+    for (const card of cards) names[card.card_id] = card.name;
+    return names;
+  }, [accounts, cards]);
 
   async function handleSetAccountActive(
     account: AccountSummary,
@@ -978,6 +1130,264 @@ export function App() {
     }
   }
 
+  async function handleCreatePluggyConnectToken(itemId?: string): Promise<string> {
+    try {
+      const response = await createPluggyConnectToken(
+        PLUGGY_CLIENT_USER_ID,
+        itemId,
+      );
+      return response.accessToken;
+    } catch (error) {
+      showErrorToast(error);
+      throw error;
+    }
+  }
+
+  /**
+   * Confirms an imported entry with whatever the user edited in the composer.
+   * The backend still writes it, so the holder lookup and the settling of a
+   * fixed expense keep working exactly as they do for an untouched proposal.
+   */
+  async function acceptReviewedEntry(
+    overrides: Record<string, unknown>,
+  ): Promise<void> {
+    if (!reviewingEntry) return;
+    await acceptPluggyEntry(
+      reviewingEntry.entryId,
+      overrides,
+      reviewingEntry.remember,
+    );
+    setReviewingEntry(null);
+    setQuickAddDraft(null);
+    void refreshPluggyInboxCount();
+    setPluggyInboxRefreshToken((value) => value + 1);
+    void refreshDataRef.current({ month: selectedMonth });
+    setRefreshKey((value) => value + 1);
+  }
+
+  async function handleSyncPluggy(options?: {
+    itemId?: string;
+    silent?: boolean;
+  }): Promise<void> {
+    setPluggySyncing(true);
+    try {
+      const result = await syncPluggyItem(options?.itemId);
+      const results = result.items ?? [result];
+      const successful = results.filter((item) => item.status === "success");
+      const failed = results.filter((item) => item.status === "error");
+      await Promise.all([
+        refreshPluggyStatusState(),
+        refreshDataRef.current({ month: selectedMonth }),
+      ]);
+      setRefreshKey((value) => value + 1);
+      setPluggyAccountsRefreshToken((value) => value + 1);
+      setPluggyInboxRefreshToken((value) => value + 1);
+      await refreshPluggyInboxCount();
+      if (failed.length > 0 && successful.length === 0) {
+        throw new Error(
+          failed[0].detail ?? "Não foi possível sincronizar os dados da Pluggy.",
+        );
+      }
+      if (!options?.silent) {
+        const discovered = successful.reduce(
+          (total, item) => total + (item.accounts_discovered ?? 0),
+          0,
+        );
+        const pending = successful.reduce(
+          (total, item) => total + (item.accounts_pending ?? 0),
+          0,
+        );
+        const staged = successful.reduce(
+          (total, item) => total + (item.entries_pending ?? 0),
+          0,
+        );
+        // A card whose invoice has not closed yet imports nothing, which on
+        // screen is indistinguishable from the card being broken.
+        const openInvoice = successful.reduce(
+          (total, item) => total + (item.entries_skipped?.open_invoice ?? 0),
+          0,
+        );
+        const openInvoiceNote =
+          openInvoice > 0
+            ? ` ${openInvoice} compra(s) de cartão ainda estão na fatura aberta e entram quando ela fechar.`
+            : "";
+        showToast(
+          "success",
+          pending > 0
+            ? `Pluggy sincronizada: ${discovered} conta(s), ${pending} aguardando vínculo.${openInvoiceNote}`
+            : staged > 0
+              ? `${staged} lançamento(s) aguardando revisão em Importar.${openInvoiceNote}`
+              : `Pluggy sincronizada: ${discovered} conta(s) vinculada(s).${openInvoiceNote}`,
+        );
+      }
+    } catch (error) {
+      if (!options?.silent) {
+        showErrorToast(error);
+      }
+      throw error;
+    } finally {
+      setPluggySyncing(false);
+    }
+  }
+
+  async function handlePluggyConnected(item: PluggyItemPayload): Promise<void> {
+    try {
+      await registerPluggyItem(item, PLUGGY_CLIENT_USER_ID);
+      await refreshPluggyStatusState();
+    } catch (error) {
+      showErrorToast(error);
+      throw error;
+    }
+    await handleSyncPluggy({ itemId: item.id });
+  }
+
+  async function handleLinkPluggyItem(itemId: string): Promise<void> {
+    try {
+      await linkPluggyItem(itemId.trim(), PLUGGY_CLIENT_USER_ID);
+      await refreshPluggyStatusState();
+    } catch (error) {
+      showErrorToast(error);
+      throw error;
+    }
+    await handleSyncPluggy({ itemId: itemId.trim() });
+  }
+
+  async function handlePluggyItemDetected(item: PluggyItemPayload): Promise<void> {
+    // Pluggy creates the item before the flow finishes. Persisting the id as
+    // soon as it exists keeps the connection recoverable even if the user
+    // closes the widget or the run fails afterwards.
+    try {
+      await registerPluggyItem(item, PLUGGY_CLIENT_USER_ID);
+      await refreshPluggyStatusState();
+    } catch {
+      // Best effort: the success and error handlers register the item as well.
+    }
+  }
+
+  type PluggyRecoveryOutcome =
+    | "recovered"
+    | "listing-disabled"
+    | "nothing-found"
+    | "failed";
+
+  async function handleRecoverExistingPluggyConnection(): Promise<PluggyRecoveryOutcome> {
+    let recovery;
+    try {
+      recovery = await recoverPluggyItems(PLUGGY_CLIENT_USER_ID);
+    } catch {
+      return "failed";
+    }
+    if (!recovery.available) {
+      return "listing-disabled";
+    }
+    if (recovery.items.length === 0) {
+      return "nothing-found";
+    }
+    await refreshPluggyStatusState();
+    try {
+      await handleSyncPluggy({ silent: true });
+    } catch {
+      // The connection is registered; a failed first sync can be retried.
+    }
+    showToast(
+      "success",
+      `${recovery.items.length} conexão(ões) encontrada(s) na Pluggy e sincronizada(s).`,
+    );
+    return "recovered";
+  }
+
+  async function handleDiscoverPluggyItems(): Promise<void> {
+    const outcome = await handleRecoverExistingPluggyConnection();
+    if (outcome === "recovered") {
+      return;
+    }
+    showToast(
+      "error",
+      {
+        "listing-disabled":
+          "Sua conta Pluggy não permite listar as conexões desta aplicação, então não dá para encontrá-las sozinho. Peça ao suporte da Pluggy para habilitar a listagem de items, ou vincule pelo Item ID nas opções avançadas.",
+        "nothing-found":
+          "Nenhuma conexão encontrada nesta aplicação da Pluggy. Autorize uma conexão antes de procurar.",
+        failed: "Não foi possível consultar as conexões na Pluggy agora.",
+      }[outcome],
+    );
+  }
+
+  async function handlePluggyError(
+    message: string,
+    item?: PluggyItemPayload,
+  ): Promise<void> {
+    let knownItemId: string | null = null;
+    if (item) {
+      try {
+        await registerPluggyItem(item, PLUGGY_CLIENT_USER_ID, message);
+        await refreshPluggyStatusState();
+        knownItemId = item.id;
+      } catch (error) {
+        showErrorToast(error);
+        return;
+      }
+    }
+    if (/ITEM_USER_ALREADY_EXISTS/i.test(message)) {
+      if (knownItemId ?? pluggyStatus?.items?.[0]?.item_id) {
+        showToast(
+          "success",
+          "Essa conta já estava conectada na Pluggy. Sincronizando os dados existentes.",
+        );
+        await handleSyncPluggy({ silent: true }).catch(() => undefined);
+        return;
+      }
+      const outcome = await handleRecoverExistingPluggyConnection();
+      if (outcome === "recovered") {
+        return;
+      }
+      showToast(
+        "error",
+        {
+          "listing-disabled":
+            "Já existe uma conexão na Pluggy para essas credenciais, mas sua conta Pluggy não permite listar as conexões da aplicação, então não dá para reaproveitá-la sozinho. Peça ao suporte da Pluggy para habilitar a listagem de items, ou apague a conexão antiga no painel da Pluggy.",
+          "nothing-found":
+            "A Pluggy recusou a conexão por já existir uma com essas credenciais, mas nenhuma conexão aparece nesta aplicação. Confira se a conexão antiga foi apagada no painel da aplicação certa.",
+          failed:
+            "Já existe uma conexão na Pluggy e a busca automática falhou. Tente de novo em instantes.",
+        }[outcome],
+      );
+      return;
+    }
+    showToast(
+      "error",
+      message || "Não foi possível concluir a conexão com o Meu Pluggy.",
+    );
+  }
+
+  async function handleSavePluggyCredentials(
+    clientId: string,
+    clientSecret: string,
+  ): Promise<void> {
+    try {
+      await setPluggyCredentials(clientId, clientSecret);
+      setPluggyCredentialsConfigured(true);
+      showToast(
+        "success",
+        "Chaves da Pluggy protegidas neste computador. Você já pode conectar.",
+      );
+    } catch (error) {
+      showErrorToast(error);
+      throw error;
+    }
+  }
+
+  async function handleClearPluggyCredentials(): Promise<void> {
+    try {
+      await clearPluggyCredentials();
+      setPluggyCredentialsConfigured(false);
+      showToast("success", "Chaves da Pluggy removidas deste computador.");
+    } catch (error) {
+      showErrorToast(error);
+      throw error;
+    }
+  }
+
   async function handleSetDesktopAutostart(enabled: boolean): Promise<void> {
     try {
       await setAutostartEnabled(enabled);
@@ -1189,6 +1599,7 @@ export function App() {
       uiDensity={uiDensity}
       month={selectedMonth}
       onMonthChange={setSelectedMonth}
+      importPendingCount={pluggyInboxPending}
     >
       <ErrorBoundary>
         <Suspense fallback={<ViewFallback activeView={activeView} />}>
@@ -1319,7 +1730,53 @@ export function App() {
             onSetCardActive={handleSetCardActive}
             onUpdateCard={handleUpdateCard}
             onUpdateInvoicePayment={handleUpdateInvoicePayment}
+            onError={(message) => showToast("error", message)}
+            onCardConverted={async (message: string) => {
+              await refreshData();
+              setRefreshKey((k) => k + 1);
+              showToast("success", message);
+            }}
             uiDensity={uiDensity}
+          />
+        ) : null}
+
+        {activeView === "import" ? (
+          <ImportView
+            isSyncing={pluggySyncing}
+            onSync={() => handleSyncPluggy()}
+            onError={(message) => showToast("error", message)}
+            onChanged={() => {
+              void refreshPluggyInboxCount();
+              void refreshDataRef.current({ month: selectedMonth });
+              setRefreshKey((value) => value + 1);
+            }}
+            refreshToken={pluggyInboxRefreshToken}
+            names={importNames}
+            onReview={(entry, remember) => {
+              setReviewingEntry({
+                entryId: entry.entry_id,
+                kind: entry.kind,
+                remember,
+              });
+              setQuickAddDraft(draftFromInboxEntry(entry));
+              setQuickAddPreset(
+                entry.kind === "card_purchase" ? "expense_card" : "expense",
+              );
+              setIsQuickAddOpen(true);
+            }}
+          />
+        ) : null}
+
+        {activeView === "openFinance" ? (
+          <OpenFinanceView
+            onError={(message) => showToast("error", message)}
+            onChanged={() => {
+              void refreshPluggyInboxCount();
+              setPluggyAccountsRefreshToken((value) => value + 1);
+            }}
+            onSync={() => handleSyncPluggy()}
+            isSyncing={pluggySyncing}
+            refreshToken={pluggyAccountsRefreshToken}
           />
         ) : null}
 
@@ -1332,6 +1789,23 @@ export function App() {
             onExportBackup={() => {
               void handleExportBackup();
             }}
+            onCreatePluggyConnectToken={handleCreatePluggyConnectToken}
+            onPluggyConnected={handlePluggyConnected}
+            onPluggyItemDetected={handlePluggyItemDetected}
+            onPluggyError={handlePluggyError}
+            pluggyConnected={pluggyStatus?.connected ?? false}
+            pluggyItems={pluggyStatus?.items ?? []}
+            pluggyConnectorIds={pluggyStatus?.connector_ids ?? []}
+            onLinkPluggyItem={handleLinkPluggyItem}
+            onDiscoverPluggyItems={handleDiscoverPluggyItems}
+            pluggyLastSyncedAt={pluggyStatus?.last_synced_at ?? null}
+            pluggySyncing={pluggySyncing}
+            onSyncPluggy={() => handleSyncPluggy()}
+            pluggyCredentialsSupported={isTauriEnvironment()}
+            pluggyCredentialsConfigured={pluggyCredentialsConfigured}
+            pluggyCredentialsLoading={pluggyCredentialsLoading}
+            onSavePluggyCredentials={handleSavePluggyCredentials}
+            onClearPluggyCredentials={handleClearPluggyCredentials}
             onResetApplicationData={handleResetAllData}
             onThemeColorChange={setThemeColor}
             onDarkModeChange={setDarkMode}
@@ -1385,9 +1859,12 @@ export function App() {
               setIsQuickAddOpen(false);
               setQuickAddPreset(undefined);
               setQuickAddInvoiceId(undefined);
+              setReviewingEntry(null);
+              setQuickAddDraft(null);
             }}
             preset={quickAddPreset}
             presetInvoiceId={quickAddInvoiceId}
+            presetDraft={quickAddDraft}
             accounts={accounts}
             cards={cards}
             invoices={invoices}
@@ -1395,12 +1872,43 @@ export function App() {
             onCreateCategory={handleCreateCategory}
             onRemoveCategory={handleRemoveCategory}
             onSubmitTransaction={async (payload) => {
+              if (reviewingEntry) {
+                await acceptReviewedEntry({
+                  transaction_type: payload.type,
+                  category_id: payload.categoryId,
+                  person_id: payload.personId || null,
+                  account_id: payload.accountId,
+                  payment_method: payload.paymentMethod,
+                  amount: payload.amountInCents,
+                  description: payload.description,
+                  ...(payload.occurredAt
+                    ? { occurred_at: payload.occurredAt }
+                    : {}),
+                });
+                return;
+              }
               await handleTransactionSubmit(payload);
             }}
             onSubmitTransfer={async (payload) => {
               await handleTransferSubmit(payload);
             }}
             onSubmitCardPurchase={async (payload) => {
+              if (reviewingEntry) {
+                await acceptReviewedEntry({
+                  category_id: payload.categoryId,
+                  person_id: payload.personId || null,
+                  card_id: payload.cardId,
+                  // Left out on purpose: the composer has no holder field, so
+                  // sending it would erase the holder the backend resolved
+                  // from the card's last four digits.
+                  ...(payload.holderId ? { holder_id: payload.holderId } : {}),
+                  purchase_date: payload.purchaseDate,
+                  amount: payload.amountInCents,
+                  installments_count: payload.installmentsCount,
+                  description: payload.description,
+                });
+                return;
+              }
               await handleCreateCardPurchase(payload);
             }}
             onSubmitRecurringRule={async (payload) => {

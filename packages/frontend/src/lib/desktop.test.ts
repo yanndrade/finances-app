@@ -1,10 +1,13 @@
 import {
   checkForAppUpdate,
+  clearPluggyCredentials,
   getAutostartEnabled,
+  getPluggyCredentialsConfigured,
   installAppUpdate,
   isTauriEnvironment,
   listenDesktopEvent,
   setAutostartEnabled,
+  setPluggyCredentials,
 } from "./desktop";
 
 const invokeMock = vi.fn();
@@ -81,6 +84,30 @@ describe("desktop bridge", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(2, "set_autostart_enabled", {
       enabled: false,
     });
+  });
+
+  it("keeps Pluggy credentials inside native desktop commands", async () => {
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+    invokeMock
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+
+    await expect(getPluggyCredentialsConfigured()).resolves.toBe(false);
+    await expect(
+      setPluggyCredentials("client-id", "client-secret"),
+    ).resolves.toBeUndefined();
+    await expect(clearPluggyCredentials()).resolves.toBeUndefined();
+
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      1,
+      "get_pluggy_credentials_configured",
+    );
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "set_pluggy_credentials", {
+      clientId: "client-id",
+      clientSecret: "client-secret",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "clear_pluggy_credentials");
   });
 
   it("returns updater metadata when a desktop update is available", async () => {

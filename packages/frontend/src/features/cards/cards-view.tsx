@@ -21,6 +21,7 @@ import { CardList } from "./components/card-list";
 import { CardDetail } from "./components/card-detail";
 import { ManageCardsSheet } from "./components/manage-cards-sheet";
 import { CreateCardDialog, EditCardDialog } from "./components/card-form-dialog";
+import { ConvertCardDialog } from "./components/convert-card-dialog";
 import { useInvoiceItems } from "./use-invoice-items";
 import { useInvoicePayments } from "./use-invoice-payments";
 
@@ -45,6 +46,8 @@ type CardsViewProps = {
     paymentId: string,
     payload: InvoicePaymentUpdatePayload,
   ) => Promise<void>;
+  onError: (message: string) => void;
+  onCardConverted: (message: string) => Promise<void>;
   uiDensity: UiDensity;
 };
 
@@ -62,6 +65,8 @@ export function CardsView({
   onSetCardActive,
   onUpdateCard,
   onUpdateInvoicePayment,
+  onError,
+  onCardConverted,
   uiDensity,
 }: CardsViewProps) {
   const isMobileSurface = surface === "mobile";
@@ -71,6 +76,7 @@ export function CardsView({
   const [isManageSheetOpen, setIsManageSheetOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<CardSummary | null>(null);
+  const [convertingCard, setConvertingCard] = useState<CardSummary | null>(null);
 
   const [futureInstallments, setFutureInstallments] = useState<CardInstallmentSummary[]>([]);
   const [installmentsLoadError, setInstallmentsLoadError] = useState<string | null>(null);
@@ -262,6 +268,7 @@ export function CardsView({
             onOpenQuickAdd={onOpenQuickAdd}
             onSelectInvoice={jumpToInvoice}
             onUpdateInvoicePayment={onUpdateInvoicePayment}
+            onError={onError}
             isSubmitting={isSubmitting}
           />
         )
@@ -278,6 +285,18 @@ export function CardsView({
             onAddCard={() => setIsCreateDialogOpen(true)}
             onEditCard={(card) => setEditingCard(card)}
             onToggleCardActive={(card) => void handleToggleCardActive(card)}
+            onConvertCard={(card) => setConvertingCard(card)}
+          />
+
+          <ConvertCardDialog
+            open={convertingCard !== null}
+            onOpenChange={(open) => {
+              if (!open) setConvertingCard(null);
+            }}
+            card={convertingCard}
+            cards={cards}
+            onConverted={(message) => void onCardConverted(message)}
+            onError={onError}
           />
 
           <CreateCardDialog

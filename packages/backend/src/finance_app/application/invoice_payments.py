@@ -153,6 +153,61 @@ class InvoicePaymentService:
             )
         return updated_payment
 
+    def reassign_payment(
+        self,
+        *,
+        payment_id: str,
+        invoice_id: str,
+    ) -> dict[str, str | int]:
+        """Move a payment to another invoice, keeping amount, date and account.
+
+        Used when folding an additional card into its titular: the issuer bills
+        a single invoice, so the payments have to follow the purchases.
+        """
+        self._sync_projections()
+        payment = self._projector.get_invoice_payment(payment_id)
+        if payment is None:
+            raise InvoicePaymentNotFoundError(
+                f"Invoice payment '{payment_id}' was not found."
+            )
+
+        invoice = self._find_invoice(invoice_id)
+        if invoice is None:
+            raise InvoiceNotFoundError(f"Invoice '{invoice_id}' was not found.")
+
+        if str(payment["invoice_id"]) == invoice_id:
+            return payment
+
+        self._append_event(
+            "InvoicePaymentReassigned",
+            {
+                "id": payment_id,
+                "invoice_id": invoice_id,
+                "card_id": str(invoice["card_id"]),
+            },
+        )
+
+        reassigned = self._projector.get_invoice_payment(payment_id)
+        if reassigned is None:
+            raise InvoicePaymentNotFoundError(
+                f"Invoice payment '{payment_id}' was not found."
+            )
+        return reassigned
+
+    def list_invoices(self, card_id: str) -> list[dict[str, str | int]]:
+        self._sync_projections()
+        return self._projector.list_invoices(card_id=card_id)
+
+    def list_payments_for_card(self, card_id: str) -> list[dict[str, str | int]]:
+        self._sync_projections()
+        return [
+            payment
+            for invoice in self._projector.list_invoices(card_id=card_id)
+            for payment in self._projector.list_invoice_payments(
+                invoice_id=str(invoice["invoice_id"]),
+            )
+        ]
+
     def _validate_payload(
         self,
         *,

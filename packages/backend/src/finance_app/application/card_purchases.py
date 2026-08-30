@@ -25,6 +25,10 @@ class InvoiceNotFoundError(CardPurchaseServiceError):
     pass
 
 
+class InvalidCardHolderError(CardPurchaseServiceError):
+    pass
+
+
 class CardPurchaseEventStore(Protocol):
     def create_schema(self) -> None: ...
     def append(self, event: NewEvent) -> int: ...
@@ -60,6 +64,10 @@ class CardPurchaseProjector(Protocol):
 
 class CardReader(Protocol):
     def get_card(self, card_id: str) -> dict[str, str | int | bool]: ...
+    def list_holders(
+        self,
+        card_id: str,
+    ) -> list[dict[str, str | int | bool | None]]: ...
 
 
 class CardPurchaseService:
@@ -85,6 +93,7 @@ class CardPurchaseService:
         card_id: str,
         description: str | None = None,
         person_id: str | None = None,
+        holder_id: str | None = None,
     ) -> dict[str, str | int | None]:
         self._sync_projections()
         if self._find_card_purchase(purchase_id) is not None:
@@ -100,6 +109,7 @@ class CardPurchaseService:
             category_id=category_id,
             card_id=card_id,
         )
+        self._validate_holder(card_id=card_id, holder_id=holder_id)
 
         payload = {
             "id": purchase_id,
@@ -110,6 +120,7 @@ class CardPurchaseService:
             "card_id": card_id,
             "description": description,
             "person_id": person_id,
+            "holder_id": holder_id,
         }
 
         self._append_event("CardPurchaseCreated", payload)
@@ -135,6 +146,7 @@ class CardPurchaseService:
         card_id: object = _UNSET,
         description: object = _UNSET,
         person_id: object = _UNSET,
+        holder_id: object = _UNSET,
     ) -> dict[str, str | int | None]:
         self._sync_projections()
         existing = self._find_card_purchase(purchase_id)
@@ -185,6 +197,14 @@ class CardPurchaseService:
             else current_person_id
         )
 
+        next_holder_id = (
+            None
+            if holder_id is not _UNSET and holder_id is None
+            else str(holder_id).strip() or None
+            if holder_id is not _UNSET
+            else existing.get("holder_id")
+        )
+
         self._validate_payload(
             purchase_date=next_purchase_date,
             amount=next_amount,
@@ -193,6 +213,7 @@ class CardPurchaseService:
             card_id=next_card_id,
         )
         self._card_reader.get_card(next_card_id)
+        self._validate_holder(card_id=next_card_id, holder_id=next_holder_id)
 
         if (
             next_purchase_date == str(existing["purchase_date"])
@@ -202,6 +223,7 @@ class CardPurchaseService:
             and next_card_id == str(existing["card_id"])
             and next_description == existing.get("description")
             and next_person_id == current_person_id
+            and next_holder_id == existing.get("holder_id")
         ):
             return existing
 
@@ -216,6 +238,7 @@ class CardPurchaseService:
                 "card_id": next_card_id,
                 "description": next_description,
                 "person_id": next_person_id,
+                "holder_id": next_holder_id,
             },
         )
         return self.get_card_purchase(purchase_id)
@@ -303,6 +326,15 @@ class CardPurchaseService:
             raise CardPurchaseServiceError("category_id is required.")
         if not card_id.strip():
             raise CardPurchaseServiceError("card_id is required.")
+
+    def _validate_holder(self, *, card_id: str, holder_id: str | None) -> None:
+        if holder_id is None:
+            return
+        holders = self._card_reader.list_holders(card_id)
+        if not any(holder["holder_id"] == holder_id for holder in holders):
+            raise InvalidCardHolderError(
+                f"Card holder '{holder_id}' does not belong to card '{card_id}'."
+            )
 
     def _append_event(
         self,

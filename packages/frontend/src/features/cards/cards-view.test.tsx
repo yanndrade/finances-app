@@ -81,6 +81,9 @@ function renderCardsView(overrides: Partial<ComponentProps<typeof CardsView>> = 
   const onUpdateCard = overrides.onUpdateCard ?? vi.fn(() => Promise.resolve());
   const onUpdateInvoicePayment =
     overrides.onUpdateInvoicePayment ?? vi.fn(() => Promise.resolve());
+  const onError = overrides.onError ?? vi.fn();
+  const onCardConverted =
+    overrides.onCardConverted ?? vi.fn(() => Promise.resolve());
 
   render(
     <CardsView
@@ -97,6 +100,8 @@ function renderCardsView(overrides: Partial<ComponentProps<typeof CardsView>> = 
       onSetCardActive={onSetCardActive}
       onUpdateCard={onUpdateCard}
       onUpdateInvoicePayment={onUpdateInvoicePayment}
+      onError={onError}
+      onCardConverted={onCardConverted}
       uiDensity={overrides.uiDensity ?? "compact"}
     />,
   );

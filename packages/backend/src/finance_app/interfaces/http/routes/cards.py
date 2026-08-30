@@ -11,8 +11,13 @@ from finance_app.application.card_purchases import (
     CardPurchaseServiceError,
     InvoiceNotFoundError as CardInvoiceNotFoundError,
 )
+from finance_app.application.card_conversion import (
+    CardConversionError,
+    CardConversionService,
+)
 from finance_app.application.cards import (
     CardAlreadyExistsError,
+    CardHolderNotFoundError,
     CardNotFoundError,
     CardService,
     CardServiceError,
@@ -46,6 +51,25 @@ class UpdateCardRequest(BaseModel):
     is_active: bool | None = None
 
 
+class ConvertCardToHolderRequest(BaseModel):
+    target_card_id: str = Field(min_length=1)
+    holder_id: str = Field(min_length=1)
+    holder_name: str = Field(min_length=1)
+    last_four: str | None = Field(default=None, min_length=4, max_length=4)
+    sub_limit: int | None = Field(default=None, gt=0)
+    reimbursable_person_id: str | None = None
+
+
+class UpsertCardHolderRequest(BaseModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    last_four: str | None = Field(default=None, min_length=4, max_length=4)
+    is_primary: bool = False
+    sub_limit: int | None = Field(default=None, gt=0)
+    reimbursable_person_id: str | None = None
+    is_active: bool = True
+
+
 class CreateCardPurchaseRequest(BaseModel):
     id: str = Field(min_length=1)
     purchase_date: str
@@ -55,6 +79,7 @@ class CreateCardPurchaseRequest(BaseModel):
     card_id: str = Field(min_length=1)
     description: str | None = None
     person_id: str | None = None
+    holder_id: str | None = None
 
 
 class UpdateCardPurchaseRequest(BaseModel):
@@ -65,6 +90,7 @@ class UpdateCardPurchaseRequest(BaseModel):
     card_id: str | None = Field(default=None, min_length=1)
     description: str | None = None
     person_id: str | None = None
+    holder_id: str | None = None
 
 
 class CreateInvoicePaymentRequest(BaseModel):
@@ -82,6 +108,7 @@ def build_cards_router(
     *,
     card_service: CardService,
     card_purchase_service: CardPurchaseService,
+    card_conversion_service: CardConversionService,
     invoice_payment_service: InvoicePaymentService,
 ) -> APIRouter:
     router = APIRouter()
@@ -148,6 +175,114 @@ def build_cards_router(
                 detail=str(exc),
             ) from exc
 
+    @router.get("/api/cards/{card_id}/holders")
+    def list_card_holders(card_id: str) -> list[dict[str, str | int | bool | None]]:
+        try:
+            return card_service.list_holders(card_id)
+        except CardNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+
+    @router.put("/api/cards/{card_id}/holders/{holder_id}")
+    def upsert_card_holder(
+        card_id: str,
+        holder_id: str,
+        payload: UpsertCardHolderRequest,
+    ) -> dict[str, str | int | bool | None]:
+        if payload.id != holder_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="id must match the holder_id in the path.",
+            )
+        try:
+            return card_service.upsert_holder(
+                card_id=card_id,
+                holder_id=holder_id,
+                name=payload.name,
+                last_four=payload.last_four,
+                is_primary=payload.is_primary,
+                sub_limit=payload.sub_limit,
+                reimbursable_person_id=payload.reimbursable_person_id,
+                is_active=payload.is_active,
+            )
+        except CardNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except CardServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.delete(
+        "/api/cards/{card_id}/holders/{holder_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def remove_card_holder(card_id: str, holder_id: str) -> None:
+        try:
+            card_service.remove_holder(holder_id)
+        except CardHolderNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except CardServiceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.get("/api/cards/{card_id}/convert-to-holder/preview")
+    def preview_card_conversion(
+        card_id: str,
+        target_card_id: str = Query(min_length=1),
+    ) -> dict[str, object]:
+        try:
+            return card_conversion_service.preview(
+                card_id=card_id,
+                target_card_id=target_card_id,
+            )
+        except CardNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except CardConversionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.post("/api/cards/{card_id}/convert-to-holder")
+    def convert_card_to_holder(
+        card_id: str,
+        payload: ConvertCardToHolderRequest,
+    ) -> dict[str, object]:
+        try:
+            return card_conversion_service.convert(
+                card_id=card_id,
+                target_card_id=payload.target_card_id,
+                holder_id=payload.holder_id,
+                holder_name=payload.holder_name,
+                last_four=payload.last_four,
+                sub_limit=payload.sub_limit,
+                reimbursable_person_id=payload.reimbursable_person_id,
+            )
+        except CardNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        except (CardConversionError, CardServiceError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
     @router.post("/api/card-purchases", status_code=status.HTTP_201_CREATED)
     def create_card_purchase(
         payload: CreateCardPurchaseRequest,
@@ -162,6 +297,7 @@ def build_cards_router(
                 card_id=payload.card_id,
                 description=payload.description,
                 person_id=payload.person_id,
+                holder_id=payload.holder_id,
             )
         except (AccountNotFoundError, CardNotFoundError) as exc:
             raise HTTPException(

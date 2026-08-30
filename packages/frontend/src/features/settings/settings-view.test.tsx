@@ -1,8 +1,38 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
 import { SettingsView } from "./settings-view";
+
+const pluggyConnectMock = vi.hoisted(() => ({
+  destroy: vi.fn(() => Promise.resolve()),
+  init: vi.fn(() => Promise.resolve()),
+  props: null as null | {
+    connectToken: string;
+    connectorIds?: number[];
+    selectedConnectorId?: number;
+    onSuccess?: (data: {
+      item: {
+        id: string;
+        status?: string;
+        executionStatus?: string;
+        connector?: { name?: string };
+        error?: null;
+      };
+    }) => void | Promise<void>;
+  },
+}));
+
+vi.mock("pluggy-connect-sdk", () => ({
+  PluggyConnect: class {
+    constructor(props: NonNullable<typeof pluggyConnectMock.props>) {
+      pluggyConnectMock.props = props;
+    }
+
+    init = pluggyConnectMock.init;
+    destroy = pluggyConnectMock.destroy;
+  },
+}));
 
 function renderSettingsView(overrides?: Partial<ComponentProps<typeof SettingsView>>) {
   return render(
@@ -12,6 +42,23 @@ function renderSettingsView(overrides?: Partial<ComponentProps<typeof SettingsVi
       darkMode={false}
       investmentGoalPercent={10}
       onExportBackup={vi.fn()}
+      onCreatePluggyConnectToken={vi.fn(() => Promise.resolve("connect-token"))}
+      onPluggyConnected={vi.fn()}
+      onPluggyItemDetected={vi.fn(() => Promise.resolve())}
+      onPluggyError={vi.fn()}
+      pluggyConnected={false}
+      pluggyItems={[]}
+      pluggyConnectorIds={[200]}
+      onLinkPluggyItem={vi.fn(() => Promise.resolve())}
+      onDiscoverPluggyItems={vi.fn(() => Promise.resolve())}
+      pluggyLastSyncedAt={null}
+      pluggySyncing={false}
+      onSyncPluggy={vi.fn(() => Promise.resolve())}
+      pluggyCredentialsSupported={true}
+      pluggyCredentialsConfigured={true}
+      pluggyCredentialsLoading={false}
+      onSavePluggyCredentials={vi.fn(() => Promise.resolve())}
+      onClearPluggyCredentials={vi.fn(() => Promise.resolve())}
       onResetApplicationData={vi.fn(() => Promise.resolve())}
       onThemeColorChange={vi.fn()}
       onDarkModeChange={vi.fn()}
@@ -71,6 +118,120 @@ describe("SettingsView", () => {
     expect(screen.getByText(/produtividade/i)).toBeInTheDocument();
     expect(screen.getByText(/ctrl\+n/i)).toBeInTheDocument();
     expect(screen.getByText(/ctrl\+k/i)).toBeInTheDocument();
+  });
+
+  it("opens Pluggy Connect restricted to Meu Pluggy and reports success", async () => {
+    const onCreatePluggyConnectToken = vi.fn(() =>
+      Promise.resolve("connect-token"),
+    );
+    const onPluggyConnected = vi.fn();
+    renderSettingsView({ onCreatePluggyConnectToken, onPluggyConnected });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /adicionar conex/i }),
+    );
+
+    expect(onCreatePluggyConnectToken).toHaveBeenCalledTimes(1);
+    expect(pluggyConnectMock.init).toHaveBeenCalledTimes(1);
+    expect(pluggyConnectMock.props).toMatchObject({
+      connectToken: "connect-token",
+      connectorIds: [200],
+      selectedConnectorId: 200,
+    });
+
+    await act(async () => {
+      await pluggyConnectMock.props?.onSuccess?.({ item: { id: "item-123" } });
+    });
+    expect(onPluggyConnected).toHaveBeenCalledWith({
+      id: "item-123",
+      error: null,
+    });
+    expect(
+      screen.getByText(/contas, cartões, lançamentos e investimentos/i),
+    ).toBeInTheDocument();
+  });
+
+  it("reopens Pluggy Connect in update mode for an existing connection", async () => {
+    const onCreatePluggyConnectToken = vi.fn(() =>
+      Promise.resolve("connect-token"),
+    );
+    renderSettingsView({
+      onCreatePluggyConnectToken,
+      pluggyConnected: true,
+      pluggyItems: [
+        {
+          item_id: "item-123",
+          client_user_id: "meucofri-owner",
+          connector_name: "MeuPluggy",
+          status: "UPDATED",
+          execution_status: "SUCCESS",
+          error_code: null,
+          error_message: null,
+          provider_message: null,
+          created_at: "2026-08-28T00:00:00Z",
+          updated_at: "2026-08-28T00:00:00Z",
+          last_synced_at: "2026-08-28T00:00:00Z",
+        },
+      ],
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /atualizar/i }));
+
+    expect(onCreatePluggyConnectToken).toHaveBeenCalledWith("item-123");
+    expect(pluggyConnectMock.props).toMatchObject({ updateItem: "item-123" });
+  });
+
+  it("asks the backend to discover connections that already exist at Pluggy", async () => {
+    const onDiscoverPluggyItems = vi.fn(() => Promise.resolve());
+    renderSettingsView({ onDiscoverPluggyItems });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /procurar conex/i }),
+    );
+
+    expect(onDiscoverPluggyItems).toHaveBeenCalledTimes(1);
+  });
+
+  it("links a connection that already exists at Pluggy by its item id", async () => {
+    const onLinkPluggyItem = vi.fn(() => Promise.resolve());
+    renderSettingsView({ onLinkPluggyItem });
+
+    await userEvent.type(
+      screen.getByLabelText(/vincular uma conexão existente pelo item id/i),
+      "item-123",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^vincular$/i }));
+
+    expect(onLinkPluggyItem).toHaveBeenCalledWith("item-123");
+  });
+
+  it("saves Pluggy credentials without displaying the secret again", async () => {
+    const onSavePluggyCredentials = vi.fn(() => Promise.resolve());
+    renderSettingsView({
+      pluggyCredentialsConfigured: false,
+      onSavePluggyCredentials,
+    });
+
+    await userEvent.type(screen.getByLabelText(/^client id$/i), "client-id");
+    await userEvent.type(
+      screen.getByLabelText(/^client secret$/i),
+      "client-secret",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /salvar chaves/i }));
+
+    expect(onSavePluggyCredentials).toHaveBeenCalledWith(
+      "client-id",
+      "client-secret",
+    );
+    expect(screen.queryByDisplayValue("client-secret")).not.toBeInTheDocument();
+  });
+
+  it("disables Pluggy Connect until desktop credentials are configured", () => {
+    renderSettingsView({ pluggyCredentialsConfigured: false });
+
+    expect(
+      screen.getByRole("button", { name: /adicionar conex/i }),
+    ).toBeDisabled();
   });
 
   it("allows changing the primary theme color", async () => {

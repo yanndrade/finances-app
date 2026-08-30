@@ -65,6 +65,21 @@ export type QuickAddPreset =
   | "investment_withdrawal"
   | "expense_card";
 
+/**
+ * Values to open the composer with. Used when a draft already exists — an
+ * imported entry being reviewed — so the user edits it instead of retyping it.
+ */
+export type QuickAddDraft = {
+  amount?: string;
+  description?: string;
+  categoryId?: string;
+  personId?: string;
+  cardId?: string;
+  accountId?: string;
+  date?: string;
+  installments?: string;
+};
+
 const MOBILE_QUERY = "(max-width: 900px)";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ENTER_SUBMIT_INPUT_TYPES = new Set([
@@ -167,6 +182,7 @@ const TAB_CONFIG: TabConfig[] = [
 
 type QuickAddComposerProps = {
   isOpen: boolean;
+  presetDraft?: QuickAddDraft | null;
   onClose: () => void;
   preset?: QuickAddPreset;
   presetInvoiceId?: string;
@@ -196,6 +212,7 @@ export function QuickAddComposer({
   onClose,
   preset,
   presetInvoiceId,
+  presetDraft,
   accounts,
   cards,
   invoices,
@@ -375,6 +392,40 @@ export function QuickAddComposer({
         return;
     }
   }, [isOpen, openInvoices, preset, presetInvoiceId]);
+
+  // Seeded once per opening. The draft is a starting point, not a binding: the
+  // user edits every field before confirming, which is the whole reason the
+  // composer is used instead of accepting the proposal as it came.
+  useEffect(() => {
+    if (!isOpen || !presetDraft) {
+      return;
+    }
+    if (presetDraft.amount !== undefined) setAmount(presetDraft.amount);
+    if (presetDraft.description !== undefined) {
+      setDescription(presetDraft.description);
+    }
+    if (presetDraft.categoryId !== undefined) {
+      setCategoryId(presetDraft.categoryId);
+    }
+    if (presetDraft.personId !== undefined) setPersonId(presetDraft.personId);
+    if (presetDraft.cardId) setCardId(presetDraft.cardId);
+    if (presetDraft.accountId) {
+      dispatchQuickAdd({
+        type: "accountChanged",
+        accountId: presetDraft.accountId,
+      });
+    }
+    if (presetDraft.date) {
+      dispatchQuickAdd({ type: "dateChanged", date: presetDraft.date });
+    }
+    if (presetDraft.installments) {
+      dispatchQuickAdd({
+        type: "installmentsChanged",
+        installments: presetDraft.installments,
+      });
+    }
+    setComposerMode("advanced");
+  }, [isOpen, presetDraft]);
 
   useEffect(() => {
     const requiresAdvancedMode =

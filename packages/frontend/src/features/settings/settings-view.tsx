@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Moon,
@@ -6,6 +6,7 @@ import {
   Sun,
   Download,
   Keyboard,
+  Landmark,
   Laptop,
   QrCode,
   RefreshCw,
@@ -14,12 +15,16 @@ import {
   Target,
   Wifi,
 } from "lucide-react";
+import { PluggyConnect as PluggyConnectSdk } from "pluggy-connect-sdk";
 import { toString as toQrSvgString } from "qrcode";
+
 
 import type {
   AuthorizedLanDevice,
   LanPairTokenSession,
   LanSecurityState,
+  PluggyItemPayload,
+  PluggyItemState,
   SecurityState,
 } from "../../lib/api";
 import { Button } from "../../components/ui/button";
@@ -41,6 +46,29 @@ type SettingsViewProps = {
   darkMode: boolean;
   investmentGoalPercent: number;
   onExportBackup: () => void;
+  onCreatePluggyConnectToken: (itemId?: string) => Promise<string>;
+  onPluggyConnected: (item: PluggyItemPayload) => Promise<void>;
+  onPluggyItemDetected: (item: PluggyItemPayload) => Promise<void>;
+  onPluggyError: (
+    message: string,
+    item?: PluggyItemPayload,
+  ) => Promise<void>;
+  pluggyConnected: boolean;
+  pluggyItems: PluggyItemState[];
+  pluggyConnectorIds: number[];
+  onLinkPluggyItem: (itemId: string) => Promise<void>;
+  onDiscoverPluggyItems: () => Promise<void>;
+  pluggyLastSyncedAt: string | null;
+  pluggySyncing: boolean;
+  onSyncPluggy: () => Promise<void>;
+  pluggyCredentialsSupported: boolean;
+  pluggyCredentialsConfigured: boolean;
+  pluggyCredentialsLoading: boolean;
+  onSavePluggyCredentials: (
+    clientId: string,
+    clientSecret: string,
+  ) => Promise<void>;
+  onClearPluggyCredentials: () => Promise<void>;
   onResetApplicationData: () => Promise<void>;
   onThemeColorChange: (color: string) => void;
   onDarkModeChange: (isDark: boolean) => void;
@@ -82,6 +110,23 @@ export function SettingsView({
   darkMode,
   investmentGoalPercent,
   onExportBackup,
+  onCreatePluggyConnectToken,
+  onPluggyConnected,
+  onPluggyItemDetected,
+  onPluggyError,
+  pluggyConnected,
+  pluggyItems,
+  pluggyConnectorIds,
+  onLinkPluggyItem,
+  onDiscoverPluggyItems,
+  pluggyLastSyncedAt,
+  pluggySyncing,
+  onSyncPluggy,
+  pluggyCredentialsSupported,
+  pluggyCredentialsConfigured,
+  pluggyCredentialsLoading,
+  onSavePluggyCredentials,
+  onClearPluggyCredentials,
   onResetApplicationData,
   onThemeColorChange,
   onDarkModeChange,
@@ -111,6 +156,22 @@ export function SettingsView({
   onRevokeLanDevice,
 }: SettingsViewProps) {
   const [isResetting, setIsResetting] = useState(false);
+  const [isCreatingPluggyToken, setIsCreatingPluggyToken] = useState(false);
+  const [isPluggyOpen, setIsPluggyOpen] = useState(false);
+  const [isPluggyConnected, setIsPluggyConnected] = useState(false);
+  const [pluggyItemIdInput, setPluggyItemIdInput] = useState("");
+  const [isLinkingPluggyItem, setIsLinkingPluggyItem] = useState(false);
+  const [isDiscoveringPluggyItems, setIsDiscoveringPluggyItems] = useState(false);
+  const [pluggyClientIdInput, setPluggyClientIdInput] = useState("");
+  const [pluggyClientSecretInput, setPluggyClientSecretInput] = useState("");
+  const [isEditingPluggyCredentials, setIsEditingPluggyCredentials] =
+    useState(false);
+  const [isSavingPluggyCredentials, setIsSavingPluggyCredentials] =
+    useState(false);
+  const [isClearingPluggyCredentials, setIsClearingPluggyCredentials] =
+    useState(false);
+  const pluggyConnectRef = useRef<PluggyConnectSdk | null>(null);
+  const detectedItemIdRef = useRef<string | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [unlockInput, setUnlockInput] = useState("");
   const [isSettingPassword, setIsSettingPassword] = useState(false);
@@ -151,6 +212,20 @@ export function SettingsView({
   }, [investmentGoalPercent]);
 
   useEffect(() => {
+    setIsPluggyConnected(pluggyConnected);
+  }, [pluggyConnected]);
+
+  useEffect(() => {
+    return () => {
+      const instance = pluggyConnectRef.current;
+      pluggyConnectRef.current = null;
+      if (instance) {
+        void instance.destroy().catch(() => undefined);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
     if (!lanPairingSession) {
       setPairingQrDataUrl(null);
@@ -189,6 +264,176 @@ export function SettingsView({
       await onResetApplicationData();
     } finally {
       setIsResetting(false);
+    }
+  }
+
+  async function handleOpenPluggyConnect(updateItemId?: string) {
+    setIsCreatingPluggyToken(true);
+    detectedItemIdRef.current = null;
+    let token: string;
+    try {
+      token = await onCreatePluggyConnectToken(updateItemId);
+    } catch {
+      // The parent already surfaces the API error in the application toast.
+      setIsCreatingPluggyToken(false);
+      return;
+    }
+
+    // The backend owns the connector allow-list (PLUGGY_CONNECTOR_IDS), so
+    // moving to production widens it without a frontend change. Empty means the
+    // widget shows every connector the application can reach.
+    const connectorIds = pluggyConnectorIds;
+    const instance = new PluggyConnectSdk({
+      connectToken: token,
+      ...(connectorIds.length > 0 ? { connectorIds } : {}),
+      ...(connectorIds.length === 1
+        ? { selectedConnectorId: connectorIds[0] }
+        : {}),
+      // Pluggy refuses a second item for the same credentials
+      // (ITEM_USER_ALREADY_EXISTS), so an existing connection is refreshed in
+      // update mode instead of created again.
+      ...(updateItemId ? { updateItem: updateItemId } : {}),
+      includeSandbox: false,
+      language: "pt",
+      theme: darkMode ? "dark" : "light",
+      forceOauthInBrowser: true,
+      onSuccess: async ({ item }) => {
+        setIsPluggyConnected(true);
+        try {
+          await onPluggyConnected({
+            id: item.id,
+            status: item.status,
+            executionStatus: item.executionStatus,
+            connector: item.connector ? { name: item.connector.name } : undefined,
+            error: item.error
+              ? {
+                  code: item.error.code,
+                  message: item.error.message,
+                  providerMessage: item.error.providerMessage,
+                }
+              : null,
+          });
+        } finally {
+          await disposePluggyConnect(instance);
+        }
+      },
+      onError: async (error) => {
+        const item = error.data?.item;
+        try {
+          await onPluggyError(
+            error.message,
+            item
+              ? {
+                  id: item.id,
+                  status: item.status,
+                  executionStatus: item.executionStatus,
+                  connector: item.connector ? { name: item.connector.name } : undefined,
+                  error: item.error
+                    ? {
+                        code: item.error.code,
+                        message: item.error.message,
+                        providerMessage: item.error.providerMessage,
+                      }
+                    : null,
+                }
+              : undefined,
+          );
+        } finally {
+          await disposePluggyConnect(instance);
+        }
+      },
+      onEvent: async (payload) => {
+        const detected = "item" in payload ? payload.item : null;
+        if (!detected?.id || detectedItemIdRef.current === detected.id) {
+          return;
+        }
+        detectedItemIdRef.current = detected.id;
+        await onPluggyItemDetected({ id: detected.id });
+      },
+      onClose: async () => {
+        await disposePluggyConnect(instance);
+      },
+    });
+    pluggyConnectRef.current = instance;
+
+    try {
+      await instance.init();
+      if (pluggyConnectRef.current === instance) {
+        setIsPluggyOpen(true);
+      }
+    } catch {
+      await disposePluggyConnect(instance);
+      await onPluggyError("Não foi possível abrir o Pluggy Connect.");
+    } finally {
+      setIsCreatingPluggyToken(false);
+    }
+  }
+
+  async function handleLinkPluggyItem() {
+    const itemId = pluggyItemIdInput.trim();
+    if (!itemId) {
+      return;
+    }
+    setIsLinkingPluggyItem(true);
+    try {
+      await onLinkPluggyItem(itemId);
+      setPluggyItemIdInput("");
+    } catch {
+      // The parent already surfaces the API error in the application toast.
+    } finally {
+      setIsLinkingPluggyItem(false);
+    }
+  }
+
+  async function handleDiscoverPluggyItems() {
+    setIsDiscoveringPluggyItems(true);
+    try {
+      await onDiscoverPluggyItems();
+    } catch {
+      // The parent already surfaces the API error in the application toast.
+    } finally {
+      setIsDiscoveringPluggyItems(false);
+    }
+  }
+
+  async function handleSavePluggyCredentials() {
+    setIsSavingPluggyCredentials(true);
+    try {
+      await onSavePluggyCredentials(
+        pluggyClientIdInput,
+        pluggyClientSecretInput,
+      );
+      setPluggyClientIdInput("");
+      setPluggyClientSecretInput("");
+      setIsEditingPluggyCredentials(false);
+    } catch {
+      // The parent already surfaces native desktop errors in the application toast.
+    } finally {
+      setIsSavingPluggyCredentials(false);
+    }
+  }
+
+  async function handleClearPluggyCredentials() {
+    setIsClearingPluggyCredentials(true);
+    try {
+      await onClearPluggyCredentials();
+      setIsEditingPluggyCredentials(false);
+      setPluggyClientIdInput("");
+      setPluggyClientSecretInput("");
+    } catch {
+      // The parent already surfaces native desktop errors in the application toast.
+    } finally {
+      setIsClearingPluggyCredentials(false);
+    }
+  }
+
+  async function disposePluggyConnect(instance = pluggyConnectRef.current) {
+    if (instance) {
+      if (pluggyConnectRef.current === instance) {
+        pluggyConnectRef.current = null;
+        setIsPluggyOpen(false);
+      }
+      await instance.destroy().catch(() => undefined);
     }
   }
 
@@ -336,6 +581,300 @@ export function SettingsView({
                 </Button>
               </div>
             </div>
+          </div>
+        </section>
+
+        <Separator />
+
+        <section
+          className="settings-section"
+          aria-labelledby="settings-open-finance-heading"
+        >
+          <header className="settings-section__header">
+            <div className="flex items-center gap-2">
+              <Landmark
+                className="h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <h3 id="settings-open-finance-heading" className="settings-section__title">
+                Open Finance
+              </h3>
+            </div>
+            <p className="settings-section__description">
+              Autorize o MeuCofri a acessar as contas já reunidas no seu Meu Pluggy.
+            </p>
+          </header>
+          <div className="settings-section__body">
+            {!pluggyCredentialsSupported ? (
+              <p className="text-xs text-muted-foreground" role="status">
+                Configure as chaves no aplicativo desktop instalado. Elas não ficam
+                disponíveis no navegador ou na rede local.
+              </p>
+            ) : pluggyCredentialsLoading ? (
+              <p className="text-xs text-muted-foreground" role="status">
+                Verificando as chaves deste computador...
+              </p>
+            ) : !pluggyCredentialsConfigured || isEditingPluggyCredentials ? (
+              <form
+                className="grid gap-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleSavePluggyCredentials();
+                }}
+              >
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-1.5 text-xs font-medium">
+                    Client ID
+                    <Input
+                      value={pluggyClientIdInput}
+                      onChange={(event) => setPluggyClientIdInput(event.target.value)}
+                      autoComplete="off"
+                      spellCheck={false}
+                      required
+                      disabled={isSavingPluggyCredentials}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs font-medium">
+                    Client Secret
+                    <Input
+                      type="password"
+                      value={pluggyClientSecretInput}
+                      onChange={(event) =>
+                        setPluggyClientSecretInput(event.target.value)
+                      }
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      required
+                      disabled={isSavingPluggyCredentials}
+                    />
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Os valores são criptografados pelo Windows para o seu usuário e não
+                  entram no Git, no instalador ou no banco local do MeuCofri.
+                </p>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {pluggyCredentialsConfigured ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditingPluggyCredentials(false)}
+                      disabled={isSavingPluggyCredentials}
+                    >
+                      Cancelar
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={
+                      isSavingPluggyCredentials ||
+                      !pluggyClientIdInput.trim() ||
+                      !pluggyClientSecretInput.trim()
+                    }
+                  >
+                    {isSavingPluggyCredentials ? "Salvando..." : "Salvar chaves"}
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="settings-action-row">
+                <div className="settings-action-item">
+                  <div>
+                    <p className="settings-action-item__label">
+                      Chaves protegidas neste computador
+                    </p>
+                    <p className="settings-action-item__hint">
+                      O segredo não é exibido novamente e só é entregue ao backend local.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditingPluggyCredentials(true)}
+                    >
+                      Substituir
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void handleClearPluggyCredentials()}
+                      disabled={isClearingPluggyCredentials}
+                    >
+                      {isClearingPluggyCredentials ? "Removendo..." : "Remover"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="settings-action-row">
+              <div className="settings-action-item">
+                <div>
+                  <p className="settings-action-item__label">
+                    {isPluggyConnected
+                      ? `Conexões do Meu Pluggy (${pluggyItems.length})`
+                      : "Meu Pluggy"}
+                  </p>
+                  <p className="settings-action-item__hint">
+                    {isPluggyConnected
+                      ? pluggyLastSyncedAt
+                        ? `Sincronizado em ${formatDateTime(pluggyLastSyncedAt)}. O app atualiza sozinho ao abrir.`
+                        : "Conexões vinculadas. A primeira sincronização será feita agora."
+                      : pluggyCredentialsConfigured
+                        ? "As chaves estão prontas. Procure as conexões que você já autorizou na Pluggy."
+                        : "Salve as chaves acima antes de buscar suas conexões."}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                  {isPluggyConnected ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void onSyncPluggy()}
+                      disabled={isSubmitting || pluggySyncing}
+                    >
+                      <RefreshCw
+                        className={`mr-1.5 h-3.5 w-3.5 ${pluggySyncing ? "animate-spin" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {pluggySyncing ? "Sincronizando..." : "Sincronizar agora"}
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant={isPluggyConnected ? "outline" : "secondary"}
+                    size="sm"
+                    onClick={() => void handleDiscoverPluggyItems()}
+                    disabled={
+                      isSubmitting ||
+                      isDiscoveringPluggyItems ||
+                      !pluggyCredentialsSupported ||
+                      !pluggyCredentialsConfigured ||
+                      pluggyCredentialsLoading
+                    }
+                  >
+                    <RefreshCw
+                      className={`mr-1.5 h-3.5 w-3.5 ${isDiscoveringPluggyItems ? "animate-spin" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {isDiscoveringPluggyItems
+                      ? "Procurando..."
+                      : "Procurar conexões"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleOpenPluggyConnect()}
+                    disabled={
+                      isSubmitting ||
+                      isCreatingPluggyToken ||
+                      isPluggyOpen ||
+                      !pluggyCredentialsSupported ||
+                      !pluggyCredentialsConfigured ||
+                      pluggyCredentialsLoading
+                    }
+                  >
+                    <Landmark className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    {isCreatingPluggyToken
+                      ? "Abrindo..."
+                      : isPluggyOpen
+                        ? "Conexão aberta"
+                        : "Adicionar conexão"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+            {pluggyItems.length > 0 ? (
+              <ul className="grid gap-1.5" aria-label="Conexões da Pluggy">
+                {pluggyItems.map((item) => (
+                  <li key={item.item_id} className="settings-action-item">
+                    <div className="min-w-0">
+                      <p className="settings-action-item__label truncate">
+                        {item.connector_name ?? "Conexão Pluggy"}
+                      </p>
+                      <p className="settings-action-item__hint">
+                        {item.error_message
+                          ? item.error_message
+                          : item.last_synced_at
+                            ? `Sincronizado em ${formatDateTime(item.last_synced_at)}`
+                            : "Ainda não sincronizado"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void handleOpenPluggyConnect(item.item_id)}
+                      disabled={
+                        isSubmitting || isCreatingPluggyToken || isPluggyOpen
+                      }
+                    >
+                      Atualizar
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {isPluggyConnected ? (
+              <p className="settings-action-item__hint">
+                As contas descobertas e o destino de cada uma ficam em Open
+                Finance, na barra lateral.
+              </p>
+            ) : null}
+            {pluggyCredentialsConfigured ? (
+              <details className="settings-disclosure">
+                <summary className="cursor-pointer text-xs text-muted-foreground">
+                  Opções avançadas
+                </summary>
+                <form
+                  className="mt-2 grid gap-1.5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleLinkPluggyItem();
+                  }}
+                >
+                  <label className="text-xs font-medium" htmlFor="pluggy-item-id">
+                    Vincular uma conexão existente pelo Item ID
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      id="pluggy-item-id"
+                      className="min-w-[16rem] flex-1"
+                      value={pluggyItemIdInput}
+                      onChange={(event) => setPluggyItemIdInput(event.target.value)}
+                      placeholder="00000000-0000-0000-0000-000000000000"
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={isLinkingPluggyItem}
+                    />
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      size="sm"
+                      disabled={isLinkingPluggyItem || !pluggyItemIdInput.trim()}
+                    >
+                      {isLinkingPluggyItem ? "Vinculando..." : "Vincular"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use apenas se &quot;Procurar conexões&quot; não encontrar o que já
+                    existe. O Item ID fica no Demo da sua aplicação, no painel da Pluggy.
+                  </p>
+                </form>
+              </details>
+            ) : null}
+            {isPluggyConnected ? (
+              <p className="text-xs text-success" role="status">
+                Contas, cartões, lançamentos e investimentos são importados
+                automaticamente toda vez que o app abre.
+              </p>
+            ) : null}
           </div>
         </section>
 
