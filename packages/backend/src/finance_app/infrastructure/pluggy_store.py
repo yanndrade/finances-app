@@ -448,7 +448,10 @@ class PluggyStore:
         An entry the user already decided on is left alone, so re-syncing never
         resurrects something that was accepted or ignored. The exception is a
         revision at Pluggy: a different content hash reopens it for review
-        instead of letting the stale decision stand.
+        instead of letting the stale decision stand — unless the revision still
+        resolves to the very transaction this entry already created (a Pix
+        merely settling from PENDING to POSTED, say), in which case reopening
+        would only ask the user to reconfirm something already recorded.
         """
         self._bootstrap()
         now = self._utc_now()
@@ -466,9 +469,13 @@ class PluggyStore:
             elif record.decision != "pending":
                 if record.content_hash == content_hash:
                     return self._require_entry(entry_id)
-                record.revised = True
-                record.decision = "pending"
-                record.decided_at = None
+                if (
+                    record.created_local_id is None
+                    or record.created_local_id != matched_local_id
+                ):
+                    record.revised = True
+                    record.decision = "pending"
+                    record.decided_at = None
 
             record.kind = kind
             record.group_key = group_key
