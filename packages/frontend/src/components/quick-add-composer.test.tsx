@@ -159,6 +159,8 @@ function renderComposer(options?: {
   onRemoveCategory?: (categoryId: string) => void;
   holdersByCard?: Record<string, CardHolderSummary[]>;
   presetDraft?: Parameters<typeof QuickAddComposer>[0]["presetDraft"];
+  recurringRules?: Parameters<typeof QuickAddComposer>[0]["recurringRules"];
+  isReviewingImport?: boolean;
 }) {
   const onSubmitTransaction = vi.fn(() => Promise.resolve());
   const onSubmitTransfer = vi.fn(() => Promise.resolve());
@@ -175,6 +177,8 @@ function renderComposer(options?: {
       holdersByCard={options?.holdersByCard}
       presetDraft={options?.presetDraft}
       invoices={options?.invoices ?? []}
+      recurringRules={options?.recurringRules}
+      isReviewingImport={options?.isReviewingImport}
       preset={options?.preset}
       presetInvoiceId={options?.presetInvoiceId}
       categories={options?.categories}
@@ -226,6 +230,74 @@ describe("QuickAddComposer", () => {
 
     expect(screen.getByTestId("quick-add-drawer")).toBeInTheDocument();
     expect(screen.queryByTestId("quick-add-dialog")).not.toBeInTheDocument();
+  });
+
+  it("links an imported expense to an existing fixed expense", async () => {
+    installMatchMedia(false);
+    const user = userEvent.setup();
+    const { onSubmitTransaction } = renderComposer({
+      preset: "expense",
+      presetDraft: {
+        amount: "450.00",
+        description: "Condomínio",
+        accountId: "acc-1",
+        date: "2026-09-03",
+      },
+      isReviewingImport: true,
+      recurringRules: [
+        {
+          rule_id: "rule-condo",
+          name: "Condomínio",
+          amount: 45_000,
+          due_day: 3,
+          account_id: "acc-1",
+          card_id: null,
+          payment_method: "PIX",
+          category_id: "moradia",
+          description: null,
+          is_active: true,
+        },
+      ],
+    });
+
+    await user.selectOptions(
+      screen.getByLabelText(/vincular a gasto fixo/i),
+      "rule-condo",
+    );
+    await user.click(screen.getByRole("button", { name: /^lançar$/i }));
+
+    expect(onSubmitTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recurringRuleId: "rule-condo",
+        categoryId: "moradia",
+      }),
+    );
+  });
+
+  it("keeps the imported amount when reclassifying it as an investment", async () => {
+    installMatchMedia(false);
+    const user = userEvent.setup();
+    const { onSubmitInvestmentMovement } = renderComposer({
+      preset: "expense",
+      presetDraft: {
+        amount: "6645.43",
+        description: "Aplicação RDB",
+        accountId: "acc-1",
+        date: "2026-09-03",
+      },
+      isReviewingImport: true,
+    });
+
+    await user.click(screen.getByRole("button", { name: /^investimento$/i }));
+    await user.click(screen.getByRole("button", { name: /^lançar$/i }));
+
+    expect(onSubmitInvestmentMovement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "contribution",
+        contributionAmountInCents: 664_543,
+        investedAmountInCents: 664_543,
+      }),
+    );
   });
 
   it("shows validation feedback when invoice payment has no open invoice selected", async () => {

@@ -2209,6 +2209,8 @@ export type PluggyImportRule = {
   set_card_id: string | null;
   set_holder_id: string | null;
   set_account_id: string | null;
+  set_kind: string | null;
+  set_recurring_rule_id: string | null;
   hit_count: number;
 };
 
@@ -2242,12 +2244,17 @@ export async function acceptPluggyEntry(
   overrides?: Record<string, unknown>,
   /** Teach what this description means, for the next one like it. */
   remember = false,
+  targetKind?: PluggyInboxEntry["kind"],
 ): Promise<PluggyInboxEntry> {
   return requestJson<PluggyInboxEntry>(
     `/api/pluggy/inbox/${encodeURIComponent(entryId)}/accept`,
     {
       method: "POST",
-      body: JSON.stringify({ overrides: overrides ?? null, remember }),
+      body: JSON.stringify({
+        overrides: overrides ?? null,
+        remember,
+        targetKind: targetKind ?? null,
+      }),
     },
   );
 }

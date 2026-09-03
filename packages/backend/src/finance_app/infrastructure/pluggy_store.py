@@ -180,6 +180,8 @@ class PluggyImportRuleRecord(PluggyBase):
     set_card_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     set_holder_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     set_account_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    set_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    set_recurring_rule_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     hit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
@@ -195,6 +197,8 @@ class PluggyImportRuleState:
     set_card_id: str | None
     set_holder_id: str | None
     set_account_id: str | None
+    set_kind: str | None
+    set_recurring_rule_id: str | None
     hit_count: int
     created_at: str
     updated_at: str
@@ -209,6 +213,8 @@ class PluggyImportRuleState:
             "set_card_id": self.set_card_id,
             "set_holder_id": self.set_holder_id,
             "set_account_id": self.set_account_id,
+            "set_kind": self.set_kind,
+            "set_recurring_rule_id": self.set_recurring_rule_id,
             "hit_count": self.hit_count,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -572,6 +578,8 @@ class PluggyStore:
         set_card_id: str | None = None,
         set_holder_id: str | None = None,
         set_account_id: str | None = None,
+        set_kind: str | None = None,
+        set_recurring_rule_id: str | None = None,
     ) -> PluggyImportRuleState:
         """One rule per description; teaching it again replaces it."""
         self._bootstrap()
@@ -594,6 +602,8 @@ class PluggyStore:
             record.set_card_id = set_card_id
             record.set_holder_id = set_holder_id
             record.set_account_id = set_account_id
+            record.set_kind = set_kind
+            record.set_recurring_rule_id = set_recurring_rule_id
             record.updated_at = now
         state = self.get_import_rule(match_value)
         assert state is not None
@@ -641,6 +651,8 @@ class PluggyStore:
             set_card_id=record.set_card_id,
             set_holder_id=record.set_holder_id,
             set_account_id=record.set_account_id,
+            set_kind=record.set_kind,
+            set_recurring_rule_id=record.set_recurring_rule_id,
             hit_count=record.hit_count,
             created_at=record.created_at,
             updated_at=record.updated_at,

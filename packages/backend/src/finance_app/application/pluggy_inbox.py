@@ -254,6 +254,7 @@ class PluggyInboxService:
         *,
         overrides: dict[str, Any] | None = None,
         remember: bool = False,
+        target_kind: str | None = None,
     ) -> dict[str, Any]:
         entry = self._require_pending(entry_id)
         if entry.kind not in ACCEPTABLE_KINDS:
@@ -262,11 +263,24 @@ class PluggyInboxService:
             )
 
         payload = {**entry.proposal.get("payload", {}), **(overrides or {})}
-        if entry.kind in CATEGORY_REQUIRED_KINDS and not payload.get("category_id"):
+        accepted_kind = target_kind or payload.pop("_target_kind", None) or entry.kind
+        if accepted_kind not in ACCEPTABLE_KINDS:
+            raise UnsupportedEntryKindError(
+                f"Lançamentos do tipo '{accepted_kind}' ainda não podem ser aceitos."
+            )
+
+        pending = self._pending_for_rule(payload, accepted_kind)
+        if pending is not None:
+            payload["category_id"] = pending["category_id"]
+
+        if accepted_kind in CATEGORY_REQUIRED_KINDS and not payload.get("category_id"):
             raise MissingCategoryError("Escolha uma categoria antes de aceitar.")
 
         local_id = _local_id(entry_id)
-        if entry.kind == "card_purchase":
+        if pending is not None:
+            suffix = "purchase" if accepted_kind == "card_purchase" else "expense"
+            local_id = f"{pending['pending_id']}:{suffix}"
+        elif accepted_kind == "card_purchase":
             # A fixed expense already projected on this invoice is settled by
             # the id, not by matching later, so the purchase has to be created
             # under the pending's own id or the invoice shows both.
@@ -274,19 +288,23 @@ class PluggyInboxService:
             if pending is not None:
                 local_id = f"{pending['pending_id']}:purchase"
 
-        if entry.kind == "bank_transaction":
+        if accepted_kind == "bank_transaction":
             self._create_transaction(local_id, payload)
-        elif entry.kind == "card_purchase":
+        elif accepted_kind == "card_purchase":
             self._create_card_purchase(local_id, payload)
-        elif entry.kind == "invoice_payment":
+        elif accepted_kind == "invoice_payment":
             payload = self._create_invoice_payment(local_id, payload)
-        elif entry.kind == "investment_movement":
+        elif accepted_kind == "investment_movement":
             self._create_investment_movement(local_id, payload)
         else:
             self._create_transfer(local_id, payload)
 
         if remember:
-            self.remember_rule(description=entry.title, payload=payload)
+            self.remember_rule(
+                description=entry.title,
+                payload=payload,
+                target_kind=accepted_kind,
+            )
 
         updated = self._store.decide_entry(
             entry_id=entry_id,
@@ -425,10 +443,18 @@ class PluggyInboxService:
         payload = self._apply_rule(proposal, payload)
         settles: str | None = None
         holder_name: str | None = None
-        if proposal.kind == "card_purchase":
+        accepted_kind = str(payload.get("_target_kind") or proposal.kind)
+        try:
+            pending = self._pending_for_rule(payload, accepted_kind)
+        except PluggyInboxError:
+            pending = None
+        if pending is not None:
+            settles = str(pending.get("name") or "")
+        elif proposal.kind == "card_purchase":
             pending = self._match_pending(payload)
             if pending is not None:
                 settles = str(pending.get("name") or "")
+        if proposal.kind == "card_purchase":
             holder_name = self._holder_name(payload)
 
         return {
@@ -562,6 +588,10 @@ class PluggyInboxService:
             # not move a purchase onto a card the transaction did not come from.
             if value and field in applied:
                 applied[field] = value
+        if rule.set_kind:
+            applied["_target_kind"] = rule.set_kind
+        if rule.set_recurring_rule_id:
+            applied["recurring_rule_id"] = rule.set_recurring_rule_id
         if applied != payload:
             self._store.count_import_rule_hit(rule.rule_id)
         return applied
@@ -571,6 +601,7 @@ class PluggyInboxService:
         *,
         description: str | None,
         payload: dict[str, Any],
+        target_kind: str | None = None,
     ) -> dict[str, Any] | None:
         """Teach what this description always means, from an accepted entry."""
         key = rule_key(description)
@@ -584,6 +615,8 @@ class PluggyInboxService:
             set_card_id=payload.get("card_id"),
             set_holder_id=payload.get("holder_id"),
             set_account_id=payload.get("account_id"),
+            set_kind=target_kind,
+            set_recurring_rule_id=payload.get("recurring_rule_id"),
         )
         return rule.to_dict()
 
@@ -604,7 +637,46 @@ class PluggyInboxService:
             set_card_id=payload.get("set_card_id"),
             set_holder_id=payload.get("set_holder_id"),
             set_account_id=payload.get("set_account_id"),
+            set_kind=payload.get("set_kind"),
+            set_recurring_rule_id=payload.get("set_recurring_rule_id"),
         ).to_dict()
+
+    def _pending_for_rule(
+        self,
+        payload: dict[str, Any],
+        accepted_kind: str,
+    ) -> dict[str, Any] | None:
+        rule_id = payload.get("recurring_rule_id")
+        if not rule_id:
+            return None
+        if accepted_kind not in {"bank_transaction", "card_purchase"} or (
+            accepted_kind == "bank_transaction"
+            and payload.get("transaction_type") != "expense"
+        ):
+            raise MissingDestinationError(
+                "Um gasto fixo só pode ser vinculado a uma despesa."
+            )
+        date_value = payload.get("purchase_date") or payload.get("occurred_at")
+        month = str(date_value or "")[:7]
+        if self._recurring_service is None or len(month) != 7:
+            raise MissingDestinationError(
+                "Não encontrei a competência desse gasto fixo."
+            )
+        pending_id = f"{rule_id}:{month}"
+        pending = next(
+            (
+                item
+                for item in self._recurring_service.list_pendings(month=month)
+                if str(item.get("pending_id")) == pending_id
+                and str(item.get("status")) == "pending"
+            ),
+            None,
+        )
+        if pending is None:
+            raise MissingDestinationError(
+                "Esse gasto fixo não está pendente na competência do lançamento."
+            )
+        return pending
 
     def delete_rule(self, rule_id: str) -> None:
         if not self._store.delete_import_rule(rule_id):
