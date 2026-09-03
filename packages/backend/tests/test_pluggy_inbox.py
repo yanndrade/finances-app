@@ -114,6 +114,7 @@ def _setup(
         transaction_service=services.transaction_service,
         invoice_payment_service=services.invoice_payment_service,
         transfer_service=services.transfer_service,
+        investment_service=services.investment_service,
         recurring_service=services.recurring_service,
     )
     pluggy = PluggyService(
@@ -1672,6 +1673,94 @@ def test_an_imported_subscription_confirms_the_fixed_expense_instead_of_doubling
     # One charge on the invoice, not the forecast plus an imported twin.
     purchases = services.card_purchase_service.list_card_purchases()
     assert len(purchases) == 1
+
+
+def test_a_bank_debit_can_be_reclassified_as_an_investment(tmp_path: Path) -> None:
+    pluggy, inbox, services = _setup(
+        tmp_path,
+        accounts=[{"id": BANK_ID, "type": "BANK", "name": "Conta"}],
+        transactions={
+            BANK_ID: [
+                _bank_transaction(
+                    amount=6645.43,
+                    description="Aplicação RDB",
+                    category=None,
+                )
+            ]
+        },
+    )
+    pluggy.sync_item(ITEM_ID)
+    _link_all(pluggy)
+    pluggy.sync_item(ITEM_ID)
+
+    entry = _pending(inbox)[0]
+    inbox.accept(
+        entry["entry_id"],
+        target_kind="investment_movement",
+        overrides={
+            "movement_type": "contribution",
+            "account_id": "acc-nubank",
+            "occurred_at": entry["occurred_at"],
+            "amount": entry["amount"],
+            "cash_amount": entry["amount"],
+            "invested_amount": entry["amount"],
+            "contribution_amount": entry["amount"],
+        },
+        remember=True,
+    )
+
+    assert services.transaction_service.list_transactions() == []
+    movements = services.investment_service.list_movements()
+    assert len(movements) == 1
+    assert movements[0]["type"] == "contribution"
+    assert movements[0]["invested_amount"] == 6645_43
+    assert inbox.list_rules()["rules"][0]["set_kind"] == "investment_movement"
+
+
+def test_a_bank_debit_can_confirm_a_selected_fixed_expense(tmp_path: Path) -> None:
+    pluggy, inbox, services = _setup(
+        tmp_path,
+        accounts=[{"id": BANK_ID, "type": "BANK", "name": "Conta"}],
+        transactions={
+            BANK_ID: [
+                _bank_transaction(
+                    amount=450.00,
+                    date="2026-08-03T12:00:00Z",
+                    description="CONDOMINIO EDIFICIO",
+                    category=None,
+                )
+            ]
+        },
+    )
+    services.recurring_service.create_rule(
+        rule_id="rule-condo",
+        name="Condomínio",
+        amount=450_00,
+        due_day=3,
+        account_id="acc-nubank",
+        card_id=None,
+        payment_method="PIX",
+        category_id="moradia",
+    )
+    pluggy.sync_item(ITEM_ID)
+    _link_all(pluggy)
+    pluggy.sync_item(ITEM_ID)
+
+    entry = _pending(inbox)[0]
+    accepted = inbox.accept(
+        entry["entry_id"],
+        overrides={"recurring_rule_id": "rule-condo"},
+        remember=True,
+        target_kind="bank_transaction",
+    )
+
+    assert accepted["created_local_id"] == "rule-condo:2026-08:expense"
+    condo = services.recurring_service.list_pendings(month="2026-08")[0]
+    assert condo["status"] == "confirmed"
+    assert len(services.transaction_service.list_transactions()) == 1
+    rule = inbox.list_rules()["rules"][0]
+    assert rule["set_recurring_rule_id"] == "rule-condo"
+    assert rule["set_kind"] == "bank_transaction"
 
 
 def test_a_purchase_that_is_not_the_fixed_expense_keeps_its_own_id(

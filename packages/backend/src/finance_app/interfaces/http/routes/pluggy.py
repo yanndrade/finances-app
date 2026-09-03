@@ -108,6 +108,7 @@ class AcceptEntryRequest(BaseModel):
     # Teach what this description always means. It only ever pre-fills the next
     # one; acceptance stays a click.
     remember: bool = False
+    target_kind: str | None = Field(default=None, alias="targetKind", max_length=40)
 
 
 class SaveImportRuleRequest(BaseModel):
@@ -120,6 +121,12 @@ class SaveImportRuleRequest(BaseModel):
     set_card_id: str | None = Field(default=None, alias="setCardId")
     set_holder_id: str | None = Field(default=None, alias="setHolderId")
     set_account_id: str | None = Field(default=None, alias="setAccountId")
+    set_kind: str | None = Field(default=None, alias="setKind", max_length=40)
+    set_recurring_rule_id: str | None = Field(
+        default=None,
+        alias="setRecurringRuleId",
+        max_length=200,
+    )
 
 
 class LinkExistingEntryRequest(BaseModel):
@@ -201,6 +208,7 @@ def build_pluggy_router(
                 entry_id,
                 overrides=payload.overrides if payload else None,
                 remember=payload.remember if payload else False,
+                target_kind=payload.target_kind if payload else None,
             )
         except PluggyInboxError as exc:
             raise _inbox_http_error(exc) from exc

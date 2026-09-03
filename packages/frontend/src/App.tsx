@@ -219,7 +219,9 @@ function proposalText(
  * the guess before they can confirm anything.
  */
 function presetForInboxEntry(entry: PluggyInboxEntry): QuickAddPreset {
-  switch (entry.kind) {
+  const rememberedKind = proposalText(entry, "_target_kind");
+  const kind = rememberedKind ?? entry.kind;
+  switch (kind) {
     case "card_purchase":
       return "expense_card";
     case "transfer":
@@ -260,6 +262,7 @@ function draftFromInboxEntry(entry: PluggyInboxEntry): QuickAddDraft {
       entry.occurred_at
     ).slice(0, 10),
     installments: typeof count === "number" && count > 1 ? String(count) : undefined,
+    recurringRuleId: text("recurring_rule_id") ?? "",
   };
 }
 
@@ -385,7 +388,7 @@ export function App() {
   // backend keeps resolving the holder and settling a fixed expense.
   const [reviewingEntry, setReviewingEntry] = useState<{
     entryId: string;
-    kind: string;
+    kind: PluggyInboxEntry["kind"];
     remember?: boolean;
   } | null>(null);
   const [quickAddDraft, setQuickAddDraft] = useState<QuickAddDraft | null>(null);
@@ -1221,12 +1224,14 @@ export function App() {
    */
   async function acceptReviewedEntry(
     overrides: Record<string, unknown>,
+    targetKind: PluggyInboxEntry["kind"],
   ): Promise<void> {
     if (!reviewingEntry) return;
     await acceptPluggyEntry(
       reviewingEntry.entryId,
       overrides,
       reviewingEntry.remember,
+      targetKind,
     );
     setReviewingEntry(null);
     setQuickAddDraft(null);
@@ -1945,6 +1950,8 @@ export function App() {
             cards={cards}
             holdersByCard={holdersByCard}
             invoices={invoices}
+            recurringRules={recurringRules.filter((rule) => rule.is_active)}
+            isReviewingImport={reviewingEntry !== null}
             categories={categoryOptions}
             onCreateCategory={handleCreateCategory}
             onRemoveCategory={handleRemoveCategory}
@@ -1958,10 +1965,11 @@ export function App() {
                   payment_method: payload.paymentMethod,
                   amount: payload.amountInCents,
                   description: payload.description,
+                  recurring_rule_id: payload.recurringRuleId || null,
                   ...(payload.occurredAt
                     ? { occurred_at: payload.occurredAt }
                     : {}),
-                });
+                }, "bank_transaction");
                 return;
               }
               await handleTransactionSubmit(payload);
@@ -1976,7 +1984,7 @@ export function App() {
                   ...(payload.occurredAt
                     ? { occurred_at: payload.occurredAt }
                     : {}),
-                });
+                }, "transfer");
                 return;
               }
               await handleTransferSubmit(payload);
@@ -1996,7 +2004,8 @@ export function App() {
                   amount: payload.amountInCents,
                   installments_count: payload.installmentsCount,
                   description: payload.description,
-                });
+                  recurring_rule_id: payload.recurringRuleId || null,
+                }, "card_purchase");
                 return;
               }
               await handleCreateCardPurchase(payload);
@@ -2011,7 +2020,7 @@ export function App() {
                   account_id: payload.accountId,
                   amount: payload.amountInCents,
                   paid_at: payload.paidAt,
-                });
+                }, "invoice_payment");
                 return;
               }
               await handlePayInvoice(payload);
@@ -2036,7 +2045,7 @@ export function App() {
                   dividend_amount: payload.dividendAmountInCents,
                   reinvested_dividend_amount:
                     payload.reinvestedDividendAmountInCents,
-                });
+                }, "investment_movement");
                 return;
               }
               await handleCreateInvestmentMovement(payload);

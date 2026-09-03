@@ -39,6 +39,7 @@ import type {
   CardHolderSummary,
   TransferPayload,
   RecurringRulePayload,
+  RecurringRuleSummary,
 } from "../lib/api";
 import { getCategoryOptions, type CategoryOption } from "../lib/categories";
 import { CategoryManagerDialog } from "../features/categories/category-manager-dialog";
@@ -84,6 +85,7 @@ export type QuickAddDraft = {
   toAccountId?: string;
   date?: string;
   installments?: string;
+  recurringRuleId?: string;
 };
 
 const MOBILE_QUERY = "(max-width: 900px)";
@@ -201,14 +203,21 @@ type QuickAddComposerProps = {
    */
   holdersByCard?: Record<string, CardHolderSummary[]>;
   invoices: InvoiceSummary[];
+  recurringRules?: RecurringRuleSummary[];
+  isReviewingImport?: boolean;
   categories?: CategoryOption[];
   onCreateCategory?: (label: string) => boolean;
   onRemoveCategory?: (categoryId: string) => void;
   onSubmitTransaction: (
-    payload: CashTransactionPayload & { forceKeepContext?: boolean },
+    payload: CashTransactionPayload & {
+      forceKeepContext?: boolean;
+      recurringRuleId?: string;
+    },
   ) => Promise<void>;
   onSubmitTransfer: (payload: TransferPayload) => Promise<void>;
-  onSubmitCardPurchase: (payload: CardPurchasePayload) => Promise<void>;
+  onSubmitCardPurchase: (
+    payload: CardPurchasePayload & { recurringRuleId?: string },
+  ) => Promise<void>;
   onSubmitInvoicePayment: (payload: InvoicePaymentPayload) => Promise<void>;
   onSubmitInvestmentMovement: (payload: InvestmentMovementPayload) => Promise<void>;
   onSubmitRecurringRule?: (payload: RecurringRulePayload) => Promise<void>;
@@ -229,6 +238,8 @@ export function QuickAddComposer({
   cards,
   holdersByCard,
   invoices,
+  recurringRules = [],
+  isReviewingImport = false,
   categories: externalCategories,
   onCreateCategory,
   onRemoveCategory,
@@ -274,6 +285,7 @@ export function QuickAddComposer({
   const [categoryId, setCategoryId] = useState("");
   const [cardId, setCardId] = useState("");
   const [holderId, setHolderId] = useState("");
+  const [recurringRuleId, setRecurringRuleId] = useState("");
   const [composerMode, setComposerMode] = useState<ComposerMode>("quick");
 
   const activeTab = TAB_CONFIG.find((t) => t.type === entryType) ?? TAB_CONFIG[0];
@@ -462,6 +474,9 @@ export function QuickAddComposer({
         installments: presetDraft.installments,
       });
     }
+    if (presetDraft.recurringRuleId !== undefined) {
+      setRecurringRuleId(presetDraft.recurringRuleId);
+    }
     setComposerMode("advanced");
   }, [isOpen, presetDraft]);
 
@@ -481,9 +496,41 @@ export function QuickAddComposer({
       return;
     }
 
+    if (
+      isReviewingImport &&
+      presetDraft?.amount &&
+      !newMoneyAmount &&
+      !reinvestedDividendAmount
+    ) {
+      dispatchQuickAdd({
+        type: "newMoneyAmountChanged",
+        amount: formatAmountInput(presetDraft.amount),
+      });
+      return;
+    }
+
     const total = investmentContributionTotalInCents();
     setAmount(total > 0 ? formatCentsInput(total) : "");
-  }, [entryType, investmentMode, newMoneyAmount, reinvestedDividendAmount]);
+  }, [
+    entryType,
+    investmentMode,
+    isReviewingImport,
+    newMoneyAmount,
+    presetDraft?.amount,
+    reinvestedDividendAmount,
+  ]);
+
+  useEffect(() => {
+    if (!recurringRuleId) return;
+    const rule = recurringRules.find((item) => item.rule_id === recurringRuleId);
+    const isCompatible =
+      entryType === "expense" &&
+      rule !== undefined &&
+      (isCardExpense
+        ? rule.payment_method === "CARD"
+        : rule.payment_method !== "CARD");
+    if (!isCompatible) setRecurringRuleId("");
+  }, [entryType, isCardExpense, recurringRuleId, recurringRules]);
 
   function resetForm() {
     setAmount("");
@@ -491,6 +538,7 @@ export function QuickAddComposer({
     setPersonId("");
     setHolderId("");
     setCategoryId("");
+    setRecurringRuleId("");
     setComposerMode("quick");
     dispatchQuickAdd({
       type: "reset",
@@ -768,7 +816,9 @@ export function QuickAddComposer({
           });
         }
       } else if (entryType === "expense" && expensePaymentMode === "CARD") {
-        const cardPurchasePayload: CardPurchasePayload = {
+        const cardPurchasePayload: CardPurchasePayload & {
+          recurringRuleId?: string;
+        } = {
           description,
           amountInCents,
           cardId,
@@ -776,6 +826,7 @@ export function QuickAddComposer({
           purchaseDate: `${date}T12:00:00Z`,
           installmentsCount: parseInt(installments, 10) || 1,
           holderId,
+          ...(recurringRuleId ? { recurringRuleId } : {}),
         };
         const trimmedPersonId = personId.trim();
         if (trimmedPersonId.length > 0) {
@@ -784,7 +835,10 @@ export function QuickAddComposer({
 
         await onSubmitCardPurchase(cardPurchasePayload);
       } else {
-        const transactionPayload: CashTransactionPayload & { forceKeepContext?: boolean } = {
+        const transactionPayload: CashTransactionPayload & {
+          forceKeepContext?: boolean;
+          recurringRuleId?: string;
+        } = {
           type: entryType,
           description,
           amountInCents,
@@ -796,6 +850,7 @@ export function QuickAddComposer({
           categoryId: categoryId || "other",
           occurredAt: `${date}T12:00:00Z`,
           forceKeepContext: keepOpen,
+          ...(recurringRuleId ? { recurringRuleId } : {}),
         };
         const trimmedPersonId = personId.trim();
         if (trimmedPersonId.length > 0) {
@@ -833,7 +888,9 @@ export function QuickAddComposer({
       <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-10" />
       <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-10" />
       <div className="flex items-center gap-2 overflow-x-auto px-6 pb-3 pt-1 scrollbar-none" style={{ WebkitOverflowScrolling: "touch" }}>
-        {TAB_CONFIG.map((tab) => {
+        {TAB_CONFIG.filter(
+          (tab) => !isReviewingImport || tab.type !== "recurring",
+        ).map((tab) => {
           const Icon = tab.icon;
           const isActive = tab.type === entryType;
           return (
@@ -1008,6 +1065,44 @@ export function QuickAddComposer({
       {/* ── Expense fields ── */}
       {entryType === "expense" && (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
+          {isReviewingImport && recurringRules.length > 0 ? (
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="quick-add-recurring-link">Vincular a gasto fixo</Label>
+              <select
+                id="quick-add-recurring-link"
+                aria-label="Vincular a gasto fixo"
+                className={QUICK_ADD_SELECT_CLASS_NAME}
+                value={recurringRuleId}
+                onChange={(event) => {
+                  const nextRuleId = event.target.value;
+                  setRecurringRuleId(nextRuleId);
+                  const rule = recurringRules.find(
+                    (item) => item.rule_id === nextRuleId,
+                  );
+                  if (rule) setCategoryId(rule.category_id);
+                }}
+              >
+                <option value="">Nenhum — lançar separadamente</option>
+                {recurringRules
+                  .filter((rule) =>
+                    isCardExpense
+                      ? rule.payment_method === "CARD"
+                      : rule.payment_method !== "CARD",
+                  )
+                  .map((rule) => (
+                    <option key={rule.rule_id} value={rule.rule_id}>
+                      {rule.name} · {(rule.amount / 100).toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}
+                    </option>
+                  ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Marca a pendência deste mês como paga sem duplicar a despesa.
+              </p>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="quick-add-payment-mode">Pagamento</Label>
             <select
