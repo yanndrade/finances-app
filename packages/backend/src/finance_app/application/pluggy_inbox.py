@@ -98,6 +98,7 @@ class PluggyInboxService:
         item_id: str,
         snapshot: dict[str, Any],
     ) -> dict[str, int]:
+        self._heal_orphaned_covered()
         links = self._build_links(item_id)
         translation = translate_snapshot(snapshot, links=links)
         proposals = translation.proposals
@@ -293,23 +294,36 @@ class PluggyInboxService:
             created_local_id=local_id,
             proposal={**entry.proposal, "payload": payload},
         )
+        self._decide_group_siblings(
+            entry,
+            decision="accepted",
+            created_local_id=local_id,
+        )
         return updated.to_dict()
 
     def ignore(self, entry_id: str) -> dict[str, Any]:
-        self._require_pending(entry_id)
-        return self._store.decide_entry(
+        entry = self._require_pending(entry_id)
+        decided = self._store.decide_entry(
             entry_id=entry_id,
             decision="ignored",
-        ).to_dict()
+        )
+        self._decide_group_siblings(entry, decision="ignored")
+        return decided.to_dict()
 
     def link_existing(self, entry_id: str, *, local_id: str) -> dict[str, Any]:
         """Mark the entry as already present locally, without creating anything."""
-        self._require_pending(entry_id)
-        return self._store.decide_entry(
+        entry = self._require_pending(entry_id)
+        decided = self._store.decide_entry(
             entry_id=entry_id,
             decision="duplicate",
             created_local_id=local_id,
-        ).to_dict()
+        )
+        self._decide_group_siblings(
+            entry,
+            decision="duplicate",
+            created_local_id=local_id,
+        )
+        return decided.to_dict()
 
     def accept_batch(self, entry_ids: list[str]) -> dict[str, Any]:
         accepted: list[str] = []
@@ -675,6 +689,67 @@ class PluggyInboxService:
                 f"O lançamento '{entry_id}' já foi decidido."
             )
         return entry
+
+    def _decide_group_siblings(
+        self,
+        entry: Any,
+        *,
+        decision: str,
+        created_local_id: str | None = None,
+    ) -> None:
+        """Decide the hidden legs that only exist because of this entry.
+
+        A transfer, an invoice payment and a rebuilt installment purchase only
+        show one row: the other leg is staged as ``*_covered`` so a re-sync
+        stays idempotent, but it is the same money movement. Leaving it
+        pending while its visible sibling is decided is what made it resurface
+        as a new unpaired row on the next sync of its own connection, once its
+        decided partner was out of view for the pairing pass.
+        """
+        group_key = getattr(entry, "group_key", None)
+        if not group_key:
+            return
+        for sibling in self._store.list_entries(include_covered=True):
+            if sibling.entry_id == entry.entry_id:
+                continue
+            if sibling.group_key != group_key:
+                continue
+            if sibling.decision != "pending":
+                continue
+            self._store.decide_entry(
+                entry_id=sibling.entry_id,
+                decision=decision,
+                created_local_id=created_local_id,
+            )
+
+    def _heal_orphaned_covered(self) -> None:
+        """Decide hidden legs left pending by an older version.
+
+        Before grouped siblings were decided together, deciding a transfer or
+        an invoice payment left its ``*_covered`` leg pending. The next sync of
+        that leg's own connection then unpaired it into a visible row. Any
+        group that already has a decided entry lends its decision to the
+        still-pending legs, so one more sync clears the resurrected rows
+        without asking again.
+        """
+        by_group: dict[str, list[Any]] = {}
+        for entry in self._store.list_entries(include_covered=True):
+            if not entry.group_key:
+                continue
+            by_group.setdefault(entry.group_key, []).append(entry)
+        for siblings in by_group.values():
+            decided = [item for item in siblings if item.decision != "pending"]
+            if not decided:
+                continue
+            source = decided[0]
+            for sibling in siblings:
+                if sibling.decision != "pending":
+                    continue
+                self._store.decide_entry(
+                    entry_id=sibling.entry_id,
+                    decision=source.decision,
+                    created_local_id=source.created_local_id,
+                )
 
     def _already_linked_ids(self) -> set[str]:
         """Local entries a previous review already claimed.

@@ -469,6 +469,20 @@ class PluggyStore:
             elif record.decision != "pending":
                 if record.content_hash == content_hash:
                     return self._require_entry(entry_id)
+                # A pair whose legs live in different Pluggy connections only
+                # meets in the global reconciliation pass. Syncing one
+                # connection stages its leg unpaired first, which must not
+                # reopen an entry the user already decided: the base content
+                # is unchanged, only the group fell off while the partner was
+                # out of view. Detect the unpaired echo of the same base and
+                # leave the decision standing; the reconciliation pass (or the
+                # partner's own sync) restores the grouping without a reopen.
+                if record.group_key is not None and group_key is None:
+                    echo = hashlib.sha1(
+                        f"{content_hash}|{record.group_key}".encode("utf-8")
+                    ).hexdigest()
+                    if echo == record.content_hash:
+                        return self._require_entry(entry_id)
                 if (
                     record.created_local_id is None
                     or record.created_local_id != matched_local_id
